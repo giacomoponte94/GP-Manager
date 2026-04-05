@@ -1831,28 +1831,21 @@ function renderSlotModal(){
   // Desmarcar - gera reposi??o E remove do dia
   body.querySelectorAll('.repos-btn').forEach(function(btn){
     btn.onclick=function(){
+      if(btn.disabled) return; // proteção contra duplo-clique/toque
+      btn.disabled=true;
+
       var sid=btn.getAttribute('data-sid');
       var agId=btn.getAttribute('data-agid');
       var dt=btn.getAttribute('data-date');
-      var slotDtStr=btn.getAttribute('data-slot-dt');
-      var slotDtDate=new Date(slotDtStr);
-      var agora=new Date();
-      var diffH=(slotDtDate-agora)/3600000;
 
-      // Verificar se est? dentro da janela de 3h (para aluno)
-      // Admin sempre pode (sem verifica??o de senha aqui - comportamento assumido)
-      // Se j? passou a hora: s? admin (permitir com toast de aviso)
-      // Se faltam mais de 3h: s? admin tamb?m
-      // Regra: sem popup de senha aqui, s? o admin usa o app
-
-      // Remover presen?a
+      // Remover presença
       var k=presKey(sid,dt);
       delete presencas[k];
 
-      // Remover do dia via exce??o (n?o mexe na agenda recorrente)
+      // Remover do dia via exceção (não mexe na agenda recorrente)
       removerDeData(agId, dt);
 
-      // Gerar reposi??o
+      // Gerar 1 reposição
       addReposicao(sid);
       savePresencas();
 
@@ -3101,52 +3094,78 @@ function sugerirHorariosLivres(sid) {
 function openReposicao(sid) {
   var s = students.find(function(x){ return x.id===sid; });
   if (!s) return;
-  var livres = sugerirHorariosLivres(sid);
-  var dnames = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab'];
+
+  // Buscar slots livres nas próximas 2 semanas (datas específicas)
+  var hoje = new Date(); hoje.setHours(0,0,0,0);
+  var slotsLivres = [];
+  for (var di = 1; di <= 14 && slotsLivres.length < 6; di++) {
+    var d = new Date(hoje); d.setDate(d.getDate()+di);
+    var dow = d.getDay();
+    if (diasPermitidos.indexOf(dow) === -1) continue;
+    var dateStr = d.toISOString().split('T')[0];
+    if (isHoliday(d)) continue;
+    var agsNoDia = getAgendasParaData(dateStr);
+    // Aluno já tem aula nesse dia? pula
+    if (agsNoDia.some(function(a){return a.alunoId===sid;})) continue;
+    // Buscar primeiro horário livre do dia
+    for (var h = 6; h <= 19; h++) {
+      var ocup = agsNoDia.filter(function(a){return parseInt(a.inicio.split(':')[0])===h;}).length;
+      if (ocup < 2) {
+        slotsLivres.push({dateStr:dateStr, dow:dow, hora:h, ocupados:ocup});
+        break;
+      }
+    }
+  }
 
   var modal = document.getElementById('modal-reposicao');
   document.getElementById('repos-nome').textContent = s.nome;
   document.getElementById('repos-sid').value = sid;
 
   var body = document.getElementById('repos-body');
-  if (!livres.length) {
-    body.innerHTML = '<p style="color:var(--white-dim);text-align:center;padding:20px;">Nenhum horario dispon\u00EDvel encontrado.</p>';
+  if (!slotsLivres.length) {
+    body.innerHTML = '<p style="color:var(--white-dim);text-align:center;padding:20px;">Nenhum hor\u00e1rio livre encontrado nos pr\u00f3ximos 14 dias.</p>';
   } else {
-    body.innerHTML = '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:12px;">Selecione um horario livre para a reposi\u00E7\u00E3o:</div>'
-      + livres.map(function(l){
-        return '<button class="btn btn-outline repos-slot-btn" style="width:100%;height:44px;margin-bottom:6px;text-align:left;padding:0 16px;" '
-          + 'data-sid="'+sid+'" data-dow="'+l.dow+'" data-hora="'+l.hora+'">'  + '\n'
-          + dnames[l.dow] + ' &nbsp; ' + String(l.hora).padStart(2,'0') + ':00'
-          + (l.ocupados===0 ? ' <span style="color:var(--success);font-size:0.65rem;margin-left:8px;">\u25CF livre</span>'
-                            : ' <span style="color:var(--warning);font-size:0.65rem;margin-left:8px;">\u25CF 1 aluno</span>')
-          + '<\/button>';
+    body.innerHTML = '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:12px;">Selecione a data da reposi\u00e7\u00e3o (aula \u00fanica, n\u00e3o recorrente):</div>'
+      + slotsLivres.map(function(l){
+        var dtFmt = new Date(l.dateStr+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'});
+        var horaFmt = String(l.hora).padStart(2,'0')+':00';
+        var livreTag = l.ocupados===0
+          ? '<span style="color:var(--success);font-size:0.65rem;margin-left:8px;">\u25CF livre</span>'
+          : '<span style="color:var(--warning);font-size:0.65rem;margin-left:8px;">\u25CF 1 aluno</span>';
+        return '<button class="btn btn-outline repos-slot-btn" style="width:100%;height:48px;margin-bottom:6px;text-align:left;padding:0 16px;"'
+          +' data-sid="'+sid+'" data-date="'+l.dateStr+'" data-hora="'+l.hora+'">'
+          +'<span style="font-weight:600;">'+dtFmt+'</span>'
+          +' &nbsp; '+horaFmt+livreTag
+          +'<\/button>';
       }).join('');
   }
   modal.style.display='flex';
-  
+
   setTimeout(function(){
     body.querySelectorAll('.repos-slot-btn').forEach(function(btn){
       btn.onclick=function(){
-        agendarReposicao(btn.getAttribute('data-sid'),parseInt(btn.getAttribute('data-dow')),parseInt(btn.getAttribute('data-hora')));
+        if(btn.disabled) return;
+        btn.disabled=true;
+        agendarReposicao(
+          btn.getAttribute('data-sid'),
+          btn.getAttribute('data-date'),
+          parseInt(btn.getAttribute('data-hora'))
+        );
       };
     });
   },0);
 }
 
-function agendarReposicao(sid, dow, hora) {
+function agendarReposicao(sid, dateStr, hora) {
   var s = students.find(function(x){ return x.id===sid; });
   if (!s) return;
   var horaStr = String(hora).padStart(2,'0') + ':00';
-  var fimStr  = String(hora+1).padStart(2,'0') + ':00';
-  agendas.push({
-    id: Date.now().toString() + '_rep_' + sid,
-    alunoId: sid, days: [dow],
-    inicio: horaStr, fim: fimStr, obs: 'Reposi\u00E7\u00E3o'
-  });
-  saveAgendas();
+  // Adicionar como EXCEÇÃO de data única (não como agenda recorrente)
+  adicionarEmData(sid, horaStr, dateStr);
   closeModal('modal-reposicao');
   renderCalendar();
-  toast('Reposi\u00E7\u00E3o agendada: ' + ['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][dow] + ' ' + horaStr);
+  var dow = new Date(dateStr+'T12:00:00').getDay();
+  toast('Reposi\u00e7\u00e3o agendada: '+DAY_NAMES[dow]+' '+horaStr+' ('+fmtDate(dateStr)+')');
 }
 
 function adicionarFeriadoCfg() {
