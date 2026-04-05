@@ -1365,7 +1365,6 @@ function saveStudent(){
     status:document.getElementById('f-status').value,foto:currentPhoto||null,
     criadoEm:editingId?(students.find(function(x){return x.id===editingId;})||{}).criadoEm:new Date().toISOString()
   };
-  if(editingId) agendas=agendas.filter(function(a){return a.alunoId!==editingId;});
   var days=Array.from(document.querySelectorAll('#f-days-picker .day-btn.selected')).map(function(b){return parseInt(b.dataset.day);});
   if(days.length){
     var rows=document.querySelectorAll('#f-day-times .day-time-row');
@@ -1373,10 +1372,41 @@ function saveStudent(){
     rows.forEach(function(r){var i=r.querySelector('input[type=time]');if(i)times[r.dataset.day]=i.value;});
     var byTime={};
     days.forEach(function(d){var t=times[d]||'06:00';if(!byTime[t])byTime[t]=[];byTime[t].push(d);});
+
+    // Verificar conflitos ANTES de modificar agendas
+    // Agendas de referência: excluir o próprio aluno em edição
+    var agsRef=editingId?agendas.filter(function(a){return a.alunoId!==editingId;}):agendas;
+    var conflitos=[];
+    Object.keys(byTime).forEach(function(t){
+      var h=parseInt(t.split(':')[0]);
+      byTime[t].forEach(function(d){
+        var ocupados=agsRef.filter(function(a){
+          return a.days.includes(d) && parseInt(a.inicio.split(':')[0])===h;
+        });
+        if(ocupados.length>=2){
+          var nomes=ocupados.map(function(a){var s=students.find(function(x){return x.id===a.alunoId;});return s?s.nome.split(' ')[0]:'?';});
+          conflitos.push(DAY_NAMES[d]+' '+t+' \u2014 hor\u00e1rio lotado ('+nomes.join(' + ')+')');
+        } else if(ocupados.length===1 && obj.modalidade!=='Duo'){
+          var sOcup=students.find(function(x){return x.id===ocupados[0].alunoId;});
+          var nomeOcup=sOcup?sOcup.nome.split(' ')[0]:'?';
+          conflitos.push(DAY_NAMES[d]+' '+t+' \u2014 j\u00e1 tem '+nomeOcup+' (use Duo ou escolha outro hor\u00e1rio)');
+        }
+      });
+    });
+    if(conflitos.length){
+      alert('Conflito de hor\u00e1rio:\n\n'+conflitos.join('\n'));
+      return;
+    }
+
+    // Sem conflitos — agora sim modifica agendas
+    if(editingId) agendas=agendas.filter(function(a){return a.alunoId!==editingId;});
     Object.keys(byTime).forEach(function(t){
       var h=parseInt(t.split(':')[0]);
       agendas.push({id:Date.now().toString()+'_'+t,alunoId:obj.id,days:byTime[t],inicio:t,fim:String((h+1)%24).padStart(2,'0')+':00',obs:''});
     });
+  } else {
+    // Sem dias selecionados — apenas limpa agendas do aluno em edição
+    if(editingId) agendas=agendas.filter(function(a){return a.alunoId!==editingId;});
   }
   if(editingId){var i=students.findIndex(function(x){return x.id===editingId;});if(i>=0)students[i]=obj;else students.push(obj);}
   else students.push(obj);
