@@ -185,6 +185,44 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
 [data-theme="light"] .notif-warn{background:rgba(183,89,10,0.08);}
 [data-theme="light"] .notif-danger{background:rgba(185,28,28,0.08);}
 
+/* Light mode — correções de contraste e legibilidade */
+[data-theme="light"] th{color:#e0eaf5;}
+[data-theme="light"] .page-sub{color:#4a5568;}
+[data-theme="light"] .cal-time-label{color:#64748b;}
+[data-theme="light"] .day-time{color:#64748b;}
+[data-theme="light"] .empty-state{color:#64748b;}
+[data-theme="light"] .form-label{color:#2d6a9f;}
+[data-theme="light"] .detail-item-label{color:#2d6a9f;}
+[data-theme="light"] .modal-title{color:#0f1f33;}
+[data-theme="light"] .stat-lbl{color:#64748b;}
+/* Eventos "neutro" quase invisíveis no fundo claro */
+[data-theme="light"] .cal-event.status-neutral{background:rgba(100,116,139,0.12);border-color:#64748b;color:#334155;}
+[data-theme="light"] .day-event.status-neutral{background:rgba(100,116,139,0.10);border-color:#64748b;color:#334155;}
+/* Feriado — tinta mais visível em fundo claro */
+[data-theme="light"] .feriado-col{background:rgba(183,89,10,0.07)!important;}
+[data-theme="light"] .feriado-col .cal-day-num{color:#92400e!important;}
+/* Hover das células do calendário */
+[data-theme="light"] .cal-slot-cell:hover,[data-theme="light"] .day-slot-content:hover{background:rgba(45,106,159,0.07);}
+/* Coluna de hoje em modo claro */
+[data-theme="light"] .cal-slot-cell.today-col{background:#dbeafe;}
+/* Bordas do calendário */
+[data-theme="light"] .cal-slot-cell{border-bottom-color:#e2e8f0;border-right-color:#e9eef4;}
+/* Modal overlay fundo branco */
+[data-theme="light"] .modal{background:#fff;}
+/* Badge solo no modo claro */
+[data-theme="light"] .badge-solo{background:#e2e8f0;color:#4a5568;}
+/* Notif textos */
+[data-theme="light"] .notif-info{border-left-color:#2d6a9f;}
+[data-theme="light"] .notif-warn{border-left-color:#b7590a;}
+[data-theme="light"] .notif-danger{border-left-color:#b91c1c;}
+/* Botão outline no header */
+[data-theme="light"] .app-header .btn-outline{background:#f1f5f9;border-color:#cbd5e1;color:#334155;}
+[data-theme="light"] .app-header .btn-outline:hover{background:#e2e8f0;}
+/* Row time do cadastro */
+[data-theme="light"] .day-time-row{border-left-color:#2d6a9f;}
+[data-theme="light"] .day-time-row .dt-day{color:#2d6a9f;border-right-color:rgba(45,106,159,0.2);}
+[data-theme="light"] .day-time-row .dt-lbl{color:#64748b;}
+
 /* Days picker grid - 6 colunas, sem DOM */
 #f-days-picker { display:grid; grid-template-columns:repeat(6,1fr); gap:5px; }
 #f-days-picker .day-btn { width:100%; height:42px; padding:0; font-size:0.6rem; }
@@ -278,7 +316,7 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
   <div class="app-header">
     <div class="app-logo">GP <span>Manager</span></div>
     <div class="app-header-actions">
-      <button id="theme-btn" class="btn btn-outline btn-sm" onclick="toggleTheme()">&#9728;&#65039;</button>
+      <button id="theme-btn" class="btn btn-outline btn-sm" onclick="toggleTheme()" title="Modo claro">&#9728;&#65039;</button>
       <button class="btn btn-outline btn-sm" onclick="openConfiguracoes()">&#9881;&#65039;</button>
       <button class="btn btn-outline btn-sm" onclick="doLogout()">Sair</button>
     </div>
@@ -2291,7 +2329,10 @@ function getAulasPacote(studentId) {
 function applyTheme(t) {
   document.documentElement.setAttribute('data-theme', t);
   var btn=document.getElementById('theme-btn');
-  if(btn) btn.textContent = t==='light' ? '\u2600' : '\uDF19';
+  if(btn) {
+    btn.textContent = t==='light' ? '\uD83C\uDF19' : '\u2600\uFE0F';
+    btn.title = t==='light' ? 'Modo escuro' : 'Modo claro';
+  }
 }
 function toggleTheme() {
   var cur=document.documentElement.getAttribute('data-theme')||'dark';
