@@ -446,6 +446,7 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
       <div id="sim-panel" style="margin-bottom:12px;"></div>
       <div id="comp-panel" style="margin-bottom:12px;"></div>
       <div id="hist-panel" style="background:var(--card);padding:16px 18px;margin-bottom:20px;border-radius:4px;"></div>
+      <div id="rel-mensal-panel" style="margin-bottom:20px;"></div>
       <div class="fin-table-wrap">
         <table><thead><tr><th>Aluno</th><th>Plano</th><th>Mod.</th><th>Valor</th><th>Vencimento</th><th>Status</th><th>A&ccedil;&atilde;o</th></tr></thead><tbody id="fin-tbody"></tbody></table>
       </div>
@@ -2163,6 +2164,7 @@ function renderFinanceiro(){
   try{renderSimulacao();}catch(e){}
   try{renderComparativo();}catch(e){}
   try{renderHistoricoVisual();}catch(e){}
+  try{renderRelatorioMensal();}catch(e){}
   document.getElementById('fin-tbody').innerHTML=sorted.length?sorted.map(function(s){
     var sb=s.status==='em dia'?'<span class="badge badge-ok">Em dia</span>':s.status==='atrasado'?'<span class="badge badge-late">Inativo</span>':'<span class="badge badge-warn">Vencendo</span>';
     var venc=fmtDate(s.vencimento);
@@ -3457,6 +3459,104 @@ function renderDashboard() {
       pagEl.innerHTML = '';
     }
   }
+}
+
+function renderRelatorioMensal() {
+  var panel = document.getElementById('rel-mensal-panel');
+  if (!panel) return;
+
+  var now = new Date();
+  var y = now.getFullYear(), m = now.getMonth();
+  var mesNomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  var mesLabel = mesNomes[m] + ' ' + y;
+
+  // Pagamentos registrados no mês atual
+  var pagsMes = pagamentos.filter(function(p) {
+    var d = new Date(p.data + 'T12:00:00');
+    return d.getFullYear() === y && d.getMonth() === m;
+  });
+  var totalPago = pagsMes.reduce(function(a, p) { return a + (parseFloat(p.valor) || 0); }, 0);
+
+  // Presenças e faltas no mês
+  var aulasMes = 0, faltasMes = 0;
+  Object.keys(presencas).forEach(function(k) {
+    var parts = k.split('_');
+    if (parts.length < 2) return;
+    var ds = parts[parts.length - 1];
+    var d = new Date(ds + 'T12:00:00');
+    if (d.getFullYear() !== y || d.getMonth() !== m) return;
+    if (presencas[k] === 'presente') aulasMes++;
+    else if (presencas[k] === 'faltou') faltasMes++;
+  });
+  var totalAulas = aulasMes + faltasMes;
+  var freqMes = totalAulas > 0 ? Math.round(aulasMes / totalAulas * 100) : 0;
+
+  // Alunos que pagaram este mês
+  var idsPageram = pagsMes.map(function(p) { return p.alunoId; })
+    .filter(function(id, i, ar) { return ar.indexOf(id) === i; });
+
+  // Inadimplentes (status atrasado)
+  var inadList = students.filter(function(s) { return s.status === 'atrasado'; });
+
+  var out = '';
+  out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Relatório — ' + mesLabel + '</div>';
+
+  // KPIs do mês
+  out += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">';
+  out += '<div class="dash-kpi ok"><div class="dash-kpi-val">R$\u00A0' + Math.round(totalPago).toLocaleString('pt-BR') + '</div><div class="dash-kpi-lbl">Recebido no mês</div></div>';
+  out += '<div class="dash-kpi"><div class="dash-kpi-val">' + aulasMes + '</div><div class="dash-kpi-lbl">Aulas realizadas</div></div>';
+  out += '<div class="dash-kpi warn"><div class="dash-kpi-val">' + faltasMes + '</div><div class="dash-kpi-lbl">Faltas no mês</div></div>';
+  out += '<div class="dash-kpi' + (inadList.length > 0 ? ' danger' : '') + '"><div class="dash-kpi-val">' + inadList.length + '</div><div class="dash-kpi-lbl">Inadimplentes</div></div>';
+  out += '</div>';
+
+  // Barra de frequência
+  if (totalAulas > 0) {
+    var fc = freqMes >= 80 ? 'var(--success)' : freqMes >= 60 ? 'var(--warning)' : 'var(--danger)';
+    out += '<div style="background:var(--card);padding:12px 14px;border-radius:4px;margin-bottom:8px;">';
+    out += '<div style="display:flex;justify-content:space-between;margin-bottom:6px;">';
+    out += '<span style="font-family:Raleway,sans-serif;font-size:0.58rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--accent-l);">Frequência do mês</span>';
+    out += '<span style="font-size:0.82rem;font-weight:600;color:' + fc + ';">' + freqMes + '%</span></div>';
+    out += '<div style="height:8px;background:rgba(74,127,165,0.15);border-radius:4px;overflow:hidden;">';
+    out += '<div style="height:100%;width:' + freqMes + '%;background:' + fc + ';border-radius:4px;transition:width 0.4s;"></div></div>';
+    out += '<div style="font-size:0.7rem;color:var(--white-dim);margin-top:4px;">' + aulasMes + ' presença' + (aulasMes !== 1 ? 's' : '') + ' · ' + faltasMes + ' falta' + (faltasMes !== 1 ? 's' : '') + '</div></div>';
+  }
+
+  // Pagamentos do mês
+  if (pagsMes.length) {
+    out += '<div style="background:var(--card);padding:12px 14px;border-radius:4px;margin-bottom:8px;">';
+    out += '<div style="font-family:Raleway,sans-serif;font-size:0.58rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--accent-l);margin-bottom:8px;">Pagamentos recebidos (' + pagsMes.length + ')</div>';
+    var pagsSorted = pagsMes.slice().sort(function(a,b){return b.data.localeCompare(a.data);});
+    out += pagsSorted.map(function(p) {
+      var s = students.find(function(x){ return x.id === p.alunoId; });
+      var nome = s ? s.nome.split(' ')[0] : '?';
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(74,127,165,0.1);">'
+        + '<div><div style="font-size:0.85rem;font-weight:600;color:var(--white);">' + nome + '</div>'
+        + '<div style="font-size:0.68rem;color:var(--white-dim);">' + fmtDate(p.data) + ' · ' + p.forma + (p.obs ? ' · ' + p.obs : '') + '</div></div>'
+        + '<span style="font-size:0.88rem;font-weight:700;color:var(--success);">R$\u00A0' + Math.round(p.valor).toLocaleString('pt-BR') + '</span>'
+        + '</div>';
+    }).join('');
+    out += '</div>';
+  } else {
+    out += '<div style="background:var(--card);padding:12px 14px;border-radius:4px;margin-bottom:8px;font-size:0.8rem;color:var(--white-dim);">Nenhum pagamento registrado em ' + mesNomes[m] + '.</div>';
+  }
+
+  // Inadimplentes do mês
+  if (inadList.length) {
+    out += '<div style="background:var(--card);padding:12px 14px;border-radius:4px;">';
+    out += '<div style="font-family:Raleway,sans-serif;font-size:0.58rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--danger);margin-bottom:8px;">Inadimplentes (' + inadList.length + ')</div>';
+    out += inadList.map(function(s) {
+      var ph = waPhone(s);
+      var msg = encodeURIComponent('Olá ' + s.nome.split(' ')[0] + '! Seu plano ' + (s.plano || '') + ' está em aberto. Vamos regularizar?');
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(74,127,165,0.1);">'
+        + '<div><div style="font-size:0.85rem;font-weight:600;color:var(--white);">' + s.nome + '</div>'
+        + '<div style="font-size:0.68rem;color:var(--white-dim);">' + (s.plano || '—') + ' · Venc: ' + fmtDate(s.vencimento) + '</div></div>'
+        + (ph ? '<a href="https://wa.me/' + ph + '?text=' + msg + '" target="_blank" class="wa-btn" style="padding:5px 10px;font-size:0.58rem;">Cobrar</a>' : '')
+        + '</div>';
+    }).join('');
+    out += '</div>';
+  }
+
+  panel.innerHTML = out;
 }
 
 function adicionarFeriadoCfg() {
