@@ -936,7 +936,7 @@ function isHoliday(date) {
 
 function save() { try{localStorage.setItem('gp-s',JSON.stringify(students));}catch(e){} }
 function loadAll() {
-  loadPlanos(); syncPlanLegacy(); loadTreinos(); loadHistoricoFin(); loadExcecoes(); loadDiasPermitidos(); loadReposicoes();
+  loadPlanos(); syncPlanLegacy(); loadTreinos(); loadHistoricoFin(); loadExcecoes(); loadDiasPermitidos(); loadReposicoes(); loadPagamentos();
   try{var s=localStorage.getItem('gp-s');if(s)students=JSON.parse(s);}catch(e){}
   try{var a=localStorage.getItem('gp-a');if(a)agendas=JSON.parse(a);}catch(e){}
   try{var p=localStorage.getItem('gp-p');if(p)presencas=JSON.parse(p);}catch(e){}
@@ -1028,6 +1028,7 @@ function refreshAll(){
   try{renderNotifs();}catch(e){}
   try{renderLockIn();}catch(e){}
   try{renderPaineis();}catch(e){}
+  try{renderDashboard();}catch(e){}
 }
 function toggleStatus(id,ns){
   var s=students.find(function(x){return x.id===id;});
@@ -1044,17 +1045,19 @@ function renovarAluno(id){
 }
 
 function showTab(tab,el){
-  ['alunos','agenda','financeiro'].forEach(function(t){
-    document.getElementById('tab-'+t).style.display=t===tab?'':'none';
+  ['dashboard','alunos','agenda','financeiro'].forEach(function(t){
+    var el2=document.getElementById('tab-'+t);if(el2)el2.style.display=t===tab?'':'none';
   });
   document.querySelectorAll('.nav-tab').forEach(function(b){b.classList.remove('active');});
   el.classList.add('active');
   if(tab==='agenda'){renderCalendar();}
   if(tab==='financeiro'){renderFinanceiro();}
+  if(tab==='dashboard'){renderDashboard();}
 
   setTimeout(function(){
     try{
-      if(tab==='alunos'){renderTable();renderStats();renderNotifs();renderLockIn();renderPaineis();renderAutomacao();}
+      if(tab==='dashboard'){renderDashboard();}
+      else if(tab==='alunos'){renderTable();renderStats();renderNotifs();renderLockIn();renderPaineis();renderAutomacao();}
       else if(tab==='agenda'){renderCalendar();}
       else if(tab==='financeiro'){renderFinanceiro();renderSimulacao();renderComparativo();renderHistoricoVisual();}
     }catch(e){}
@@ -1639,6 +1642,29 @@ function openDetail(id){
   renderRepPanel();
   document.getElementById('det-body').appendChild(repPanel);
 
+  // Botão registrar pagamento
+  var btnPag=document.createElement('button');
+  btnPag.className='btn btn-primary';
+  btnPag.style.cssText='width:100%;height:44px;margin-top:12px;';
+  btnPag.textContent='R$ Registrar pagamento';
+  btnPag.onclick=function(){openPagamento(s.id);};
+  document.getElementById('det-body').appendChild(btnPag);
+
+  // Histórico de pagamentos do aluno
+  var pagsAluno=getPagamentosAluno(s.id);
+  if(pagsAluno.length){
+    var pagHistDiv=document.createElement('div');
+    pagHistDiv.style.cssText='margin-top:12px;';
+    var pagRows=pagsAluno.slice(0,3).map(function(p){
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--card);margin-bottom:2px;border-left:3px solid var(--success);">'
+        +'<div><div style="font-size:0.82rem;color:var(--white);">'+fmtDate(p.data)+' <span style="font-size:0.7rem;color:var(--white-dim);">· '+p.forma+'</span></div>'
+        +(p.obs?'<div style="font-size:0.7rem;color:var(--white-dim);">'+p.obs+'</div>':'')
+        +'</div><span style="font-weight:700;color:var(--success);">R$\u00A0'+Math.round(p.valor).toLocaleString('pt-BR')+'</span></div>';
+    }).join('');
+    pagHistDiv.innerHTML='<div style="font-family:Raleway,sans-serif;font-size:0.58rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--accent-l);margin-bottom:6px;">Histórico de pagamentos</div>'+pagRows;
+    document.getElementById('det-body').appendChild(pagHistDiv);
+  }
+
   var actDiv2=document.createElement('div');
   actDiv2.style.cssText='margin-top:8px;display:flex;gap:8px;';
   var btnRep=document.createElement('button');
@@ -2205,6 +2231,7 @@ function initApp(){
   try{atualizarSelectsPlanos();}catch(e){}
   try{refreshAll();}catch(e){}
   setTimeout(function(){
+    try{renderDashboard();}catch(e){}
     try{renderCalendar();}catch(e){}
     try{renderFinanceiro();}catch(e){}
     try{renderSimulacao();}catch(e){}
