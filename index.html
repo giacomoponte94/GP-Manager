@@ -223,6 +223,29 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
 [data-theme="light"] .day-time-row .dt-day{color:#2d6a9f;border-right-color:rgba(45,106,159,0.2);}
 [data-theme="light"] .day-time-row .dt-lbl{color:#64748b;}
 
+/* Dashboard */
+.dash-kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;}
+.dash-kpi{background:var(--card);padding:16px 14px;border-radius:6px;border-left:3px solid var(--accent);}
+.dash-kpi.ok{border-color:var(--success);}
+.dash-kpi.warn{border-color:var(--warning);}
+.dash-kpi.danger{border-color:var(--danger);}
+.dash-kpi-val{font-family:'Raleway',sans-serif;font-size:1.5rem;font-weight:800;color:var(--white);}
+.dash-kpi.ok .dash-kpi-val{color:var(--success);}
+.dash-kpi.warn .dash-kpi-val{color:var(--warning);}
+.dash-kpi.danger .dash-kpi-val{color:var(--danger);}
+.dash-kpi-lbl{font-size:0.58rem;color:var(--white-dim);text-transform:uppercase;letter-spacing:0.1em;margin-top:4px;}
+.dash-section{margin-bottom:16px;}
+.dash-section-title{font-family:'Raleway',sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:8px;}
+.dash-row{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;margin-bottom:2px;border-radius:4px;}
+.dash-row-name{font-size:0.88rem;font-weight:600;color:var(--white);}
+.dash-row-sub{font-size:0.7rem;color:var(--white-dim);margin-top:2px;}
+[data-theme="light"] .dash-kpi{background:#fff;box-shadow:0 1px 4px rgba(0,0,0,0.07);}
+[data-theme="light"] .dash-kpi-val{color:#0f1f33;}
+[data-theme="light"] .dash-kpi.ok .dash-kpi-val{color:var(--success);}
+[data-theme="light"] .dash-kpi.warn .dash-kpi-val{color:var(--warning);}
+[data-theme="light"] .dash-kpi.danger .dash-kpi-val{color:var(--danger);}
+[data-theme="light"] .dash-row-name{color:#0f1f33;}
+
 /* Days picker grid - 6 colunas, sem DOM */
 #f-days-picker { display:grid; grid-template-columns:repeat(6,1fr); gap:5px; }
 #f-days-picker .day-btn { width:100%; height:42px; padding:0; font-size:0.6rem; }
@@ -323,7 +346,8 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
     </div>
   </div>
   <div class="nav-tabs">
-    <button class="nav-tab active" id="nav-alunos" onclick="showTab('alunos',this)">Alunos</button>
+    <button class="nav-tab active" id="nav-dashboard" onclick="showTab('dashboard',this)">In&iacute;cio</button>
+    <button class="nav-tab" id="nav-alunos" onclick="showTab('alunos',this)">Alunos</button>
     <button class="nav-tab" id="nav-agenda" onclick="showTab('agenda',this)">Agenda</button>
     <button class="nav-tab" id="nav-financeiro" onclick="showTab('financeiro',this)">Financeiro</button>
     <button class="nav-tab" id="nav-cadastro" style="display:none;" onclick="showTab('cadastro',this)">Cadastro</button>
@@ -331,8 +355,20 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
   <div id="notif-bar" style="padding:0 16px;margin-top:4px;"></div>
   <div class="main">
 
+    <!-- DASHBOARD -->
+    <div id="tab-dashboard">
+      <div class="tab-header">
+        <div class="page-title">Ol&aacute;, <span>Giacomo</span></div>
+        <div class="page-sub" id="dash-data"></div>
+      </div>
+      <div class="dash-kpi-grid" id="dash-kpis"></div>
+      <div class="dash-section" id="dash-hoje"></div>
+      <div class="dash-section" id="dash-venc"></div>
+      <div class="dash-section" id="dash-pagtos"></div>
+    </div>
+
     <!-- ALUNOS -->
-    <div id="tab-alunos">
+    <div id="tab-alunos" style="display:none;">
       <div class="tab-header">
         <div class="page-title">Meus <span>Alunos</span></div>
         <div class="page-sub" id="st-count">0 alunos</div>
@@ -505,6 +541,24 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
 </div>
 <div id="modal-slot-picker" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,0.7);z-index:500;align-items:flex-end;justify-content:center;">
   <div class="modal" style="max-width:400px;"><div class="modal-header"><div class="modal-title">Agendar aula</div><button class="modal-close" onclick="document.getElementById('modal-slot-picker').style.display='none'">&#215;</button></div><div id="slot-picker-body"></div><div style="display:flex;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border);"><button class="btn btn-outline" style="flex:1;height:40px;" onclick="document.getElementById('modal-slot-picker').style.display='none'">Cancelar</button><button class="btn btn-primary" style="flex:2;height:40px;" onclick="confirmarSlotPicker()">Abrir hor&aacute;rio</button></div></div>
+</div>
+
+<div id="modal-pagamento" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,0.7);z-index:500;align-items:flex-end;justify-content:center;">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header"><div class="modal-title">Registrar Pagamento</div><button class="modal-close" onclick="closeModal('modal-pagamento')">&#215;</button></div>
+    <input type="hidden" id="pag-sid">
+    <div style="display:flex;flex-direction:column;gap:16px;">
+      <div><label class="form-label">Aluno</label><div id="pag-nome" style="font-size:0.92rem;font-weight:600;color:var(--white);padding:10px 0;"></div></div>
+      <div><label class="form-label">Data *</label><input type="date" id="pag-data" class="form-inp"></div>
+      <div><label class="form-label">Valor (R$) *</label><input type="number" id="pag-valor" class="form-inp" placeholder="0"></div>
+      <div><label class="form-label">Forma</label><select id="pag-forma" class="form-sel"><option value="Pix">Pix</option><option value="Dinheiro">Dinheiro</option><option value="Cart&atilde;o">Cart&atilde;o</option><option value="Transfer&ecirc;ncia">Transfer&ecirc;ncia</option></select></div>
+      <div><label class="form-label">Obs</label><input type="text" id="pag-obs" class="form-inp" placeholder="Opcional..."></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:24px;">
+      <button class="btn btn-outline" style="flex:1 1 0;min-width:0;height:44px;" onclick="closeModal('modal-pagamento')">Cancelar</button>
+      <button class="btn btn-primary" style="flex:1 1 0;min-width:0;height:44px;" onclick="salvarPagamento()">Salvar</button>
+    </div>
+  </div>
 </div>
 
 <div id="toast-msg"></div>
@@ -1696,8 +1750,8 @@ function renderDay(){
     var timeDiv=document.createElement('div');timeDiv.className='day-time';
     timeDiv.textContent=String(h).padStart(2,'0')+':00';
     var content=document.createElement('div');content.className='day-slot-content';
-    var hCopy=h;
-    content.onclick=function(){openSlotModal(dow,hCopy);};
+    var hCopy=h; var dStrCopyDay=dStr;
+    content.onclick=function(){openSlotModal(dow,hCopy,dStrCopyDay);};
     var ev=getAgendasParaData(dStr).filter(function(a){return parseInt(a.inicio.split(':')[0])===h;});
     ev.forEach(function(ag){
       var s=students.find(function(x){return x.id===ag.alunoId;});if(!s)return;
@@ -1714,10 +1768,14 @@ function renderDay(){
   });
 }
 
-function openSlotModal(dow,h){
+function openSlotModal(dow,h,dateStr){
   agSlotDay=dow; agSlotHour=h;
-  
-  if(calView==='dia'){
+
+  if(dateStr){
+    // Data explícita passada pelo calendário — usar diretamente (sem recalcular)
+    agSlotDateStr=dateStr;
+    agSlotDay=new Date(dateStr+'T12:00:00').getDay();
+  } else if(calView==='dia'){
     var d=new Date(currentDay); d.setHours(0,0,0,0);
     agSlotDateStr=d.toISOString().split('T')[0];
     agSlotDay=d.getDay();
@@ -3225,6 +3283,153 @@ function agendarReposicao(sid, dateStr, hora) {
   renderCalendar();
   var dow = new Date(dateStr+'T12:00:00').getDay();
   toast('Reposi\u00e7\u00e3o agendada: '+DAY_NAMES[dow]+' '+horaStr+' ('+fmtDate(dateStr)+')');
+}
+
+/* ===== PAGAMENTOS ===== */
+var pagamentos = [];
+function loadPagamentos() {
+  try { var p=localStorage.getItem('gp-pagamentos'); if(p) pagamentos=JSON.parse(p); } catch(e) {}
+}
+function savePagamentos() {
+  try { localStorage.setItem('gp-pagamentos', JSON.stringify(pagamentos)); } catch(e) {}
+}
+
+function openPagamento(sid) {
+  var s = students.find(function(x){ return x.id===sid; }); if(!s) return;
+  document.getElementById('pag-sid').value = sid;
+  document.getElementById('pag-nome').textContent = s.nome;
+  document.getElementById('pag-data').value = todayStr();
+  document.getElementById('pag-valor').value = s.valor ? Math.round(parseFloat(s.valor)) : '';
+  document.getElementById('pag-forma').value = 'Pix';
+  document.getElementById('pag-obs').value = '';
+  // Fechar modal-detail antes de abrir
+  var md = document.getElementById('modal-detail'); if(md) md.style.display='none';
+  document.getElementById('modal-pagamento').style.display='flex';
+}
+
+function salvarPagamento() {
+  var sid = document.getElementById('pag-sid').value;
+  var data = document.getElementById('pag-data').value;
+  var valor = parseFloat(document.getElementById('pag-valor').value);
+  if(!data){ alert('Informe a data.'); return; }
+  if(!valor||valor<=0){ alert('Informe o valor.'); return; }
+  var pag = {
+    id: Date.now().toString()+Math.random().toString(36).slice(2),
+    alunoId: sid,
+    data: data,
+    valor: valor,
+    forma: document.getElementById('pag-forma').value,
+    obs: document.getElementById('pag-obs').value.trim()
+  };
+  pagamentos.push(pag);
+  savePagamentos();
+  closeModal('modal-pagamento');
+  // Perguntar se deseja renovar o plano
+  var s = students.find(function(x){ return x.id===sid; });
+  if(s && (s.status==='atrasado'||s.status==='vencendo')) {
+    if(confirm('Deseja renovar o plano de '+s.nome.split(' ')[0]+' por mais 1 mês?')) {
+      renovarAluno(sid);
+    }
+  }
+  toast('Pagamento registrado!');
+  try{ renderDashboard(); } catch(e){}
+}
+
+function getPagamentosAluno(sid) {
+  return pagamentos.filter(function(p){ return p.alunoId===sid; })
+    .sort(function(a,b){ return b.data.localeCompare(a.data); });
+}
+
+/* ===== DASHBOARD ===== */
+function renderDashboard() {
+  var now = new Date();
+  var mesNomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  var diasSem = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+  var dataEl = document.getElementById('dash-data');
+  if(dataEl) dataEl.textContent = diasSem[now.getDay()]+', '+now.getDate()+' de '+mesNomes[now.getMonth()];
+
+  // KPIs
+  var total = students.length;
+  var emDia = students.filter(function(s){ return s.status==='em dia'; }).length;
+  var inad  = students.filter(function(s){ return s.status==='atrasado'; }).length;
+  var receitaTotal = students.filter(function(s){ return s.status==='em dia'; })
+    .reduce(function(a,s){ return a+(parseFloat(s.valor)||0); },0);
+
+  var kpisEl = document.getElementById('dash-kpis');
+  if(kpisEl) kpisEl.innerHTML =
+    '<div class="dash-kpi"><div class="dash-kpi-val">'+total+'</div><div class="dash-kpi-lbl">Alunos</div></div>'
+   +'<div class="dash-kpi ok"><div class="dash-kpi-val">'+emDia+'</div><div class="dash-kpi-lbl">Em dia</div></div>'
+   +'<div class="dash-kpi"><div class="dash-kpi-val">R$\u00A0'+Math.round(receitaTotal).toLocaleString('pt-BR')+'</div><div class="dash-kpi-lbl">Receita ativa</div></div>'
+   +'<div class="dash-kpi danger"><div class="dash-kpi-val">'+inad+'</div><div class="dash-kpi-lbl">Inadimplentes</div></div>';
+
+  // Aulas hoje
+  var ds = todayStr();
+  var agsHoje = getAgendasParaData(ds);
+  var idHoje = agsHoje.map(function(a){ return a.alunoId; }).filter(function(id,i,ar){ return ar.indexOf(id)===i; });
+  var hojeEl = document.getElementById('dash-hoje');
+  if(hojeEl){
+    if(idHoje.length){
+      var rows = idHoje.map(function(id){
+        var s = students.find(function(x){ return x.id===id; }); if(!s) return '';
+        var ag = agsHoje.find(function(a){ return a.alunoId===id; });
+        var hora = ag ? ag.inicio : '';
+        return '<div class="dash-row notif-info" style="cursor:pointer;" onclick="openDetail(\''+id+'\')">'
+          +'<div><div class="dash-row-name">'+s.nome+'</div><div class="dash-row-sub">'+hora+(s.plano?' · '+s.plano:'')+'</div></div>'
+          +'<span class="badge badge-ok">Hoje</span>'
+          +'</div>';
+      }).join('');
+      hojeEl.innerHTML = '<div class="dash-section-title">Aulas hoje ('+idHoje.length+')</div>'+rows;
+    } else {
+      hojeEl.innerHTML = '<div class="dash-section-title">Aulas hoje</div>'
+        +'<div style="font-size:0.8rem;color:var(--white-dim);padding:10px 0;">Nenhuma aula agendada para hoje.</div>';
+    }
+  }
+
+  // Vencimentos próximos (3 dias) — notificação de vencimento
+  var hoje2 = new Date(); hoje2.setHours(0,0,0,0);
+  var vencProx = students.filter(function(s){
+    if(!s.vencimento) return false;
+    var v = new Date(s.vencimento+'T12:00:00'); v.setHours(0,0,0,0);
+    var diff = Math.ceil((v-hoje2)/86400000);
+    return diff>=0 && diff<=3;
+  }).sort(function(a,b){ return new Date(a.vencimento)-new Date(b.vencimento); });
+
+  var vencEl = document.getElementById('dash-venc');
+  if(vencEl){
+    if(vencProx.length){
+      var vrows = vencProx.map(function(s){
+        var v = new Date(s.vencimento+'T12:00:00'); v.setHours(0,0,0,0);
+        var diff = Math.ceil((v-hoje2)/86400000);
+        var label = diff===0?'Hoje!':diff===1?'Amanhã':'Em '+diff+' dias';
+        return '<div class="dash-row notif-danger" style="cursor:pointer;" onclick="openDetail(\''+s.id+'\')">'
+          +'<div><div class="dash-row-name">'+s.nome+'</div><div class="dash-row-sub">Vence: '+fmtDate(s.vencimento)+'</div></div>'
+          +'<span class="badge badge-late">'+label+'</span>'
+          +'</div>';
+      }).join('');
+      vencEl.innerHTML = '<div class="dash-section-title" style="color:var(--danger);">⚠ Vencimentos em 3 dias ('+vencProx.length+')</div>'+vrows;
+    } else {
+      vencEl.innerHTML = '';
+    }
+  }
+
+  // Últimos pagamentos
+  var pagEl = document.getElementById('dash-pagtos');
+  if(pagEl){
+    var ultPags = pagamentos.slice().sort(function(a,b){ return b.data.localeCompare(a.data); }).slice(0,5);
+    if(ultPags.length){
+      var prows = ultPags.map(function(p){
+        var s = students.find(function(x){ return x.id===p.alunoId; });
+        var nome = s ? s.nome.split(' ')[0] : '?';
+        return '<div class="dash-row" style="background:var(--card);">'
+          +'<div><div class="dash-row-name">'+nome+'</div><div class="dash-row-sub">'+fmtDate(p.data)+' · '+p.forma+'</div></div>'
+          +'<span style="font-size:0.88rem;font-weight:700;color:var(--success);">R$\u00A0'+Math.round(p.valor).toLocaleString('pt-BR')+'</span>'
+          +'</div>';
+      }).join('');
+      pagEl.innerHTML = '<div class="dash-section-title">Últimos pagamentos</div>'+prows;
+    } else {
+      pagEl.innerHTML = '';
+    }
+  }
 }
 
 function adicionarFeriadoCfg() {
