@@ -185,6 +185,44 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
 [data-theme="light"] .notif-warn{background:rgba(183,89,10,0.08);}
 [data-theme="light"] .notif-danger{background:rgba(185,28,28,0.08);}
 
+/* Light mode — correções de contraste e legibilidade */
+[data-theme="light"] th{color:#e0eaf5;}
+[data-theme="light"] .page-sub{color:#4a5568;}
+[data-theme="light"] .cal-time-label{color:#64748b;}
+[data-theme="light"] .day-time{color:#64748b;}
+[data-theme="light"] .empty-state{color:#64748b;}
+[data-theme="light"] .form-label{color:#2d6a9f;}
+[data-theme="light"] .detail-item-label{color:#2d6a9f;}
+[data-theme="light"] .modal-title{color:#0f1f33;}
+[data-theme="light"] .stat-lbl{color:#64748b;}
+/* Eventos "neutro" quase invisíveis no fundo claro */
+[data-theme="light"] .cal-event.status-neutral{background:rgba(100,116,139,0.12);border-color:#64748b;color:#334155;}
+[data-theme="light"] .day-event.status-neutral{background:rgba(100,116,139,0.10);border-color:#64748b;color:#334155;}
+/* Feriado — tinta mais visível em fundo claro */
+[data-theme="light"] .feriado-col{background:rgba(183,89,10,0.07)!important;}
+[data-theme="light"] .feriado-col .cal-day-num{color:#92400e!important;}
+/* Hover das células do calendário */
+[data-theme="light"] .cal-slot-cell:hover,[data-theme="light"] .day-slot-content:hover{background:rgba(45,106,159,0.07);}
+/* Coluna de hoje em modo claro */
+[data-theme="light"] .cal-slot-cell.today-col{background:#dbeafe;}
+/* Bordas do calendário */
+[data-theme="light"] .cal-slot-cell{border-bottom-color:#e2e8f0;border-right-color:#e9eef4;}
+/* Modal overlay fundo branco */
+[data-theme="light"] .modal{background:#fff;}
+/* Badge solo no modo claro */
+[data-theme="light"] .badge-solo{background:#e2e8f0;color:#4a5568;}
+/* Notif textos */
+[data-theme="light"] .notif-info{border-left-color:#2d6a9f;}
+[data-theme="light"] .notif-warn{border-left-color:#b7590a;}
+[data-theme="light"] .notif-danger{border-left-color:#b91c1c;}
+/* Botão outline no header */
+[data-theme="light"] .app-header .btn-outline{background:#f1f5f9;border-color:#cbd5e1;color:#334155;}
+[data-theme="light"] .app-header .btn-outline:hover{background:#e2e8f0;}
+/* Row time do cadastro */
+[data-theme="light"] .day-time-row{border-left-color:#2d6a9f;}
+[data-theme="light"] .day-time-row .dt-day{color:#2d6a9f;border-right-color:rgba(45,106,159,0.2);}
+[data-theme="light"] .day-time-row .dt-lbl{color:#64748b;}
+
 /* Days picker grid - 6 colunas, sem DOM */
 #f-days-picker { display:grid; grid-template-columns:repeat(6,1fr); gap:5px; }
 #f-days-picker .day-btn { width:100%; height:42px; padding:0; font-size:0.6rem; }
@@ -278,7 +316,7 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
   <div class="app-header">
     <div class="app-logo">GP <span>Manager</span></div>
     <div class="app-header-actions">
-      <button id="theme-btn" class="btn btn-outline btn-sm" onclick="toggleTheme()">&#9728;&#65039;</button>
+      <button id="theme-btn" class="btn btn-outline btn-sm" onclick="toggleTheme()" title="Modo claro">&#9728;&#65039;</button>
       <button class="btn btn-outline btn-sm" onclick="openConfiguracoes()">&#9881;&#65039;</button>
       <button class="btn btn-outline btn-sm" onclick="doLogout()">Sair</button>
     </div>
@@ -319,7 +357,7 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
         <select class="filter-select" id="filt-modal" onchange="renderTable()"><option value="">Individual e Duo</option><option value="Individual">Individual</option><option value="Duo">Duo</option></select>
       </div>
       <div class="table-wrap">
-        <table><thead><tr><th>Aluno</th><th>Status</th><th></th></tr></thead><tbody id="st-tbody"></tbody></table>
+        <table><thead><tr><th>Aluno</th><th>Plano</th><th>Mod.</th><th>Vencimento</th><th>Valor</th><th>Status</th><th></th></tr></thead><tbody id="st-tbody"></tbody></table>
       </div>
     </div>
 
@@ -977,7 +1015,7 @@ function renderTable(){
     return mQ&&mS&&mP&&mM&&mH;
   });
   var tbody=document.getElementById('st-tbody');
-  if(!f.length){tbody.innerHTML='<tr><td colspan="3"><div class="empty-state"><p>'+(students.length?'Nenhum aluno encontrado.':'Nenhum aluno cadastrado.')+'</p></div></td></tr>';return;}
+  if(!f.length){tbody.innerHTML='<tr><td colspan="7"><div class="empty-state"><p>'+(students.length?'Nenhum aluno encontrado.':'Nenhum aluno cadastrado.')+'</p></div></td></tr>';return;}
   tbody.innerHTML=f.map(function(s){
     var ini=s.nome.split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();
     var av=s.foto?'<img src="'+s.foto+'" alt="">':ini;
@@ -2291,7 +2329,10 @@ function getAulasPacote(studentId) {
 function applyTheme(t) {
   document.documentElement.setAttribute('data-theme', t);
   var btn=document.getElementById('theme-btn');
-  if(btn) btn.textContent = t==='light' ? '\u2600' : '\uDF19';
+  if(btn) {
+    btn.textContent = t==='light' ? '\uD83C\uDF19' : '\u2600\uFE0F';
+    btn.title = t==='light' ? 'Modo escuro' : 'Modo claro';
+  }
 }
 function toggleTheme() {
   var cur=document.documentElement.getAttribute('data-theme')||'dark';
@@ -2860,20 +2901,22 @@ function gerarRelatorio() {
     var aM = getAulasDoMes(s.id);
     var pk = getAulasPacote(s.id);
     var aulasCell = pk ? pk.restantes+' rest.' : aM.feitas+'/'+aM.direito;
-    var cor = s.status==='em dia'?'#1e8449':s.status==='atrasado'?'#c0392b':'#d68910';
-    var lb  = s.status==='em dia'?'Em dia':s.status==='atrasado'?'Inativo':'Vencendo';
+    var cor  = s.status==='em dia'?'#1e8449':s.status==='atrasado'?'#c0392b':'#d68910';
+    var lb   = s.status==='em dia'?'Em dia':s.status==='atrasado'?'Inativo':'Vencendo';
+    var venc = fmtDate(s.vencimento);
+    var valor = s.valor ? 'R$ '+parseFloat(s.valor).toLocaleString('pt-BR',{minimumFractionDigits:0}) : '\u2014';
+    var sb   = '<span style="color:'+cor+';font-weight:600;">'+lb+'</span>';
+    var ns   = s.status==='atrasado'?'em dia':'atrasado';
+    var ren  = (s.status==='atrasado'||s.status==='vencendo') ? '<button onclick="renovarAluno(\''+s.id+'\')" style="margin-left:4px;background:#1e8449;color:white;border:none;padding:4px 10px;font-size:10px;cursor:pointer;">Renovar</button>' : '';
     return '<tr>'
       +'<td style="padding:10px 12px;">'
-      +'<div class="student-name">'+s.nome+'</div>'
-      +'<div style="font-size:0.68rem;color:var(--white-dim);margin-top:2px;">'+(s.plano||'')+' \u00B7 vence '+venc+'</div>'
+      +'<div style="font-weight:600;">'+s.nome+'</div>'
+      +'<div style="font-size:0.68rem;color:#666;margin-top:2px;">'+(s.plano||'')+' \u00B7 vence '+venc+'</div>'
       +'</td>'
       +'<td style="padding:10px 8px;text-align:right;font-weight:600;white-space:nowrap;">'+valor+'</td>'
       +'<td style="padding:10px 8px;">'+sb+'</td>'
-      +'<td style="padding:10px 6px;white-space:nowrap;">'
-      +'<button class="btn btn-outline btn-sm" onclick="toggleStatus(this.dataset.sid,this.dataset.ns)" data-sid="'+s.id+'" data-ns="'+ns+'">'+bl+'</button>'
-      +ren
-      +'<button class="btn btn-outline btn-sm" style="margin-left:4px;" onclick="gerarRecibo(this.dataset.sid)" data-sid="'+s.id+'">Recibo</button>'
-      +'</td>'
+      +'<td style="padding:10px 8px;">'+aulasCell+'</td>'
+      +'<td style="padding:10px 6px;white-space:nowrap;">'+ren+'</td>'
       +'</tr>';
   }).join('');
 
@@ -2957,6 +3000,7 @@ function gerarRelatorio() {
 function renderHistoricoVisual() {
   var panel = document.getElementById('hist-panel');
   if (!panel) return;
+  function fmtK(v){return 'R$ '+Math.round(v).toLocaleString('pt-BR');}
   registrarMesAtual();
   var keys = Object.keys(historicoFin).sort().slice(-6); 
   if (keys.length < 2) { panel.innerHTML = ''; return; }
@@ -3040,7 +3084,7 @@ function openReposicao(sid) {
   } else {
     body.innerHTML = '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:12px;">Selecione um horario livre para a reposi\u00E7\u00E3o:</div>'
       + livres.map(function(l){
-        return '<button class="btn btn-outline" style="width:100%;height:44px;margin-bottom:6px;text-align:left;padding:0 16px;" '
+        return '<button class="btn btn-outline repos-slot-btn" style="width:100%;height:44px;margin-bottom:6px;text-align:left;padding:0 16px;" '
           + 'data-sid="'+sid+'" data-dow="'+l.dow+'" data-hora="'+l.hora+'">'  + '\n'
           + dnames[l.dow] + ' &nbsp; ' + String(l.hora).padStart(2,'0') + ':00'
           + (l.ocupados===0 ? ' <span style="color:var(--success);font-size:0.65rem;margin-left:8px;">\u25CF livre</span>'
