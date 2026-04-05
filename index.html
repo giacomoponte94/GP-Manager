@@ -1531,24 +1531,44 @@ function openDetail(id){
   actDiv.appendChild(btnDel);
   // Painel de saldo de reposições com ajuste manual
   var repPanel=document.createElement('div');
-  repPanel.style.cssText='margin-top:12px;background:var(--card);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;';
+  repPanel.style.cssText='margin-top:12px;background:var(--card);padding:12px 16px;';
   function renderRepPanel(){
     var saldo=getReposicoes(s.id);
     repPanel.innerHTML=''
+      +'<div style="display:flex;align-items:center;justify-content:space-between;">'
       +'<div>'
       +'<div style="font-family:Raleway,sans-serif;font-size:0.52rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);margin-bottom:3px;">Reposi\u00e7\u00f5es</div>'
       +'<div style="font-size:1rem;font-weight:700;color:'+(saldo>0?'var(--warning)':'var(--white-dim)')+';">'+saldo+' dispon\u00edvel'+(saldo!==1?'is':'')+'</div>'
       +'</div>'
+      +'<button class="btn btn-outline btn-sm rep-admin-btn" style="height:30px;font-size:0.55rem;opacity:0.45;">\u270F Ajuste admin</button>'
+      +'</div>'
+      +'<div class="rep-admin-panel" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'
+      +'<div style="font-size:0.72rem;color:var(--white-dim);margin-bottom:8px;">Confirme a senha para ajustar manualmente:</div>'
       +'<div style="display:flex;gap:6px;">'
+      +'<input type="password" class="rep-admin-pass" placeholder="Senha" style="flex:1;height:36px;padding:0 10px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.85rem;outline:none;">'
       +'<button class="btn btn-outline btn-sm rep-minus" style="width:36px;height:36px;font-size:1rem;padding:0;" '+(saldo<=0?'disabled':'')+'>\u2212</button>'
       +'<button class="btn btn-outline btn-sm rep-plus" style="width:36px;height:36px;font-size:1rem;padding:0;">+</button>'
+      +'</div>'
       +'</div>';
+
+    repPanel.querySelector('.rep-admin-btn').onclick=function(){
+      var panel=repPanel.querySelector('.rep-admin-panel');
+      var isOpen=panel.style.display!=='none';
+      panel.style.display=isOpen?'none':'block';
+      repPanel.querySelector('.rep-admin-btn').style.opacity=isOpen?'0.45':'1';
+      if(!isOpen) repPanel.querySelector('.rep-admin-pass').focus();
+    };
+    function checkPass(){
+      return repPanel.querySelector('.rep-admin-pass').value===CREDENTIALS.pass;
+    }
     repPanel.querySelector('.rep-minus').onclick=function(){
+      if(!checkPass()){toast('Senha incorreta.');return;}
       if(getReposicoes(s.id)<=0)return;
       useReposicao(s.id);
       renderRepPanel();
     };
     repPanel.querySelector('.rep-plus').onclick=function(){
+      if(!checkPass()){toast('Senha incorreta.');return;}
       addReposicao(s.id);
       renderRepPanel();
     };
