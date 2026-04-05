@@ -565,7 +565,12 @@ function openCadastro(mode, id) {
     if(document.getElementById('f-modal'))document.getElementById('f-modal').value=s.modalidade||'';
     if(document.getElementById('f-inicio'))document.getElementById('f-inicio').value=s.inicio||'';
     if(document.getElementById('f-venc'))document.getElementById('f-venc').value=s.vencimento||'';
-    if(document.getElementById('f-valor'))document.getElementById('f-valor').value=s.valor||'';
+    // Se o aluno não tem valor salvo, tenta calcular do plano+modalidade
+    var valorEdit=s.valor||'';
+    if(!valorEdit&&s.plano&&s.modalidade&&PLAN_PRICES[s.plano]){
+      valorEdit=PLAN_PRICES[s.plano][s.modalidade]||PLAN_PRICES[s.plano]['Individual']||'';
+    }
+    if(document.getElementById('f-valor'))document.getElementById('f-valor').value=valorEdit;
     if(document.getElementById('f-status'))document.getElementById('f-status').value=s.status||'em dia';
     currentPhoto=s.foto||null;
     if(s.foto){var pp2=document.getElementById('f-photo-prev');if(pp2)pp2.innerHTML='<img src="'+s.foto+'" style="width:100%;height:100%;object-fit:cover;">';}
@@ -1346,8 +1351,11 @@ function saveStudent(){
   var plano=document.getElementById('f-plano').value;
   var modal=document.getElementById('f-modal').value;
   var inicio=document.getElementById('f-inicio').value;
-  var valor=document.getElementById('f-valor').value||
-    (plano&&modal&&PLAN_PRICES[plano]?PLAN_PRICES[plano][modal]||'':'');
+  var valor=document.getElementById('f-valor').value;
+  if(!valor&&plano&&PLAN_PRICES[plano]){
+    var modalKey=modal||'Individual';
+    valor=PLAN_PRICES[plano][modalKey]||PLAN_PRICES[plano]['Individual']||'';
+  }
   var venc=document.getElementById('f-venc').value||(function(){
     if(!inicio)return '';
     var d=new Date(inicio+'T12:00:00'); d.setMonth(d.getMonth()+1);
