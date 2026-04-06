@@ -379,6 +379,7 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
       <div class="dash-kpi-grid" id="dash-kpis"></div>
       <div class="dash-section" id="dash-hoje"></div>
       <div class="dash-section" id="dash-venc"></div>
+      <div class="dash-section" id="dash-aniv"></div>
       <div class="dash-section" id="dash-pagtos"></div>
     </div>
 
@@ -3622,6 +3623,42 @@ function renderDashboard() {
       vencEl.innerHTML = '<div class="dash-section-title" style="color:var(--danger);">⚠ Vencimentos em 3 dias ('+vencProx.length+')</div>'+vrows;
     } else {
       vencEl.innerHTML = '';
+    }
+  }
+
+  // Aniversariantes do mês
+  var anivEl = document.getElementById('dash-aniv');
+  if(anivEl){
+    var mesAtual = now.getMonth()+1;
+    var diaAtual = now.getDate();
+    var anivMes = students.filter(function(s){
+      if(!s.nascimento) return false;
+      var p = s.nascimento.split('-');
+      return parseInt(p[1]) === mesAtual;
+    }).sort(function(a,b){
+      return parseInt(a.nascimento.split('-')[2]) - parseInt(b.nascimento.split('-')[2]);
+    });
+    if(anivMes.length){
+      var arows = anivMes.map(function(s){
+        var p = s.nascimento.split('-');
+        var dia = parseInt(p[2]);
+        var isHoje = dia === diaAtual;
+        var isFuturo = dia > diaAtual;
+        var idade = getIdade(s.nascimento) + (isHoje ? 0 : (isFuturo ? 0 : 1));
+        // if birthday already happened this year, age is current age; if today, age turns today
+        var idadeLabel = isHoje ? (getIdade(s.nascimento))+' anos hoje!' : getIdade(s.nascimento)+(isFuturo?'+1':'')+' anos · dia '+dia;
+        var cor = isHoje ? 'var(--warning)' : 'var(--white-dim)';
+        return '<div class="dash-row" style="background:var(--card);cursor:pointer;'+(isHoje?'border-left:2px solid var(--warning);':'')+'" onclick="openDetail(\''+s.id+'\')">'
+          +'<div>'
+          +'<div class="dash-row-name">'+(isHoje?'&#127881; ':'')+s.nome+'</div>'
+          +'<div class="dash-row-sub" style="color:'+cor+';">'+idadeLabel+'</div>'
+          +'</div>'
+          +(isHoje?'<span class="badge badge-warn">Hoje!</span>':'<span style="font-size:1.1rem;">&#127874;</span>')
+          +'</div>';
+      }).join('');
+      anivEl.innerHTML = '<div class="dash-section-title" style="color:var(--warning);">&#127874; Aniversariantes de '+mesNomes[now.getMonth()]+' ('+anivMes.length+')</div>'+arows;
+    } else {
+      anivEl.innerHTML = '';
     }
   }
 
