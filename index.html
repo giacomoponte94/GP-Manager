@@ -247,18 +247,25 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
 [data-theme="light"] .dash-row-name{color:#0f1f33;}
 
 /* Student cards */
-.st-card{display:flex;align-items:center;gap:12px;padding:13px 14px;background:var(--card);margin-bottom:6px;border-radius:6px;cursor:pointer;border-left:3px solid transparent;transition:opacity 0.15s;}
-.st-card.st-ok{border-left-color:var(--success);}
-.st-card.st-warn{border-left-color:var(--warning);}
-.st-card.st-late{border-left-color:var(--danger);}
-.st-card:active{opacity:0.8;}
-.st-card-av{width:52px;height:52px;border-radius:50%;background:var(--accent-dim);display:flex;align-items:center;justify-content:center;font-family:'Raleway',sans-serif;font-size:0.8rem;font-weight:700;color:var(--accent);overflow:hidden;flex-shrink:0;}
+.st-card{display:flex;align-items:center;gap:12px;padding:13px 14px;background:var(--card);margin-bottom:6px;border-radius:6px;cursor:pointer;border-left:4px solid transparent;transition:background 0.15s,opacity 0.15s;}
+.st-card.st-ok{border-left-color:var(--success);background:rgba(39,174,96,0.05);}
+.st-card.st-warn{border-left-color:var(--warning);background:rgba(243,156,18,0.06);}
+.st-card.st-late{border-left-color:var(--danger);background:rgba(231,76,60,0.06);opacity:0.9;}
+.st-card:active{opacity:0.7;}
+.st-card-av{width:52px;height:52px;border-radius:50%;background:var(--accent-dim);display:flex;align-items:center;justify-content:center;font-family:'Raleway',sans-serif;font-size:0.8rem;font-weight:700;color:var(--accent);overflow:hidden;flex-shrink:0;box-sizing:border-box;}
+.st-card.st-ok .st-card-av{border:2px solid var(--success);}
+.st-card.st-warn .st-card-av{border:2px solid var(--warning);}
+.st-card.st-late .st-card-av{border:2px solid var(--danger);}
 .st-card-av img{width:100%;height:100%;object-fit:cover;}
 .st-card-body{flex:1;min-width:0;}
 .st-card-name{font-weight:600;font-size:0.9rem;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .st-card-sub{font-size:0.72rem;color:var(--white-dim);margin-top:3px;}
 .st-card-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;}
-[data-theme="light"] .st-card{background:#fff;box-shadow:0 1px 4px rgba(0,0,0,0.06);}
+.st-card-right .badge{font-size:0.6rem;padding:4px 9px;}
+[data-theme="light"] .st-card{box-shadow:0 1px 4px rgba(0,0,0,0.06);}
+[data-theme="light"] .st-card.st-ok{background:rgba(39,174,96,0.07);}
+[data-theme="light"] .st-card.st-warn{background:rgba(243,156,18,0.08);}
+[data-theme="light"] .st-card.st-late{background:rgba(231,76,60,0.07);}
 [data-theme="light"] .st-card-name{color:#0f1f33;}
 
 /* Days picker grid - 6 colunas, sem DOM */
@@ -1112,7 +1119,7 @@ function renderTable(){
     var ini=s.nome.split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();
     var avInner=s.foto?'<img src="'+s.foto+'" alt="">':ini;
     var stClass=s.status==='em dia'?'st-ok':s.status==='atrasado'?'st-late':'st-warn';
-    var sb=s.status==='em dia'?'<span class="badge badge-ok">Em dia</span>':s.status==='atrasado'?'<span class="badge badge-late">Inativo</span>':'<span class="badge badge-warn">Vencendo</span>';
+    var sb=s.status==='em dia'?'<span class="badge badge-ok">&#10003; Em dia</span>':s.status==='atrasado'?'<span class="badge badge-late">&#8226; Inativo</span>':'<span class="badge badge-warn">&#9888; Vencendo</span>';
     var aulas=getAulasDoMes(s.id); var atag=aulas.direito>0?'<span style="font-size:0.62rem;color:var(--white-dim);margin-left:4px;">'+aulas.feitas+'/'+aulas.direito+'</span>':'';
     var hoje2=new Date();hoje2.setHours(0,0,0,0);
     var vd=s.vencimento?new Date(s.vencimento+'T12:00:00'):null;
