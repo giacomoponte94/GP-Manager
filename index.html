@@ -551,6 +551,19 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
   <div style="display:flex;gap:10px;"><button class="btn btn-outline" style="flex:1;height:40px;" onclick="document.getElementById('modal-exercicio').style.display='none'">Cancelar</button><button class="btn btn-primary" style="flex:2;height:40px;" onclick="salvarExercicio()">Adicionar</button></div>
   </div>
 </div>
+<div id="modal-carga" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,0.7);z-index:600;align-items:flex-end;justify-content:center;">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-header"><div><div class="modal-title">&#128200; Registrar Carga</div><div style="font-size:0.72rem;color:var(--white-dim);" id="rc-ex-label"></div></div><button class="modal-close" onclick="closeModal('modal-carga')">&#215;</button></div>
+    <input type="hidden" id="rc-sid"><input type="hidden" id="rc-exkey">
+    <div style="margin-bottom:12px;"><label class="form-label">Data</label><input type="date" id="rc-data" class="form-inp"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+      <div><label class="form-label">Carga (kg)</label><input type="number" id="rc-carga" placeholder="80" class="form-inp" step="0.5" min="0"></div>
+      <div><label class="form-label">Reps realizadas</label><input type="text" id="rc-reps" placeholder="12" class="form-inp"></div>
+    </div>
+    <div style="margin-bottom:16px;"><label class="form-label">Obs</label><input type="text" id="rc-obs" placeholder="Ex: sem falha, RPE 8..." class="form-inp"></div>
+    <div style="display:flex;gap:10px;"><button class="btn btn-outline" style="flex:1 1 0;min-width:0;height:40px;" onclick="closeModal('modal-carga')">Cancelar</button><button class="btn btn-primary" style="flex:2 1 0;min-width:0;height:40px;" onclick="salvarCarga()">Salvar</button></div>
+  </div>
+</div>
 <div id="modal-reposicao" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,0.7);z-index:500;align-items:flex-end;justify-content:center;">
   <div class="modal" style="max-width:380px;"><div class="modal-header"><div><div class="modal-title">Reposi&ccedil;&atilde;o</div><div style="font-size:0.72rem;color:var(--white-dim);" id="repos-nome"></div></div><button class="modal-close" onclick="document.getElementById('modal-reposicao').style.display='none'">&#215;</button></div><input type="hidden" id="repos-sid"><div id="repos-body"></div></div>
 </div>
@@ -951,7 +964,7 @@ function isHoliday(date) {
 
 function save() { try{localStorage.setItem('gp-s',JSON.stringify(students));}catch(e){} }
 function loadAll() {
-  loadPlanos(); syncPlanLegacy(); loadTreinos(); loadHistoricoFin(); loadExcecoes(); loadDiasPermitidos(); loadReposicoes(); loadPagamentos();
+  loadPlanos(); syncPlanLegacy(); loadTreinos(); loadEvolucao(); loadHistoricoFin(); loadExcecoes(); loadDiasPermitidos(); loadReposicoes(); loadPagamentos();
   try{var s=localStorage.getItem('gp-s');if(s)students=JSON.parse(s);}catch(e){}
   try{var a=localStorage.getItem('gp-a');if(a)agendas=JSON.parse(a);}catch(e){}
   try{var p=localStorage.getItem('gp-p');if(p)presencas=JSON.parse(p);}catch(e){}
@@ -2532,7 +2545,8 @@ function initTheme() {
   applyTheme(localStorage.getItem('gp-theme')||'dark');
 }
 
-var treinosData = {}; 
+var treinosData = {};
+var evolucaoCargas = {}; 
 
 function loadTreinos() {
   var t=localStorage.getItem('gp-treinos');
@@ -2573,12 +2587,34 @@ function renderTreinoEditor(sid) {
       if(div.exercicios&&div.exercicios.length) {
         out+='<div style="padding:8px 16px;">';
         div.exercicios.forEach(function(ex,ei) {
-          out+='<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:8px 0;border-bottom:1px solid rgba(74,127,165,0.08);">';
+          var exKey=getEvoKey(ex.exercicio);
+          var hist=getEvoList(sid,exKey);
+          var miniChart=renderMiniChart(sid,exKey);
+          var lastEntries='';
+          if(hist.length){
+            var last2=hist.slice(-2).reverse();
+            lastEntries='<div style="margin-top:5px;display:flex;gap:8px;">';
+            last2.forEach(function(e){
+              var d=e.data?new Date(e.data+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}):'';
+              lastEntries+='<span style="font-size:0.65rem;background:rgba(74,127,165,0.12);padding:2px 7px;border-radius:10px;color:var(--white-dim);">'
+                +d+(e.carga?' \u00B7 '+e.carga+'kg':'')+(e.reps?' \u00B7 '+e.reps:'')
+                +'</span>';
+            });
+            lastEntries+='</div>';
+          }
+          out+='<div style="padding:8px 0;border-bottom:1px solid rgba(74,127,165,0.08);">';
+          out+='<div style="display:flex;justify-content:space-between;align-items:flex-start;">';
           out+='<div style="flex:1;">';
           out+='<div style="font-size:0.85rem;font-weight:600;color:var(--white);">'+ex.exercicio+'</div>';
           out+='<div style="font-size:0.72rem;color:var(--white-dim);margin-top:2px;">'+ex.series+'x'+ex.reps+(ex.carga?' \u00B7 '+ex.carga:'')+(ex.obs?' \u00B7 '+ex.obs:'')+'</div>';
+          out+=lastEntries;
+          out+=miniChart;
           out+='</div>';
-          out+='<button class="btn btn-danger btn-sm del-ex-btn" data-di="'+di+'" data-ei="'+ei+'" style="margin-left:8px;">\u2715</button>';
+          out+='<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;margin-left:8px;flex-shrink:0;">';
+          out+='<button class="btn btn-danger btn-sm del-ex-btn" data-di="'+di+'" data-ei="'+ei+'">\u2715</button>';
+          out+='<button class="btn btn-outline btn-sm reg-carga-btn" data-sid="'+sid+'" data-exkey="'+exKey+'" data-exnome="'+ex.exercicio.replace(/"/g,'&quot;')+'" style="font-size:0.65rem;white-space:nowrap;">&#128200;</button>';
+          out+='</div>';
+          out+='</div>';
           out+='</div>';
         });
         out+='</div>';
@@ -2612,6 +2648,14 @@ function renderTreinoEditor(sid) {
       var ei=parseInt(btn.getAttribute('data-ei'));
       getTreino(sid).divisoes[di].exercicios.splice(ei,1);
       saveTreinos();renderTreinoEditor(sid);
+    };
+  });
+  body.querySelectorAll('.reg-carga-btn').forEach(function(btn){
+    btn.onclick=function(){
+      var bsid=btn.getAttribute('data-sid');
+      var exkey=btn.getAttribute('data-exkey');
+      var exnome=btn.getAttribute('data-exnome');
+      openRegistrarCarga(bsid,exkey,exnome);
     };
   });
 }
@@ -2658,6 +2702,67 @@ function salvarExercicio() {
   saveTreinos();
   closeModal('modal-exercicio');
   renderTreinoEditor(sid);
+}
+
+function loadEvolucao() {
+  var t=localStorage.getItem('gp-evolucao');
+  if(t) try{evolucaoCargas=JSON.parse(t);}catch(e){}
+}
+function saveEvolucao() {
+  localStorage.setItem('gp-evolucao',JSON.stringify(evolucaoCargas));
+}
+function getEvoKey(exNome) {
+  return exNome.trim().toLowerCase().replace(/\s+/g,'_');
+}
+function getEvoList(sid,exKey) {
+  if(!evolucaoCargas[sid])return[];
+  return (evolucaoCargas[sid][exKey]||[]).slice().sort(function(a,b){return a.data<b.data?-1:1;});
+}
+function openRegistrarCarga(sid,exKey,exNome) {
+  document.getElementById('rc-sid').value=sid;
+  document.getElementById('rc-exkey').value=exKey;
+  document.getElementById('rc-ex-label').textContent=exNome||exKey;
+  document.getElementById('rc-data').value=todayStr();
+  document.getElementById('rc-obs').value='';
+  var hist=getEvoList(sid,exKey);
+  document.getElementById('rc-carga').value=hist.length&&hist[hist.length-1].carga?hist[hist.length-1].carga:'';
+  document.getElementById('rc-reps').value=hist.length&&hist[hist.length-1].reps?hist[hist.length-1].reps:'';
+  document.getElementById('modal-carga').style.display='flex';
+}
+function salvarCarga() {
+  var sid=document.getElementById('rc-sid').value;
+  var exKey=document.getElementById('rc-exkey').value;
+  var data=document.getElementById('rc-data').value;
+  var carga=document.getElementById('rc-carga').value.trim();
+  var reps=document.getElementById('rc-reps').value.trim();
+  var obs=document.getElementById('rc-obs').value.trim();
+  if(!data){alert('Informe a data.');return;}
+  if(!evolucaoCargas[sid])evolucaoCargas[sid]={};
+  if(!evolucaoCargas[sid][exKey])evolucaoCargas[sid][exKey]=[];
+  evolucaoCargas[sid][exKey].push({data:data,carga:carga,reps:reps,obs:obs});
+  saveEvolucao();
+  closeModal('modal-carga');
+  renderTreinoEditor(sid);
+  toast('Carga registrada!');
+}
+function renderMiniChart(sid,exKey) {
+  var hist=getEvoList(sid,exKey).slice(-8);
+  if(hist.length<2)return'';
+  var vals=hist.map(function(e){return parseFloat(e.carga)||0;});
+  var maxV=Math.max.apply(null,vals);
+  if(!maxV)return'';
+  var H=32,BAR_W=14,GAP=3,W=(BAR_W+GAP)*hist.length;
+  var bars=vals.map(function(v,i){
+    var h=Math.max(3,Math.round(v/maxV*(H-8)));
+    var x=i*(BAR_W+GAP);
+    var y=H-h-2;
+    var isLast=i===vals.length-1;
+    return '<rect x="'+x+'" y="'+y+'" width="'+BAR_W+'" height="'+h+'" rx="2" fill="'+(isLast?'var(--success)':'var(--accent)')+'" opacity="'+(isLast?'1':'0.45')+'"/>';
+  }).join('');
+  var lastVal=vals[vals.length-1];
+  return '<div style="margin-top:6px;overflow:hidden;">'
+    +'<svg width="'+W+'" height="'+H+'" style="display:block;">'+bars+'</svg>'
+    +'</div>';
 }
 
 function calcSimulacao() {
