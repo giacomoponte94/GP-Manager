@@ -800,18 +800,37 @@ let calView = 'semana', currentDay = new Date(), currentWeekStart = getMonday(ne
 
 
 var PLANOS_DEFAULT = [
-  { id:'Start',         nome:'Start',         tipo:'fixo',   diasSemana:1, precoInd:320,  precoExt:280,  labelExt:'Duo' },
-  { id:'Evolucao',      nome:'Evolucao',       tipo:'fixo',   diasSemana:2, precoInd:600,  precoExt:520,  labelExt:'Duo' },
-  { id:'Performance',   nome:'Performance',    tipo:'fixo',   diasSemana:3, precoInd:880,  precoExt:720,  labelExt:'Duo' },
-  { id:'Transformacao', nome:'Transformacao',  tipo:'fixo',   diasSemana:4, precoInd:1140, precoExt:880,  labelExt:'Duo' },
-  { id:'Elite',         nome:'Elite',          tipo:'fixo',   diasSemana:5, precoInd:1400, precoExt:1040, labelExt:'Duo' }
+  { id:'Start',         nome:'Start',         tipo:'fixo',   diasSemana:1, precoInd:350,  precoExt:300,  labelExt:'Duo' },
+  { id:'Evolucao',      nome:'Evolução',       tipo:'fixo',   diasSemana:2, precoInd:650,  precoExt:550,  labelExt:'Duo' },
+  { id:'Performance',   nome:'Performance',    tipo:'fixo',   diasSemana:3, precoInd:900,  precoExt:750,  labelExt:'Duo' },
+  { id:'Transformacao', nome:'Transformação',  tipo:'fixo',   diasSemana:4, precoInd:1200, precoExt:1100, labelExt:'Duo' },
+  { id:'Elite',         nome:'Elite',          tipo:'fixo',   diasSemana:5, precoInd:1500, precoExt:1100, labelExt:'Duo' }
 ];
 var PLANOS = [];
 
 function loadPlanos() {
   try {
     var saved = localStorage.getItem('gp-planos');
-    if (saved) { try { PLANOS = JSON.parse(saved); return; } catch(e) {} }
+    if (saved) {
+      try {
+        PLANOS = JSON.parse(saved);
+        // Migrate: sync names and prices from current defaults
+        var changed = false;
+        PLANOS_DEFAULT.forEach(function(def) {
+          var p = PLANOS.find(function(x){ return x.id === def.id; });
+          if (p) {
+            if (p.precoInd !== def.precoInd || p.precoExt !== def.precoExt || p.nome !== def.nome) {
+              p.precoInd = def.precoInd;
+              p.precoExt = def.precoExt;
+              p.nome = def.nome;
+              changed = true;
+            }
+          }
+        });
+        if (changed) try { localStorage.setItem('gp-planos', JSON.stringify(PLANOS)); } catch(e) {}
+        return;
+      } catch(e) {}
+    }
   } catch(e) {}
   PLANOS = JSON.parse(JSON.stringify(PLANOS_DEFAULT));
 }
