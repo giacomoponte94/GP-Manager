@@ -669,6 +669,17 @@ function _pushToCloud(){
 function _applyCloud(data){
   if(!data) return;
   if(data.ts && data.ts===_lastPushedTs) return; // eco do próprio push
+
+  // Proteção: se nuvem tem menos alunos que local, empurra local em vez de sobrescrever
+  var localCount=0; var cloudCount=0;
+  try{ localCount=(JSON.parse(localStorage.getItem('gp-s')||'[]')).length; }catch(e){}
+  try{ cloudCount=(JSON.parse(data.students||'[]')).length; }catch(e){}
+  if(localCount > cloudCount){
+    console.log('[GP Sync] Local tem mais dados ('+localCount+' > '+cloudCount+'), enviando local para nuvem.');
+    _pushToCloud();
+    return;
+  }
+
   _applyingCloud = true;
   Object.keys(_SYNC_KEYS).forEach(function(field){
     if(data[field]) try{ localStorage.setItem(_SYNC_KEYS[field], data[field]); }catch(e){}
@@ -788,17 +799,18 @@ function openCadastro(mode, id) {
   try{atualizarSelectsPlanos();}catch(e){}
   try{buildDaysPicker();}catch(e){}
 
-  // Mostrar como aba (j? que modal n?o funciona no Safari)
-  // Esconder nav-cadastro mas mostrar a aba
-  var navCad=document.getElementById('nav-cadastro');
-  if(navCad){navCad.style.display='';navCad.classList.add('active');}
+  // Mostrar conteúdo do cadastro sem expor o tab na navbar
   document.querySelectorAll('.nav-tab').forEach(function(b){b.classList.remove('active');});
-  if(navCad)navCad.classList.add('active');
-  ['alunos','agenda','financeiro'].forEach(function(t){
+  var navAl=document.getElementById('nav-alunos');
+  if(navAl)navAl.classList.add('active'); // mantém "Alunos" ativo na navbar
+  ['dashboard','alunos','agenda','financeiro'].forEach(function(t){
     var el=document.getElementById('tab-'+t);if(el)el.style.display='none';
   });
   var tc=document.getElementById('tab-cadastro');
   if(tc){tc.style.display='block';}
+  // nav-cadastro nunca aparece na navbar
+  var navCad=document.getElementById('nav-cadastro');
+  if(navCad)navCad.style.display='none';
   window.scrollTo(0,0);
 }
 
