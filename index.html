@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,viewport-fit=cover">
-<title>GP Manager</title>
+<title>Personal Pro</title>
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@300;400;600;700;800&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
@@ -384,7 +384,7 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
   <div class="login-box">
     <div class="login-brand">
       <div class="login-brand-sub">Gi&aacute;como Ponte</div>
-      <div class="login-brand-title">GP <span>Manager</span></div>
+      <div class="login-brand-title">Personal <span>Pro</span></div>
     </div>
     <label class="form-label">Usu&aacute;rio</label>
     <input type="text" id="lin-u" autocomplete="username" style="width:100%;background:var(--dark);border:1px solid var(--border);color:var(--white);padding:12px 14px;border-radius:4px;font-size:0.92rem;margin-bottom:14px;-webkit-appearance:none;outline:none;">
@@ -398,7 +398,7 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
 <div id="ham-backdrop" class="ham-backdrop" onclick="closeHamburger()"></div>
 <div id="ham-drawer" class="ham-drawer">
   <div class="ham-dh">
-    <div class="ham-dlogo">GP <span>Manager</span></div>
+    <div class="ham-dlogo">Personal <span>Pro</span></div>
     <button class="ham-dclose" onclick="closeHamburger()">&#215;</button>
   </div>
   <div class="ham-nav">
@@ -417,7 +417,7 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
   <div class="app-header">
     <div style="display:flex;align-items:center;gap:10px;">
       <button class="ham-btn" onclick="openHamburger()" aria-label="Menu"><span></span><span></span><span></span></button>
-      <div class="app-logo">GP <span>Manager</span></div>
+      <div class="app-logo">Personal <span>Pro</span></div>
     </div>
     <div class="app-header-actions">
       <span id="sync-status" style="font-size:0.62rem;font-family:'Raleway',sans-serif;color:var(--white-dim);letter-spacing:0.05em;cursor:pointer;" onclick="forceSyncFromCloud()" title="Toque para sincronizar agora"></span>
@@ -3318,12 +3318,12 @@ function gerarPaginaAluno(d) {
     '<head>',
     '<meta charset="UTF-8">',
     '<meta name="viewport" content="width=device-width,initial-scale=1">',
-    '<title>' + d.nome + ' &middot; GP Manager<\/title>',
+    '<title>' + d.nome + ' &middot; Personal Pro<\/title>',
     '<style>' + css + '<\/style>',
     '<\/head>',
     '<body>',
     '<div class="header">',
-    '<h2>GP Manager &middot; Giacomo Ponte<\/h2>',
+    '<h2>Personal Pro &middot; Giacomo Ponte<\/h2>',
     '<h1>' + d.nome + '<\/h1>',
     '<div class="plano">' + planoInfo + '<\/div>',
     '<\/div>',
@@ -3331,7 +3331,7 @@ function gerarPaginaAluno(d) {
     aulasHtml,
     treinoHtml,
     notasHtml,
-    '<div class="footer">@giacomoponte &middot; GP Manager<\/div>',
+    '<div class="footer">@giacomoponte &middot; Personal Pro<\/div>',
     '<\/body>',
     '<\/html>'
   ];
@@ -3418,7 +3418,7 @@ function gerarRelatorio() {
     '<\/head>',
     '<body>',
     '<div class="hdr">',
-    '<div><h1>GP Manager<\/h1><h2>Giacomo Ponte \u2014 Personal Trainer<\/h2><\/div>',
+    '<div><h1>Personal Pro<\/h1><h2>Giacomo Ponte \u2014 Personal Trainer<\/h2><\/div>',
     '<div class="hdr-r"><strong>Relatorio Mensal<\/strong><br>'+mesLabel+'<br>'+now.toLocaleDateString('pt-BR')+'<\/div>',
     '<\/div>',
     '<div class="cards">',
@@ -3439,7 +3439,7 @@ function gerarRelatorio() {
     '<table><thead><tr><th>Nome \/ Plano<\/th><th>Valor<\/th><th>Vencimento<\/th><th>Status<\/th><th>Aulas<\/th><\/tr><\/thead>',
     '<tbody>'+rows+'<\/tbody><\/table>',
     '<div class="footer">',
-    '<span>GP Manager \u00B7 Giacomo Ponte \u00B7 @giacomoponte<\/span>',
+    '<span>Personal Pro \u00B7 Giacomo Ponte \u00B7 @giacomoponte<\/span>',
     '<span>'+now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'<\/span>',
     '<\/div>',
     '<div class="no-print" style="text-align:center;margin-top:28px;">',
@@ -3498,7 +3498,7 @@ function exportarListaPDF() {
     +'.footer{margin-top:24px;padding-top:10px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:10px;color:#aaa;}'
     +'@media print{.no-print{display:none;}}'
     +'</style></head><body>'
-    +'<div class="hdr"><div><h1>GP Manager</h1><h2>Giacomo Ponte \u2014 Lista de Alunos</h2></div>'
+    +'<div class="hdr"><div><h1>Personal Pro</h1><h2>Giacomo Ponte \u2014 Lista de Alunos</h2></div>'
     +'<div class="hdr-r"><strong>'+mesLabel+'</strong><br>'+now.toLocaleDateString('pt-BR')+'</div></div>'
     +'<div class="pills">'
     +'<span class="pill ok">'+em+' Em dia</span>'
@@ -3508,7 +3508,7 @@ function exportarListaPDF() {
     +'</div>'
     +'<table><thead><tr><th>Nome</th><th>Plano</th><th>Modalidade</th><th>Valor</th><th>Vencimento</th><th>Telefone</th><th>Status</th></tr></thead>'
     +'<tbody>'+rows+'</tbody></table>'
-    +'<div class="footer"><span>GP Manager \u00B7 Giacomo Ponte</span><span>'+now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'</span></div>'
+    +'<div class="footer"><span>Personal Pro \u00B7 Giacomo Ponte</span><span>'+now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'</span></div>'
     +'<div class="no-print" style="text-align:center;margin-top:24px;">'
     +'<button onclick="window.print()" style="background:#0f2035;color:white;border:none;padding:12px 40px;font-size:13px;border-radius:4px;cursor:pointer;">&#128438; Salvar como PDF</button>'
     +'</div>'
