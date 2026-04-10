@@ -33,9 +33,33 @@ select{background-image:url(data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2
 .app-logo{font-family:'Raleway',sans-serif;font-weight:800;font-size:1rem;color:var(--white);}
 .app-logo span{color:var(--accent);}
 .app-header-actions{display:flex;align-items:center;gap:6px;}
-.nav-tabs{display:flex;border-bottom:1px solid var(--border);background:var(--dark);position:sticky;top:calc(52px + env(safe-area-inset-top,0px));z-index:99;}
-.nav-tab{flex:1;padding:14px 6px;text-align:center;font-family:'Raleway',sans-serif;font-size:0.6rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--white-dim);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;-webkit-user-select:none;user-select:none;}
-.nav-tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.nav-tabs{display:none;}
+.nav-tab{display:none;}
+.ham-btn{background:none;border:none;color:var(--white);cursor:pointer;padding:4px;display:flex;flex-direction:column;justify-content:center;gap:5px;width:36px;height:36px;align-items:center;flex-shrink:0;}
+.ham-btn span{display:block;width:20px;height:2px;background:currentColor;border-radius:1px;}
+.ham-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:200;-webkit-tap-highlight-color:transparent;}
+.ham-backdrop.open{display:block;}
+.ham-drawer{position:fixed;top:0;left:0;bottom:0;width:260px;max-width:80vw;background:var(--card);z-index:201;transform:translateX(-100%);transition:transform 0.25s cubic-bezier(0.4,0,0.2,1);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);}
+.ham-drawer.open{transform:translateX(0);}
+.ham-dh{padding:18px 20px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.ham-dlogo{font-family:'Raleway',sans-serif;font-weight:800;font-size:1rem;color:var(--white);}
+.ham-dlogo span{color:var(--accent);}
+.ham-dclose{background:none;border:none;color:var(--white-dim);font-size:1.4rem;cursor:pointer;padding:0;width:32px;height:32px;display:flex;align-items:center;justify-content:center;}
+.ham-nav{flex:1;padding:8px 0;overflow-y:auto;}
+.ham-item{display:flex;align-items:center;gap:12px;width:100%;padding:14px 20px;background:none;border:none;border-left:3px solid transparent;color:var(--white-dim);font-family:'Raleway',sans-serif;font-size:0.68rem;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;text-align:left;transition:background 0.15s,color 0.15s;}
+.ham-item:hover{background:rgba(74,127,165,0.1);color:var(--white);}
+.ham-item.active{color:var(--accent);border-left-color:var(--accent);background:rgba(74,127,165,0.12);}
+.ham-icon{font-size:1.05rem;width:22px;text-align:center;flex-shrink:0;}
+.ham-div{height:1px;background:var(--border);margin:6px 0;}
+.ham-footer{padding:12px 0;border-top:1px solid var(--border);}
+[data-theme="light"] .ham-drawer{background:#fff;}
+[data-theme="light"] .ham-dh{border-color:#e2e8f0;}
+[data-theme="light"] .ham-dlogo{color:#0f1f33;}
+[data-theme="light"] .ham-item{color:#4a5568;}
+[data-theme="light"] .ham-item:hover{background:#f1f5f9;}
+[data-theme="light"] .ham-item.active{color:#2d6a9f;border-left-color:#2d6a9f;background:rgba(45,106,159,0.08);}
+[data-theme="light"] .ham-div{background:#e2e8f0;}
+[data-theme="light"] .ham-footer{border-color:#e2e8f0;}
 .btn{display:inline-flex;align-items:center;justify-content:center;font-family:'Raleway',sans-serif;font-size:0.65rem;font-weight:600;letter-spacing:0.15em;text-transform:uppercase;padding:0 18px;height:40px;cursor:pointer;border:1px solid transparent;background:none;color:var(--white);border-radius:4px;transition:opacity 0.15s,transform 0.1s;}
 .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;}
 .btn-outline{border-color:var(--border);color:var(--white-dim);}
@@ -143,9 +167,6 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
 [data-theme="light"] body{background:#eef2f7;color:#0f1f33;}
 [data-theme="light"] .app-header{background:#fff;border-color:rgba(45,106,159,0.15);box-shadow:0 1px 4px rgba(0,0,0,0.06);}
 [data-theme="light"] .app-logo{color:#0f1f33;}
-[data-theme="light"] .nav-tabs{background:#fff;border-color:rgba(45,106,159,0.15);}
-[data-theme="light"] .nav-tab{color:#4a5568;}
-[data-theme="light"] .nav-tab.active{color:#2d6a9f;border-color:#2d6a9f;}
 [data-theme="light"] .stat-card{background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.08);}
 [data-theme="light"] .stat-num{color:#0f1f33;}
 [data-theme="light"] .stat-lbl{color:#4a5568;}
@@ -348,7 +369,7 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
 /* Wider screen — center the app like a phone frame */
 @media (min-width:600px){
   #app{max-width:480px;margin:0 auto;box-shadow:0 0 60px rgba(0,0,0,0.5);}
-  .app-header,.nav-tabs{max-width:480px;}
+  .app-header{max-width:480px;}
   .main{padding-left:20px;padding-right:20px;}
 }
 @media (min-width:600px) and (min-height:700px){
@@ -374,23 +395,36 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
   </div>
 </div>
 
+<div id="ham-backdrop" class="ham-backdrop" onclick="closeHamburger()"></div>
+<div id="ham-drawer" class="ham-drawer">
+  <div class="ham-dh">
+    <div class="ham-dlogo">GP <span>Manager</span></div>
+    <button class="ham-dclose" onclick="closeHamburger()">&#215;</button>
+  </div>
+  <div class="ham-nav">
+    <button class="ham-item active" data-tab="dashboard" onclick="showTab('dashboard')"><span class="ham-icon">&#127968;</span>In&iacute;cio</button>
+    <button class="ham-item" data-tab="alunos" onclick="showTab('alunos')"><span class="ham-icon">&#128100;</span>Alunos</button>
+    <button class="ham-item" data-tab="agenda" onclick="showTab('agenda')"><span class="ham-icon">&#128197;</span>Agenda</button>
+    <button class="ham-item" data-tab="financeiro" onclick="showTab('financeiro')"><span class="ham-icon">&#128176;</span>Financeiro</button>
+    <div class="ham-div"></div>
+    <button class="ham-item" onclick="openConfiguracoes();closeHamburger()"><span class="ham-icon">&#9881;&#65039;</span>Configura&ccedil;&otilde;es</button>
+  </div>
+  <div class="ham-footer">
+    <button class="ham-item" style="color:var(--danger);" onclick="doLogout()"><span class="ham-icon">&#128682;</span>Sair</button>
+  </div>
+</div>
 <div id="app">
   <div class="app-header">
-    <div class="app-logo">GP <span>Manager</span></div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button class="ham-btn" onclick="openHamburger()" aria-label="Menu"><span></span><span></span><span></span></button>
+      <div class="app-logo">GP <span>Manager</span></div>
+    </div>
     <div class="app-header-actions">
       <span id="sync-status" style="font-size:0.62rem;font-family:'Raleway',sans-serif;color:var(--white-dim);letter-spacing:0.05em;cursor:pointer;" onclick="forceSyncFromCloud()" title="Toque para sincronizar agora"></span>
       <button id="theme-btn" class="btn btn-outline btn-sm" onclick="toggleTheme()" title="Modo claro">&#9728;&#65039;</button>
-      <button class="btn btn-outline btn-sm" onclick="openConfiguracoes()">&#9881;&#65039;</button>
-      <button class="btn btn-outline btn-sm" onclick="doLogout()">Sair</button>
     </div>
   </div>
-  <div class="nav-tabs">
-    <button class="nav-tab active" id="nav-dashboard" onclick="showTab('dashboard',this)">In&iacute;cio</button>
-    <button class="nav-tab" id="nav-alunos" onclick="showTab('alunos',this)">Alunos</button>
-    <button class="nav-tab" id="nav-agenda" onclick="showTab('agenda',this)">Agenda</button>
-    <button class="nav-tab" id="nav-financeiro" onclick="showTab('financeiro',this)">Financeiro</button>
-    <button class="nav-tab" id="nav-cadastro" style="display:none;" onclick="showTab('cadastro',this)">Cadastro</button>
-  </div>
+  <div class="nav-tabs"></div>
   <div id="notif-bar" style="padding:0 16px;margin-top:4px;"></div>
   <div class="main">
 
@@ -822,34 +856,22 @@ function openCadastro(mode, id) {
   try{atualizarSelectsPlanos();}catch(e){}
   try{buildDaysPicker();}catch(e){}
 
-  // Mostrar conteúdo do cadastro sem expor o tab na navbar
-  document.querySelectorAll('.nav-tab').forEach(function(b){b.classList.remove('active');});
-  var navAl=document.getElementById('nav-alunos');
-  if(navAl)navAl.classList.add('active'); // mantém "Alunos" ativo na navbar
+  // Mostrar cadastro, mantendo "Alunos" ativo no drawer
+  document.querySelectorAll('.ham-item[data-tab]').forEach(function(b){
+    b.classList.toggle('active', b.getAttribute('data-tab')==='alunos');
+  });
+  closeHamburger();
   ['dashboard','alunos','agenda','financeiro'].forEach(function(t){
     var el=document.getElementById('tab-'+t);if(el)el.style.display='none';
   });
   var tc=document.getElementById('tab-cadastro');
   if(tc){tc.style.display='block';}
-  // nav-cadastro nunca aparece na navbar
-  var navCad=document.getElementById('nav-cadastro');
-  if(navCad)navCad.style.display='none';
   window.scrollTo(0,0);
 }
 
 
 function cancelarCadastro() {
-  var navCad = document.getElementById('nav-cadastro');
-  if (navCad) navCad.style.display = 'none';
-  var navAl = document.getElementById('nav-alunos');
-  if (navAl) navAl.classList.add('active');
-  document.querySelectorAll('.nav-tab').forEach(function(b){ b.classList.remove('active'); });
-  if (navAl) navAl.classList.add('active');
-  ['agenda','financeiro','cadastro'].forEach(function(t){
-    var el = document.getElementById('tab-'+t); if(el) el.style.display='none';
-  });
-  var ta = document.getElementById('tab-alunos'); if(ta) ta.style.display='';
-  window.scrollTo(0,0);
+  showTab('alunos');
 }
 
 
@@ -1250,16 +1272,24 @@ function renovarAluno(id){
   toast(s.nome.split(' ')[0]+' renovado ate '+fmtDate(s.vencimento));
 }
 
-function showTab(tab,el){
+function openHamburger(){
+  document.getElementById('ham-drawer').classList.add('open');
+  document.getElementById('ham-backdrop').classList.add('open');
+}
+function closeHamburger(){
+  document.getElementById('ham-drawer').classList.remove('open');
+  document.getElementById('ham-backdrop').classList.remove('open');
+}
+function showTab(tab){
   ['dashboard','alunos','agenda','financeiro'].forEach(function(t){
     var el2=document.getElementById('tab-'+t);if(el2)el2.style.display=t===tab?'':'none';
   });
-  document.querySelectorAll('.nav-tab').forEach(function(b){b.classList.remove('active');});
-  el.classList.add('active');
-  if(tab==='agenda'){renderCalendar();}
-  if(tab==='financeiro'){renderFinanceiro();}
-  if(tab==='dashboard'){renderDashboard();}
-
+  var tc=document.getElementById('tab-cadastro');if(tc)tc.style.display='none';
+  document.querySelectorAll('.ham-item[data-tab]').forEach(function(b){
+    b.classList.toggle('active',b.getAttribute('data-tab')===tab);
+  });
+  closeHamburger();
+  window.scrollTo(0,0);
   setTimeout(function(){
     try{
       if(tab==='dashboard'){renderDashboard();}
@@ -2390,6 +2420,7 @@ function initApp(){
   try{loadAll();}catch(e){}
   try{atualizarSelectsPlanos();}catch(e){}
   try{refreshAll();}catch(e){}
+  try{showTab('dashboard');}catch(e){}
   try{startCloudSync();}catch(e){ _setSyncStatus('err'); }
   setTimeout(function(){
     try{renderDashboard();}catch(e){}
