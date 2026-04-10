@@ -1369,6 +1369,18 @@ function toggleFilterHoje(){
   renderTable();
 }
 
+function verListaHoje(){
+  showTab('alunos');
+  setTimeout(function(){
+    if(!filterHojeAtivo){
+      filterHojeAtivo=true;
+      var btn=document.getElementById('btn-hoje');
+      if(btn){btn.style.background='var(--accent)';btn.style.color='var(--white)';}
+    }
+    renderTable();
+  },50);
+}
+
 function getAulasDoMes(sid){
   var s=students.find(function(x){return x.id===sid;}); if(!s||!s.plano)return{feitas:0,direito:0,faltas:0};
   var spw=PLAN_DAYS[s.plano]||0,now=new Date(),y=now.getFullYear(),m=now.getMonth();
@@ -1505,8 +1517,8 @@ function renderNotifs(){
   if(aus.length) notifs.push({p:1,icon:'!',msg:'<strong>'+aus.length+' aluno'+(aus.length>1?'s':'')+' sem treinar ha 3+ dias</strong>',tipo:'warn',cta:null});
   var dow=new Date().getDay();
   var ds2=new Date().toISOString().split('T')[0];
-  var th=Array.from(new Set(getAgendasParaData(ds2).map(function(a){return a.alunoId;})));
-  if(th.length) notifs.push({p:2,icon:'',msg:'<strong>'+th.length+' aluno'+(th.length>1?'s':'')+' agendado'+(th.length>1?'s':'')+' hoje</strong>',tipo:'info',cta:{lbl:'Ver lista',fn:'toggleFilterHoje()'}});
+  var th=Array.from(new Set(getAgendasParaData(ds2).filter(function(a){return students.some(function(s){return s.id===a.alunoId;});}).map(function(a){return a.alunoId;})));
+  if(th.length) notifs.push({p:2,icon:'',msg:'<strong>'+th.length+' aluno'+(th.length>1?'s':'')+' agendado'+(th.length>1?'s':'')+' hoje</strong>',tipo:'info',cta:{lbl:'Ver lista',fn:'verListaHoje()'}});
 
   if(!notifs.length){bar.innerHTML='';return;}
   bar.innerHTML=notifs.sort(function(a,b){return a.p-b.p;}).map(function(n){
@@ -2451,6 +2463,7 @@ document.addEventListener('DOMContentLoaded', function() {
         var fn=nBtn.getAttribute('data-fn');
         if(fn==='cobrarInadimplentes()') cobrarInadimplentes();
         else if(fn==='toggleFilterHoje()') toggleFilterHoje();
+        else if(fn==='verListaHoje()') verListaHoje();
         return;
       }
       var row = e.target.closest ? e.target.closest('.st-row') : null;
@@ -3880,7 +3893,7 @@ function renderDashboard() {
   // Aulas hoje
   var ds = todayStr();
   var agsHoje = getAgendasParaData(ds);
-  var idHoje = agsHoje.map(function(a){ return a.alunoId; }).filter(function(id,i,ar){ return ar.indexOf(id)===i; });
+  var idHoje = agsHoje.filter(function(a){ return students.some(function(s){ return s.id===a.alunoId; }); }).map(function(a){ return a.alunoId; }).filter(function(id,i,ar){ return ar.indexOf(id)===i; });
   var hojeEl = document.getElementById('dash-hoje');
   if(hojeEl){
     if(idHoje.length){
