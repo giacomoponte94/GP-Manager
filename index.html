@@ -813,26 +813,30 @@ function loadPlanos() {
     var saved = localStorage.getItem('gp-planos');
     if (saved) {
       try {
-        PLANOS = JSON.parse(saved);
-        // Migrate: sync names and prices from current defaults
-        var changed = false;
-        PLANOS_DEFAULT.forEach(function(def) {
-          var p = PLANOS.find(function(x){ return x.id === def.id; });
-          if (p) {
-            if (p.precoInd !== def.precoInd || p.precoExt !== def.precoExt || p.nome !== def.nome) {
-              p.precoInd = def.precoInd;
-              p.precoExt = def.precoExt;
-              p.nome = def.nome;
-              changed = true;
+        var parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          PLANOS = parsed;
+          // Migrate: sync names and prices from current defaults
+          var changed = false;
+          PLANOS_DEFAULT.forEach(function(def) {
+            var p = PLANOS.find(function(x){ return x.id === def.id; });
+            if (p) {
+              if (p.precoInd !== def.precoInd || p.precoExt !== def.precoExt || p.nome !== def.nome) {
+                p.precoInd = def.precoInd;
+                p.precoExt = def.precoExt;
+                p.nome = def.nome;
+                changed = true;
+              }
             }
-          }
-        });
-        if (changed) try { localStorage.setItem('gp-planos', JSON.stringify(PLANOS)); } catch(e) {}
-        return;
+          });
+          if (changed) try { localStorage.setItem('gp-planos', JSON.stringify(PLANOS)); } catch(e) {}
+          return;
+        }
       } catch(e) {}
     }
   } catch(e) {}
   PLANOS = JSON.parse(JSON.stringify(PLANOS_DEFAULT));
+  try { localStorage.setItem('gp-planos', JSON.stringify(PLANOS)); } catch(e) {}
 }
 function savePlanos() {
   localStorage.setItem('gp-planos', JSON.stringify(PLANOS));
