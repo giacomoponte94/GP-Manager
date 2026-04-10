@@ -6,7 +6,7 @@
 <title>GP Manager</title>
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@300;400;600;700;800&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <style>
 
 
@@ -626,17 +626,15 @@ firebase.initializeApp({
   messagingSenderId:"680333411172",
   appId:"1:680333411172:web:ec373d87f989a8eea1f071"
 });
-var _db = firebase.firestore();
-var _docRef = _db.collection('gp').doc('data');
+var _dbRef = firebase.database().ref('gp/data');
 var _syncTimer = null;
 var _applyingCloud = false;
-var _cloudUnsubscribe = null;
-var _lastPushedTs = null; // evita re-aplicar o próprio push
+var _lastPushedTs = null;
 
 function _setSyncStatus(status, detail){
   var el=document.getElementById('sync-status'); if(!el) return;
-  if(status==='ok') { el.textContent='☁ Sync'; el.style.color='var(--success)'; }
-  else if(status==='up') { el.textContent='↑ Enviando...'; el.style.color='var(--accent-l)'; }
+  if(status==='ok')  { el.textContent='☁ Sync'; el.style.color='var(--success)'; }
+  else if(status==='up')  { el.textContent='↑ Enviando...'; el.style.color='var(--accent-l)'; }
   else if(status==='err') { el.textContent='⚠ Sem sync'; el.style.color='var(--warning)'; if(detail) console.error('[GP Sync]', detail); }
   else { el.textContent=''; }
 }
@@ -661,22 +659,20 @@ function _pushToCloud(){
   _syncTimer = setTimeout(function(){
     var d=_getAllData();
     _lastPushedTs=d.ts;
-    _docRef.set(d)
+    _dbRef.set(d)
       .then(function(){ _setSyncStatus('ok'); })
       .catch(function(e){ _setSyncStatus('err', e); });
   }, 1500);
 }
 
 function _applyCloud(data){
-  // Ignorar se for o push que nós mesmos acabamos de enviar
-  if(data.ts && data.ts===_lastPushedTs) return;
+  if(!data) return;
+  if(data.ts && data.ts===_lastPushedTs) return; // eco do próprio push
   _applyingCloud = true;
   Object.keys(_SYNC_KEYS).forEach(function(field){
     if(data[field]) try{ localStorage.setItem(_SYNC_KEYS[field], data[field]); }catch(e){}
   });
-  // Recarregar variáveis em memória ANTES de resetar flag
-  try{ loadAll(); }catch(e){ console.error('[GP Sync] loadAll error', e); }
-  // Resetar flag antes de refreshAll para permitir re-renders normais
+  try{ loadAll(); }catch(e){ console.error('[GP Sync] loadAll', e); }
   _applyingCloud = false;
   try{ refreshAll(); }catch(e){}
   try{ renderCalendar(); }catch(e){}
@@ -685,31 +681,28 @@ function _applyCloud(data){
 }
 
 function startCloudSync(){
-  if(_cloudUnsubscribe) _cloudUnsubscribe();
-  _cloudUnsubscribe = _docRef.onSnapshot(function(doc){
-    if(doc.exists){
-      console.log('[GP Sync] Dados recebidos, ts=', doc.data().ts);
-      _applyCloud(doc.data());
-    } else {
-      console.log('[GP Sync] Sem dados na nuvem, enviando dados locais...');
-      _pushToCloud();
-    }
+  // Ouvir mudanças em tempo real
+  _dbRef.on('value', function(snapshot){
+    var data = snapshot.val();
+    if(data){ _applyCloud(data); }
+    else { _pushToCloud(); } // banco vazio: envia dados locais
   }, function(e){ _setSyncStatus('err', e); });
 }
 
 function forceSyncFromCloud(){
   _setSyncStatus('up');
-  _docRef.get().then(function(doc){
-    if(doc.exists){ _lastPushedTs=null; _applyCloud(doc.data()); toast('Dados atualizados da nuvem!'); }
-    else { toast('Nenhum dado na nuvem ainda.'); _setSyncStatus('ok'); }
+  _dbRef.once('value').then(function(snapshot){
+    var data = snapshot.val();
+    if(data){ _lastPushedTs=null; _applyCloud(data); toast('Dados atualizados da nuvem!'); }
+    else { _pushToCloud(); toast('Nuvem vazia \u2014 dados locais enviados.'); }
   }).catch(function(e){ _setSyncStatus('err', e); toast('Erro ao buscar dados.'); });
 }
 
-// Interceptar todos os setItem gp-* para disparar push automático
+// Interceptar setItem gp-* para push automático
 (function(){
-  var orig = localStorage.setItem.bind(localStorage);
-  localStorage.setItem = function(key, val){
-    orig(key, val);
+  var orig=localStorage.setItem.bind(localStorage);
+  localStorage.setItem=function(key,val){
+    orig(key,val);
     if(!_applyingCloud && key.indexOf('gp-')===0 && key!=='gp-sess' && key!=='gp-theme'){
       _pushToCloud();
     }
