@@ -377,7 +377,7 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
   <div class="app-header">
     <div class="app-logo">GP <span>Manager</span></div>
     <div class="app-header-actions">
-      <span id="sync-status" style="font-size:0.62rem;font-family:'Raleway',sans-serif;color:var(--white-dim);letter-spacing:0.05em;"></span>
+      <span id="sync-status" style="font-size:0.62rem;font-family:'Raleway',sans-serif;color:var(--white-dim);letter-spacing:0.05em;cursor:pointer;" onclick="forceSyncFromCloud()" title="Toque para sincronizar agora"></span>
       <button id="theme-btn" class="btn btn-outline btn-sm" onclick="toggleTheme()" title="Modo claro">&#9728;&#65039;</button>
       <button class="btn btn-outline btn-sm" onclick="openConfiguracoes()">&#9881;&#65039;</button>
       <button class="btn btn-outline btn-sm" onclick="doLogout()">Sair</button>
@@ -631,70 +631,78 @@ var _docRef = _db.collection('gp').doc('data');
 var _syncTimer = null;
 var _applyingCloud = false;
 var _cloudUnsubscribe = null;
+var _lastPushedTs = null; // evita re-aplicar o próprio push
 
-function _setSyncStatus(status){
+function _setSyncStatus(status, detail){
   var el=document.getElementById('sync-status'); if(!el) return;
-  if(status==='ok')     { el.textContent='☁ Sync'; el.style.color='var(--success)'; }
-  else if(status==='up'){ el.textContent='↑ ...';  el.style.color='var(--accent-l)'; }
-  else if(status==='err'){ el.textContent='⚠ Offline'; el.style.color='var(--warning)'; }
-  else                  { el.textContent='';               }
+  if(status==='ok') { el.textContent='☁ Sync'; el.style.color='var(--success)'; }
+  else if(status==='up') { el.textContent='↑ Enviando...'; el.style.color='var(--accent-l)'; }
+  else if(status==='err') { el.textContent='⚠ Sem sync'; el.style.color='var(--warning)'; if(detail) console.error('[GP Sync]', detail); }
+  else { el.textContent=''; }
 }
 
+var _SYNC_KEYS = {
+  students:'gp-s', agendas:'gp-a', presencas:'gp-p', notasSessao:'gp-n',
+  excecoes:'gp-exc', reposicoes:'gp-rep', planos:'gp-planos',
+  historicoFin:'gp-hfin', feriadosCustom:'gp-fe', bloqueios:'gp-bl',
+  diasPermitidos:'gp-dias-perm', treinosData:'gp-treinos',
+  evolucaoCargas:'gp-evolucao', pagamentos:'gp-pagamentos', historicoCob:'gp-hc'
+};
+
 function _getAllData(){
-  return {
-    students:      localStorage.getItem('gp-s')||'[]',
-    agendas:       localStorage.getItem('gp-a')||'[]',
-    presencas:     localStorage.getItem('gp-p')||'{}',
-    notasSessao:   localStorage.getItem('gp-n')||'{}',
-    excecoes:      localStorage.getItem('gp-exc')||'{}',
-    reposicoes:    localStorage.getItem('gp-rep')||'{}',
-    planos:        localStorage.getItem('gp-planos')||'[]',
-    historicoFin:  localStorage.getItem('gp-hfin')||'{}',
-    feriadosCustom:localStorage.getItem('gp-fe')||'[]',
-    bloqueios:     localStorage.getItem('gp-bl')||'{}',
-    diasPermitidos:localStorage.getItem('gp-dias-perm')||'[]',
-    treinosData:   localStorage.getItem('gp-treinos')||'{}',
-    evolucaoCargas:localStorage.getItem('gp-evolucao')||'{}',
-    pagamentos:    localStorage.getItem('gp-pagamentos')||'[]',
-    historicoCob:  localStorage.getItem('gp-hc')||'{}',
-    ts:            new Date().toISOString()
-  };
+  var d={ts:new Date().toISOString()};
+  Object.keys(_SYNC_KEYS).forEach(function(f){ d[f]=localStorage.getItem(_SYNC_KEYS[f])||''; });
+  return d;
 }
 
 function _pushToCloud(){
   if(_syncTimer) clearTimeout(_syncTimer);
   _setSyncStatus('up');
   _syncTimer = setTimeout(function(){
-    _docRef.set(_getAllData())
+    var d=_getAllData();
+    _lastPushedTs=d.ts;
+    _docRef.set(d)
       .then(function(){ _setSyncStatus('ok'); })
-      .catch(function(){ _setSyncStatus('err'); });
+      .catch(function(e){ _setSyncStatus('err', e); });
   }, 1500);
 }
 
 function _applyCloud(data){
+  // Ignorar se for o push que nós mesmos acabamos de enviar
+  if(data.ts && data.ts===_lastPushedTs) return;
   _applyingCloud = true;
-  var keys = {
-    students:'gp-s', agendas:'gp-a', presencas:'gp-p', notasSessao:'gp-n',
-    excecoes:'gp-exc', reposicoes:'gp-rep', planos:'gp-planos',
-    historicoFin:'gp-hfin', feriadosCustom:'gp-fe', bloqueios:'gp-bl',
-    diasPermitidos:'gp-dias-perm', treinosData:'gp-treinos',
-    evolucaoCargas:'gp-evolucao', pagamentos:'gp-pagamentos', historicoCob:'gp-hc'
-  };
-  Object.keys(keys).forEach(function(field){
-    if(data[field]) try{ localStorage.setItem(keys[field], data[field]); }catch(e){}
+  Object.keys(_SYNC_KEYS).forEach(function(field){
+    if(data[field]) try{ localStorage.setItem(_SYNC_KEYS[field], data[field]); }catch(e){}
   });
+  // Recarregar variáveis em memória ANTES de resetar flag
+  try{ loadAll(); }catch(e){ console.error('[GP Sync] loadAll error', e); }
+  // Resetar flag antes de refreshAll para permitir re-renders normais
   _applyingCloud = false;
-  try{ loadAll(); }catch(e){}
   try{ refreshAll(); }catch(e){}
+  try{ renderCalendar(); }catch(e){}
+  try{ renderFinanceiro(); }catch(e){}
   _setSyncStatus('ok');
 }
 
 function startCloudSync(){
   if(_cloudUnsubscribe) _cloudUnsubscribe();
   _cloudUnsubscribe = _docRef.onSnapshot(function(doc){
-    if(doc.exists){ _applyCloud(doc.data()); }
-    else { _pushToCloud(); } // primeiro acesso: envia dados locais
-  }, function(){ _setSyncStatus('err'); });
+    if(doc.exists){
+      console.log('[GP Sync] Dados recebidos, ts=', doc.data().ts);
+      _applyCloud(doc.data());
+    } else {
+      console.log('[GP Sync] Sem dados na nuvem, enviando dados locais...');
+      _pushToCloud();
+    }
+  }, function(e){ _setSyncStatus('err', e); });
+}
+
+function forceSyncFromCloud(){
+  _setSyncStatus('up');
+  _docRef.get().then(function(doc){
+    if(doc.exists){ _lastPushedTs=null; _applyCloud(doc.data()); toast('Dados atualizados da nuvem!'); }
+    else { toast('Nenhum dado na nuvem ainda.'); _setSyncStatus('ok'); }
+  }).catch(function(e){ _setSyncStatus('err', e); toast('Erro ao buscar dados.'); });
 }
 
 // Interceptar todos os setItem gp-* para disparar push automático
