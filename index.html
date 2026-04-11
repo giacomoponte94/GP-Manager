@@ -120,6 +120,7 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
 .cal-slot-cell{position:relative;height:52px;border-bottom:1px solid rgba(74,127,165,0.08);border-right:1px solid rgba(74,127,165,0.06);background:var(--card);cursor:pointer;}
 .cal-slot-cell.today-col{background:#0d2340;}
 .cal-slot-cell:hover,.day-slot-content:hover{background:rgba(74,127,165,0.08);}
+.slot-bloqueado{background:repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(0,0,0,0.08) 4px,rgba(0,0,0,0.08) 8px);cursor:default;opacity:0.4;}
 .cal-event{position:absolute;top:2px;right:2px;bottom:2px;left:2px;padding:3px 4px;font-size:0.58rem;font-weight:600;overflow:hidden;cursor:pointer;border-left:2px solid;border-radius:2px;}
 .cal-event.status-ok{background:rgba(46,204,113,0.15);border-color:var(--success);color:var(--success);}
 .cal-event.status-late{background:rgba(231,76,60,0.15);border-color:var(--danger);color:var(--danger);}
@@ -702,7 +703,7 @@ var _SYNC_KEYS = {
   historicoFin:'gp-hfin', feriadosCustom:'gp-fe', bloqueios:'gp-bl',
   diasPermitidos:'gp-dias-perm', treinosData:'gp-treinos',
   evolucaoCargas:'gp-evolucao', pagamentos:'gp-pagamentos', historicoCob:'gp-hc',
-  despesas:'gp-desp'
+  despesas:'gp-desp', horariosConfig:'gp-hconf'
 };
 
 function _getAllData(){
@@ -919,6 +920,7 @@ function useReposicao(sid) {
 
 
 var diasPermitidos = [1,2,3,4,5,6];
+var horariosConfig = {}; // { hour: [dow, dow, ...] }  e.g. { 5:[1,4], 6:[1,2,3,4,5,6] }
 
 function loadDiasPermitidos() {
   try {
@@ -928,6 +930,23 @@ function loadDiasPermitidos() {
 }
 function saveDiasPermitidos() {
   try { localStorage.setItem('gp-dias-perm', JSON.stringify(diasPermitidos)); } catch(e) {}
+}
+function loadHorariosConfig() {
+  try {
+    var h = localStorage.getItem('gp-hconf');
+    if (h) { horariosConfig = JSON.parse(h); return; }
+  } catch(e) {}
+  // Default: all HOURS available on all diasPermitidos
+  horariosConfig = {};
+  HOURS.forEach(function(h){ horariosConfig[h] = diasPermitidos.slice(); });
+  try { localStorage.setItem('gp-hconf', JSON.stringify(horariosConfig)); } catch(e) {}
+}
+function saveHorariosConfig() {
+  try { localStorage.setItem('gp-hconf', JSON.stringify(horariosConfig)); } catch(e) {}
+}
+function isHoraPermitida(h, dow) {
+  var cfg = horariosConfig[h];
+  return !!(cfg && cfg.indexOf(dow) !== -1);
 }
 
 function buildDaysPicker() {
@@ -1164,7 +1183,7 @@ function isHoliday(date) {
 
 function save() { try{localStorage.setItem('gp-s',JSON.stringify(students));}catch(e){} }
 function loadAll() {
-  loadPlanos(); syncPlanLegacy(); loadTreinos(); loadEvolucao(); loadHistoricoFin(); loadExcecoes(); loadDiasPermitidos(); loadReposicoes(); loadPagamentos(); loadDespesas();
+  loadPlanos(); syncPlanLegacy(); loadTreinos(); loadEvolucao(); loadHistoricoFin(); loadExcecoes(); loadDiasPermitidos(); loadHorariosConfig(); loadReposicoes(); loadPagamentos(); loadDespesas();
   try{var s=localStorage.getItem('gp-s');if(s)students=JSON.parse(s);}catch(e){}
   try{var a=localStorage.getItem('gp-a');if(a)agendas=JSON.parse(a);}catch(e){}
   try{var p=localStorage.getItem('gp-p');if(p)presencas=JSON.parse(p);}catch(e){}
@@ -1991,6 +2010,9 @@ function renderWeek(){
     grid.appendChild(hdr);
   });
   HOURS.forEach(function(h){
+    var cfg=horariosConfig[h];
+    var hasAnyDay=cfg&&days.some(function(d){return cfg.indexOf(d.getDay())!==-1;});
+    if(!hasAnyDay) return;
     var tl=document.createElement('div');tl.className='cal-time-label';
     tl.textContent=String(h).padStart(2,'0')+':00';
     grid.appendChild(tl);
@@ -1998,10 +2020,13 @@ function renderWeek(){
       var dStr=d.toISOString().split('T')[0];
       var isT=d.getTime()===today.getTime();
       var cell=document.createElement('div');
-      cell.className='cal-slot-cell'+(isT?' today-col':'');
       var dow=d.getDay();
-      var hCopy=h; var dowCopy=dow; var dStrCopy=dStr;
-      cell.onclick=function(){openSlotModal(dowCopy,hCopy,dStrCopy);};
+      var permitida=isHoraPermitida(h,dow);
+      cell.className='cal-slot-cell'+(isT?' today-col':'')+(permitida?'':' slot-bloqueado');
+      if(permitida){
+        var hCopy=h; var dowCopy=dow; var dStrCopy=dStr;
+        cell.onclick=function(){openSlotModal(dowCopy,hCopy,dStrCopy);};
+      }
       var ev=getAgendasParaData(dStr).filter(function(a){return parseInt(a.inicio.split(':')[0])===h;});
       ev.forEach(function(ag){
         var s=students.find(function(x){return x.id===ag.alunoId;});if(!s)return;
@@ -2024,7 +2049,7 @@ function renderDay(){
   var dow=d.getDay();
   var tl=document.getElementById('day-timeline');if(!tl)return;
   tl.innerHTML='';
-  HOURS.forEach(function(h){
+  HOURS.filter(function(h){ return isHoraPermitida(h,dow); }).forEach(function(h){
     var slot=document.createElement('div');slot.className='day-slot';
     var timeDiv=document.createElement('div');timeDiv.className='day-time';
     timeDiv.textContent=String(h).padStart(2,'0')+':00';
@@ -2541,7 +2566,44 @@ function renderConfiguracoes() {
   });
   out += '</div></div>';
 
-  
+  // Horários de atendimento
+  out += '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">';
+  out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Hor\u00E1rios de atendimento</div>';
+  out += '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:14px;">Defina quais hor\u00E1rios est\u00E3o dispon\u00EDveis e em quais dias:</div>';
+  var DNAMES7H = ['Dom','Seg','Ter','Qua','Qui','Sex','S\u00E1b'];
+  var configuredHours = HOURS.filter(function(h){ return horariosConfig[h] && horariosConfig[h].length > 0; });
+  configuredHours.forEach(function(h){
+    var diasH = horariosConfig[h] || [];
+    out += '<div class="hcfg-row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;background:var(--card);padding:10px 12px;border-radius:6px;">';
+    out += '<span style="font-family:Raleway,sans-serif;font-weight:700;font-size:0.82rem;color:var(--white);min-width:42px;">'+String(h).padStart(2,'0')+':00</span>';
+    out += '<div style="display:flex;gap:4px;flex-wrap:wrap;flex:1;">';
+    [0,1,2,3,4,5,6].forEach(function(d){
+      var sel = diasH.indexOf(d) !== -1;
+      out += '<button class="hcfg-day-btn" data-h="'+h+'" data-d="'+d+'" style="'
+        +'height:28px;width:32px;border:1px solid '+(sel?'var(--accent)':'var(--border)')+';'
+        +'background:'+(sel?'var(--accent)':'none')+';'
+        +'color:'+(sel?'#fff':'var(--white-dim)')+';'
+        +'font-family:Raleway,sans-serif;font-size:0.5rem;font-weight:700;'
+        +'letter-spacing:0.05em;text-transform:uppercase;cursor:pointer;border-radius:3px;">'
+        +DNAMES7H[d]+'</button>';
+    });
+    out += '</div>';
+    out += '<button class="hcfg-del-btn" data-h="'+h+'" style="background:none;border:1px solid var(--danger);color:var(--danger);width:26px;height:26px;border-radius:4px;cursor:pointer;flex-shrink:0;">\u2715</button>';
+    out += '</div>';
+  });
+  // Add hour row
+  var usedHours = configuredHours;
+  var availHoursToAdd = HOURS.filter(function(h){ return usedHours.indexOf(h) === -1; });
+  out += '<div style="display:flex;gap:8px;margin-top:8px;">';
+  out += '<select id="hcfg-add-sel" class="filter-select" style="flex:1;margin:0;padding:10px 12px;">';
+  out += '<option value="">Selecionar hor\u00E1rio...</option>';
+  availHoursToAdd.forEach(function(h){ out += '<option value="'+h+'">'+String(h).padStart(2,'0')+':00</option>'; });
+  out += '</select>';
+  out += '<button class="btn btn-outline" style="height:42px;padding:0 16px;white-space:nowrap;" onclick="adicionarHorarioCfg()">+ Adicionar</button>';
+  out += '</div>';
+  out += '</div>';
+
+
   out += '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">';
   out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:12px;"> Feriados personalizados</div>';
   var ferKeys = Object.keys(feriadosCustom).sort();
@@ -2566,7 +2628,44 @@ function renderConfiguracoes() {
 
   body.innerHTML = out;
 
-  
+  // Horários config - day toggle buttons
+  body.querySelectorAll('.hcfg-day-btn').forEach(function(btn){
+    btn.onclick = function(){
+      var h = parseInt(btn.getAttribute('data-h'));
+      var d = parseInt(btn.getAttribute('data-d'));
+      if (!horariosConfig[h]) horariosConfig[h] = [];
+      var idx = horariosConfig[h].indexOf(d);
+      if (idx !== -1) {
+        if (horariosConfig[h].length > 1) {
+          horariosConfig[h].splice(idx, 1);
+          btn.style.borderColor = 'var(--border)';
+          btn.style.background = 'none';
+          btn.style.color = 'var(--white-dim)';
+        }
+      } else {
+        horariosConfig[h].push(d);
+        horariosConfig[h].sort(function(a,b){return a-b;});
+        btn.style.borderColor = 'var(--accent)';
+        btn.style.background = 'var(--accent)';
+        btn.style.color = '#fff';
+      }
+      saveHorariosConfig();
+      renderCalendar();
+    };
+  });
+
+  // Horários config - delete hour buttons
+  body.querySelectorAll('.hcfg-del-btn').forEach(function(btn){
+    btn.onclick = function(){
+      var h = parseInt(btn.getAttribute('data-h'));
+      delete horariosConfig[h];
+      saveHorariosConfig();
+      renderConfiguracoes();
+      renderCalendar();
+    };
+  });
+
+
   body.querySelectorAll('.cfg-dia-btn').forEach(function(btn){
     btn.onclick = function() {
       var dow = parseInt(btn.getAttribute('data-dow'));
@@ -4114,6 +4213,18 @@ function adicionarFeriadoCfg() {
   renderConfiguracoes();
   renderCalendar();
   toast('Feriado adicionado: '+nome);
+}
+
+function adicionarHorarioCfg() {
+  var sel = document.getElementById('hcfg-add-sel');
+  if (!sel || !sel.value) return;
+  var h = parseInt(sel.value);
+  if (!horariosConfig[h]) {
+    horariosConfig[h] = diasPermitidos.slice();
+  }
+  saveHorariosConfig();
+  renderConfiguracoes();
+  renderCalendar();
 }
 
 
