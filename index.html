@@ -2140,7 +2140,7 @@ function renderSlotModal(){
         +'</div>';
     });
 
-    // Adicionar aluno - s? mostra se h? reposi??o dispon?vel OU ? aula extra
+    // Adicionar aluno - só mostra se tiver reposição disponível ou for plano pacote
     if(ags.length<2){
       var booked=ags.map(function(a){return a.alunoId;});
       var slotDateChk=getSlotDateStr();
@@ -2166,20 +2166,23 @@ function renderSlotModal(){
           if(repS<=0) return null;
           return {s:s,info:repS+(repS===1?' reposi\u00E7\u00E3o':' reposi\u00E7\u00F5es'),tipo:'reposicao'};
         }
-        // Sem aula recorrente neste dia → aula extra (admin)
-        return {s:s,info:'aula extra',tipo:'extra'};
+        // Sem aula recorrente neste dia → só aparece se tiver reposição pendente
+        if(repS<=0) return null;
+        return {s:s,info:repS+(repS===1?' reposi\u00E7\u00E3o':' reposi\u00E7\u00F5es'),tipo:'reposicao'};
       }).filter(Boolean);
 
-      out+='<div style="margin-top:12px;">'
-          +'<div style="font-family:Raleway,sans-serif;font-size:0.58rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--accent-l);margin-bottom:8px;">Adicionar aluno</div>'
-          +'<div style="display:grid;grid-template-columns:1fr 90px 60px;gap:8px;align-items:center;">'
-          +'<select id="add-aluno-sel" class="filter-select" style="padding:10px 30px 10px 12px;margin:0;"><option value="">Selecionar...</option>'
-          +availComInfo.map(function(x){
-            return '<option value="'+x.s.id+'">'+x.s.nome+(x.info?' - '+x.info:'')+' </option>';
-          }).join('')+'</select>'
-          +'<input type="time" id="add-aluno-hora" value="'+String(agSlotHour).padStart(2,'0')+':00" style="background:var(--card);border:1px solid var(--border);color:var(--white);padding:10px 6px;font-size:0.82rem;outline:none;width:100%;margin:0;border-radius:4px;">'
-          +'<button id="add-aluno-btn" class="btn btn-primary btn-sm" style="height:42px;width:100%;">Add</button>'
-          +'</div></div>';
+      if(availComInfo.length){
+        out+='<div style="margin-top:12px;">'
+            +'<div style="font-family:Raleway,sans-serif;font-size:0.58rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--accent-l);margin-bottom:8px;">Agendar reposi\u00E7\u00E3o</div>'
+            +'<div style="display:grid;grid-template-columns:1fr 90px 60px;gap:8px;align-items:center;">'
+            +'<select id="add-aluno-sel" class="filter-select" style="padding:10px 30px 10px 12px;margin:0;"><option value="">Selecionar...</option>'
+            +availComInfo.map(function(x){
+              return '<option value="'+x.s.id+'">'+x.s.nome+(x.info?' - '+x.info:'')+' </option>';
+            }).join('')+'</select>'
+            +'<input type="time" id="add-aluno-hora" value="'+String(agSlotHour).padStart(2,'0')+':00" style="background:var(--card);border:1px solid var(--border);color:var(--white);padding:10px 6px;font-size:0.82rem;outline:none;width:100%;margin:0;border-radius:4px;">'
+            +'<button id="add-aluno-btn" class="btn btn-primary btn-sm" style="height:42px;width:100%;">Add</button>'
+            +'</div></div>';
+      }
     } else {
       out+='<p style="font-size:0.75rem;color:var(--white-dim);margin-top:10px;font-style:italic;">Hor\u00e1rio lotado.</p>';
     }
@@ -2269,8 +2272,6 @@ function renderSlotModal(){
       toast(nome2+': reposi\u00e7\u00e3o agendada. Restam '+getReposicoes(sid)+'.');
     } else if(tipoAdd==='pacote'){
       toast(nome2+' adicionado (pacote).');
-    } else {
-      toast(nome2+': aula extra adicionada.');
     }
     renderSlotModal();renderCalendar();
   };
