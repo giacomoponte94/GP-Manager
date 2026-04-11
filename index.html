@@ -2154,26 +2154,32 @@ function renderSlotModal(){
         if(agsNoDia.some(function(a){return a.alunoId===s.id;})) return null;
         var planoS=getPlano(s.plano);
         var repS=getReposicoes(s.id);
-        var temRec=agendas.some(function(a){return a.alunoId===s.id&&a.days.includes(agSlotDay);});
+        var temQualquerRec=agendas.some(function(a){return a.alunoId===s.id;});
         var isPacote=planoS&&planoS.tipo==='pacote';
         if(isPacote){
           var pk2=getAulasPacote(s.id);
           if(!pk2||pk2.restantes<=0) return null;
           return {s:s,info:pk2.restantes+' aula'+(pk2.restantes!==1?'s':''),tipo:'pacote'};
         }
-        if(temRec){
-          // Tem aula recorrente neste dia → só pode entrar se tiver reposição disponível
+        if(temQualquerRec){
+          // Tem dias fixos cadastrados → só entra via reposição
           if(repS<=0) return null;
           return {s:s,info:repS+(repS===1?' reposi\u00E7\u00E3o':' reposi\u00E7\u00F5es'),tipo:'reposicao'};
         }
-        // Sem aula recorrente neste dia → só aparece se tiver reposição pendente
-        if(repS<=0) return null;
-        return {s:s,info:repS+(repS===1?' reposi\u00E7\u00E3o':' reposi\u00E7\u00F5es'),tipo:'reposicao'};
+        // Sem dias fixos → agendamento livre respeitando limite semanal do plano
+        var maxDias=(planoS&&planoS.diasSemana)||1;
+        var slotD=new Date(slotDateChk+'T12:00:00');
+        var dow2=slotD.getDay();
+        var seg=new Date(slotD);seg.setDate(slotD.getDate()+(dow2===0?-6:1-dow2));
+        var aulasNaSemana=0;
+        for(var di=0;di<7;di++){var cd=new Date(seg);cd.setDate(seg.getDate()+di);var cs=cd.toISOString().split('T')[0];if(cs===slotDateChk)continue;if(getAgendasParaData(cs).some(function(a){return a.alunoId===s.id;}))aulasNaSemana++;}
+        if(aulasNaSemana>=maxDias) return null;
+        return {s:s,info:aulasNaSemana+'/'+maxDias+' dias esta semana',tipo:'livre'};
       }).filter(Boolean);
 
       if(availComInfo.length){
         out+='<div style="margin-top:12px;">'
-            +'<div style="font-family:Raleway,sans-serif;font-size:0.58rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--accent-l);margin-bottom:8px;">Agendar reposi\u00E7\u00E3o</div>'
+            +'<div style="font-family:Raleway,sans-serif;font-size:0.58rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--accent-l);margin-bottom:8px;">Adicionar ao hor\u00E1rio</div>'
             +'<div style="display:grid;grid-template-columns:1fr 90px 60px;gap:8px;align-items:center;">'
             +'<select id="add-aluno-sel" class="filter-select" style="padding:10px 30px 10px 12px;margin:0;"><option value="">Selecionar...</option>'
             +availComInfo.map(function(x){
@@ -2272,6 +2278,8 @@ function renderSlotModal(){
       toast(nome2+': reposi\u00e7\u00e3o agendada. Restam '+getReposicoes(sid)+'.');
     } else if(tipoAdd==='pacote'){
       toast(nome2+' adicionado (pacote).');
+    } else if(tipoAdd==='livre'){
+      toast(nome2+': aula agendada.');
     }
     renderSlotModal();renderCalendar();
   };
