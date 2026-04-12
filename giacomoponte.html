@@ -35,8 +35,10 @@
   .nav-logo { background: #ffffff; padding: 0; border-radius: 4px; overflow: hidden; }
   .nav-logo img { height: 80px; width: auto; display: block; }
   .nav-links { display: flex; gap: 40px; list-style: none; }
-  .nav-links a { color: var(--off-white-dim); text-decoration: none; font-size: 0.68rem; font-weight: 500; letter-spacing: 0.22em; text-transform: uppercase; transition: color 0.3s; }
-  .nav-links a:hover { color: var(--accent); }
+  .nav-links a { color: rgba(240,237,232,0.9); text-decoration: none; font-size: 0.68rem; font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase; transition: color 0.25s; position: relative; }
+  .nav-links a::after { content: ''; position: absolute; bottom: -5px; left: 0; width: 0; height: 1px; background: var(--accent); transition: width 0.3s ease; }
+  .nav-links a:hover { color: #7ab3d4; }
+  .nav-links a:hover::after { width: 100%; }
 
   .hero { min-height: 100vh; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; padding: 120px 60px 80px; }
   .hero-bg { position: absolute; inset: 0; background: radial-gradient(ellipse 70% 55% at 55% 35%, rgba(46,74,98,0.55) 0%, transparent 65%), radial-gradient(ellipse 45% 45% at 15% 80%, rgba(27,42,59,0.5) 0%, transparent 60%), linear-gradient(160deg, var(--navy-deep) 0%, #0d1820 100%); }
