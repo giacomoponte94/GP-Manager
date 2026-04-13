@@ -89,6 +89,7 @@
   .plans-header p { font-size: 1.05rem; font-style: italic; color: var(--off-white-dim); margin-top: 12px; font-weight: 300; }
   .plans-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; margin-bottom: 2px; }
   .plans-row2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; max-width: calc(66.66% + 2px); margin: 0 auto; }
+  .plans-row3 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; margin-top: 2px; }
   .plan-card { background: var(--card); padding: 44px 36px; position: relative; overflow: hidden; transition: transform 0.3s, background 0.3s; }
   .plan-card:hover { background: #1c2f42; transform: translateY(-4px); }
   .plan-card.featured { background: linear-gradient(140deg, #1e3349, #162638); border: 1px solid rgba(74,127,165,0.35); }
@@ -156,6 +157,7 @@
     .about-inner, .contact-inner { grid-template-columns: 1fr; gap: 50px; }
     .plans-grid { grid-template-columns: 1fr; }
     .plans-row2 { grid-template-columns: 1fr; max-width: 100%; }
+    .plans-row3 { grid-template-columns: 1fr; }
     .hero { padding: 120px 26px 80px; }
     .hero-cta { flex-direction: column; align-items: center; }
     footer { flex-direction: column; gap: 20px; text-align: center; }
@@ -333,7 +335,7 @@
       <div class="stat"><div class="stat-number">20+</div><div class="stat-label">Anos praticando</div></div>
       <div class="stat"><div class="stat-number">UFC</div><div class="stat-label">Graduação federal</div></div>
       <div class="stat"><div class="stat-number">100+</div><div class="stat-label">Alunos atendidos</div></div>
-      <div class="stat"><div class="stat-number">5</div><div class="stat-label">Planos disponíveis</div></div>
+      <div class="stat"><div class="stat-number">7</div><div class="stat-label">Planos disponíveis</div></div>
     </div>
   </div>
 </section>
@@ -401,6 +403,24 @@
         <div class="plan-cta-group">
           <a href="https://wa.me/5585996782515?text=Olá%20Giácomo!%20Tenho%20interesse%20no%20plano%20Elite%20Individual." class="plan-cta plan-cta-solo" target="_blank">Individual</a>
           <a href="https://wa.me/5585996782515?text=Olá%20Giácomo!%20Tenho%20interesse%20no%20plano%20Elite%20Duo." class="plan-cta plan-cta-duo" target="_blank">Duo</a>
+        </div>
+      </div>
+    </div>
+    <div class="plans-row3">
+      <div class="plan-card reveal reveal-delay-1">
+        <div class="plan-name">Consultoria Online</div><div class="plan-freq">Online · Personalizado</div><div class="plan-divider"></div>
+        <ul class="plan-perks"><li>Planilha de treino montada para você</li><li>Acompanhamento por WhatsApp</li><li>Revisão e ajustes periódicos</li></ul>
+        <div class="plan-cta-group">
+          <a href="https://wa.me/5585996782515?text=Olá%20Giácomo!%20Tenho%20interesse%20na%20Consultoria%20Online%20Individual." class="plan-cta plan-cta-solo" target="_blank">Individual</a>
+          <a href="https://wa.me/5585996782515?text=Olá%20Giácomo!%20Tenho%20interesse%20na%20Consultoria%20Online%20Duo." class="plan-cta plan-cta-duo" target="_blank">Duo</a>
+        </div>
+      </div>
+      <div class="plan-card reveal reveal-delay-2">
+        <div class="plan-name">Pacote de Aulas</div><div class="plan-freq">Presencial · Avulso</div><div class="plan-divider"></div>
+        <ul class="plan-perks"><li>Flexibilidade para montar sua agenda</li><li>Ideal para complementar sua rotina</li><li>Acompanhamento técnico em cada sessão</li></ul>
+        <div class="plan-cta-group">
+          <a href="https://wa.me/5585996782515?text=Olá%20Giácomo!%20Tenho%20interesse%20no%20Pacote%20de%20Aulas%20Individual." class="plan-cta plan-cta-solo" target="_blank">Individual</a>
+          <a href="https://wa.me/5585996782515?text=Olá%20Giácomo!%20Tenho%20interesse%20no%20Pacote%20de%20Aulas%20Duo." class="plan-cta plan-cta-duo" target="_blank">Duo</a>
         </div>
       </div>
     </div>
