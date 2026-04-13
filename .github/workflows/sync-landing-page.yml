@@ -1,0 +1,31 @@
+name: Sync Landing Page
+
+on:
+  push:
+    branches:
+      - claude/edit-landing-page-mwiA3
+    paths:
+      - giacomoponte.html
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout GP-Manager
+        uses: actions/checkout@v4
+
+      - name: Push to giacomoponte.com.br
+        env:
+          TOKEN: ${{ secrets.PAGES_TOKEN }}
+        run: |
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
+
+          git clone https://x-access-token:${TOKEN}@github.com/giacomoponte94/giacomoponte.com.br.git site
+
+          cp giacomoponte.html site/index.html
+
+          cd site
+          git add index.html
+          git diff --staged --quiet || git commit -m "Auto-sync from GP-Manager"
+          git push
