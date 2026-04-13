@@ -1554,8 +1554,10 @@ function renderNotifs(){
   if(aus.length) notifs.push({p:1,icon:'!',msg:'<strong>'+aus.length+' aluno'+(aus.length>1?'s':'')+' sem treinar ha 3+ dias</strong>',tipo:'warn',cta:null});
   var dow=new Date().getDay();
   var ds2=new Date().toISOString().split('T')[0];
-  var th=Array.from(new Set(getAgendasParaData(ds2).filter(function(a){return students.some(function(s){return s.id===a.alunoId;});}).map(function(a){return a.alunoId;})));
-  if(th.length) notifs.push({p:2,icon:'',msg:'<strong>'+th.length+' aluno'+(th.length>1?'s':'')+' agendado'+(th.length>1?'s':'')+' hoje</strong>',tipo:'info',cta:{lbl:'Ver lista',fn:'verListaHoje()'}});
+  if(!isHoliday(new Date())){
+    var th=Array.from(new Set(getAgendasParaData(ds2).filter(function(a){return students.some(function(s){return s.id===a.alunoId;});}).map(function(a){return a.alunoId;})));
+    if(th.length) notifs.push({p:2,icon:'',msg:'<strong>'+th.length+' aluno'+(th.length>1?'s':'')+' agendado'+(th.length>1?'s':'')+' hoje</strong>',tipo:'info',cta:{lbl:'Ver lista',fn:'verListaHoje()'}});
+  }
 
   if(!notifs.length){bar.innerHTML='';return;}
   bar.innerHTML=notifs.sort(function(a,b){return a.p-b.p;}).map(function(n){
@@ -2009,7 +2011,7 @@ function renderCalendar(){
 
 function renderWeek(){
   var today=new Date();today.setHours(0,0,0,0);
-  var days=Array.from({length:7},function(_,i){var d=new Date(currentWeekStart);d.setDate(d.getDate()+i);d.setHours(0,0,0,0);return d;}).filter(function(d){return diasPermitidos.indexOf(d.getDay())!==-1;});
+  var days=Array.from({length:7},function(_,i){var d=new Date(currentWeekStart);d.setDate(d.getDate()+i);d.setHours(0,0,0,0);return d;}).filter(function(d){return diasPermitidos.indexOf(d.getDay())!==-1&&!isHoliday(d);});
   var grid=document.getElementById('cal-grid');if(!grid)return;
   grid.innerHTML='';
   grid.style.gridTemplateColumns='44px repeat('+days.length+',1fr)';
@@ -2067,6 +2069,15 @@ function renderDay(){
   var dow=d.getDay();
   var tl=document.getElementById('day-timeline');if(!tl)return;
   tl.innerHTML='';
+  var feriadoNome=isHoliday(d);
+  if(feriadoNome){
+    tl.innerHTML='<div style="text-align:center;padding:48px 24px;">'
+      +'<div style="font-size:2rem;margin-bottom:10px;">&#127956;</div>'
+      +'<div style="font-family:Raleway,sans-serif;font-weight:700;font-size:1rem;color:var(--white);">'+feriadoNome+'</div>'
+      +'<div style="font-size:0.8rem;color:var(--white-dim);margin-top:6px;">Agenda fechada neste feriado.</div>'
+      +'</div>';
+    return;
+  }
   HOURS.filter(function(h){ return isHoraPermitida(h,dow); }).forEach(function(h){
     var slot=document.createElement('div');slot.className='day-slot';
     var timeDiv=document.createElement('div');timeDiv.className='day-time';
@@ -4095,24 +4106,30 @@ function renderDashboard() {
 
   // Aulas hoje
   var ds = todayStr();
-  var agsHoje = getAgendasParaData(ds);
-  var idHoje = agsHoje.filter(function(a){ return students.some(function(s){ return s.id===a.alunoId; }); }).map(function(a){ return a.alunoId; }).filter(function(id,i,ar){ return ar.indexOf(id)===i; });
   var hojeEl = document.getElementById('dash-hoje');
   if(hojeEl){
-    if(idHoje.length){
-      var rows = idHoje.map(function(id){
-        var s = students.find(function(x){ return x.id===id; }); if(!s) return '';
-        var ag = agsHoje.find(function(a){ return a.alunoId===id; });
-        var hora = ag ? ag.inicio : '';
-        return '<div class="dash-row notif-info" style="cursor:pointer;" onclick="openDetail(\''+id+'\')">'
-          +'<div><div class="dash-row-name">'+s.nome+'</div><div class="dash-row-sub">'+hora+(s.plano?' · '+getPlanNome(s.plano):'')+'</div></div>'
-          +'<span class="badge badge-ok">Hoje</span>'
-          +'</div>';
-      }).join('');
-      hojeEl.innerHTML = '<div class="dash-section-title">Aulas hoje ('+idHoje.length+')</div>'+rows;
-    } else {
+    var ferHoje = isHoliday(new Date());
+    if(ferHoje){
       hojeEl.innerHTML = '<div class="dash-section-title">Aulas hoje</div>'
-        +'<div style="font-size:0.8rem;color:var(--white-dim);padding:10px 0;">Nenhuma aula agendada para hoje.</div>';
+        +'<div style="font-size:0.8rem;color:var(--white-dim);padding:10px 0;">&#127956; Feriado: '+ferHoje+' \u2014 agenda fechada.</div>';
+    } else {
+      var agsHoje = getAgendasParaData(ds);
+      var idHoje = agsHoje.filter(function(a){ return students.some(function(s){ return s.id===a.alunoId; }); }).map(function(a){ return a.alunoId; }).filter(function(id,i,ar){ return ar.indexOf(id)===i; });
+      if(idHoje.length){
+        var rows = idHoje.map(function(id){
+          var s = students.find(function(x){ return x.id===id; }); if(!s) return '';
+          var ag = agsHoje.find(function(a){ return a.alunoId===id; });
+          var hora = ag ? ag.inicio : '';
+          return '<div class="dash-row notif-info" style="cursor:pointer;" onclick="openDetail(\''+id+'\')">'
+            +'<div><div class="dash-row-name">'+s.nome+'</div><div class="dash-row-sub">'+hora+(s.plano?' \u00B7 '+getPlanNome(s.plano):'')+'</div></div>'
+            +'<span class="badge badge-ok">Hoje</span>'
+            +'</div>';
+        }).join('');
+        hojeEl.innerHTML = '<div class="dash-section-title">Aulas hoje ('+idHoje.length+')</div>'+rows;
+      } else {
+        hojeEl.innerHTML = '<div class="dash-section-title">Aulas hoje</div>'
+          +'<div style="font-size:0.8rem;color:var(--white-dim);padding:10px 0;">Nenhuma aula agendada para hoje.</div>';
+      }
     }
   }
 
