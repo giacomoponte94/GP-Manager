@@ -1586,8 +1586,10 @@ function cobrarInadimplentes(){
   if(!inad.length){alert('Nenhum inadimplente com telefone.');return;}
   inad.forEach(function(s){
     var ph=waPhone(s); if(!ph)return;
-    var msg=encodeURIComponent('Ola '+s.nome.split(' ')[0]+'! Seu plano '+(s.plano||'')+' esta em aberto. Para regularizarmos e continuar os treinos, me avise!');
-    window.open('https://wa.me/'+ph+'?text='+msg,'_blank');
+    var diasAtraso=s.vencimento?Math.abs(Math.ceil((new Date(s.vencimento+'T12:00:00')-new Date())/86400000)):3;
+    var dataVenc=s.vencimento?new Date(s.vencimento+'T12:00:00').toLocaleDateString('pt-BR'):'';
+    var msgInad='Oi, '+s.nome.split(' ')[0]+', tudo bem?\n\nNotei que seu plano *'+getPlanNome(s.plano)+'* venceu há '+diasAtraso+' dia'+(diasAtraso!==1?'s':'')+(dataVenc?', em *'+dataVenc+'*':'')+', e ainda não identifiquei o pagamento por aqui.\n\nSei que o dia a dia é corrido, mas não quero que você perca seus horários nem o ritmo dos treinos que você vem mantendo. Vamos resolver isso hoje ainda? 😊\n\n*Valor:* R$ '+(parseFloat(s.valor)||0).toLocaleString('pt-BR',{minimumFractionDigits:2})+(chavePix?'\n*Chave Pix:* '+chavePix:'')+'\n\nQualquer dificuldade, me chama que a gente conversa. 🤝';
+    window.open('https://wa.me/'+ph+'?text='+encodeURIComponent(msgInad),'_blank');
     if(!historicoCob[s.id])historicoCob[s.id]=[];
     historicoCob[s.id].push({data:new Date().toISOString(),tipo:'manual'});
     saveHistCob();
@@ -1855,8 +1857,11 @@ function openDetail(id){
     var diasRestC=s.vencimento?Math.ceil((new Date(s.vencimento+'T12:00:00')-new Date())/86400000):null;
     var dataFmtC=s.vencimento?new Date(s.vencimento+'T12:00:00').toLocaleDateString('pt-BR'):'';
     var msgCStr;
-    if(diasRestC!==null&&diasRestC<=0){
+    if(diasRestC!==null&&diasRestC===0){
       msgCStr='Oi, '+nome1+'! Hoje é o dia! 📅\n\nSeu plano *'+getPlanNome(s.plano)+'* vence hoje, *'+dataFmtC+'*. Que tal já aproveitar e renovar agora para continuar treinando sem nenhuma pausa?\n\nVocê vem evoluindo muito, seria uma pena parar agora. 💪🔥\n\n*Valor:* R$ '+(parseFloat(s.valor)||0).toLocaleString('pt-BR',{minimumFractionDigits:2})+(chavePix?'\n*Chave Pix:* '+chavePix:'')+'\n\nMe manda o comprovante assim que fizer e tá confirmado!';
+    } else if(diasRestC!==null&&diasRestC<0){
+      var diasAtrasoD=Math.abs(diasRestC);
+      msgCStr='Oi, '+nome1+', tudo bem?\n\nNotei que seu plano *'+getPlanNome(s.plano)+'* venceu há '+diasAtrasoD+' dia'+(diasAtrasoD!==1?'s':'')+(dataFmtC?', em *'+dataFmtC+'*':'')+', e ainda não identifiquei o pagamento por aqui.\n\nSei que o dia a dia é corrido, mas não quero que você perca seus horários nem o ritmo dos treinos que você vem mantendo. Vamos resolver isso hoje ainda? 😊\n\n*Valor:* R$ '+(parseFloat(s.valor)||0).toLocaleString('pt-BR',{minimumFractionDigits:2})+(chavePix?'\n*Chave Pix:* '+chavePix:'')+'\n\nQualquer dificuldade, me chama que a gente conversa. 🤝';
     } else {
       var diasTextoC=diasRestC===null?'em breve':diasRestC===1?'*amanhã*':'em *'+diasRestC+' dias*';
       msgCStr='Oi, '+nome1+'! 👋\n\nPassando aqui para te avisar que seu plano *'+getPlanNome(s.plano)+'* vence '+diasTextoC+(dataFmtC?', no dia *'+dataFmtC+'*':'')+'. \n\nJá vamos adiantando a renovação? Garanta seu horário e continue sem interrupção nos treinos. 🗓️💪\n\nMe confirma e te mando tudo certinho!';
@@ -3356,7 +3361,10 @@ function getPrioridadeAcao() {
 function cobrarAluno(sid) {
   var s=students.find(function(x){return x.id===sid;}); if(!s)return;
   var ph=waPhone(s); if(!ph){alert('Sem telefone.');return;}
-  var msg=encodeURIComponent('Ola '+s.nome.split(' ')[0]+'! Seu plano '+(s.plano||'')+' esta em aberto. Para continuarmos os treinos, me avise para regularizarmos!');
+  var diasAtraso=s.vencimento?Math.abs(Math.ceil((new Date(s.vencimento+'T12:00:00')-new Date())/86400000)):3;
+  var dataVenc=s.vencimento?new Date(s.vencimento+'T12:00:00').toLocaleDateString('pt-BR'):'';
+  var msgInad='Oi, '+s.nome.split(' ')[0]+', tudo bem?\n\nNotei que seu plano *'+getPlanNome(s.plano)+'* venceu há '+diasAtraso+' dia'+(diasAtraso!==1?'s':'')+(dataVenc?', em *'+dataVenc+'*':'')+', e ainda não identifiquei o pagamento por aqui.\n\nSei que o dia a dia é corrido, mas não quero que você perca seus horários nem o ritmo dos treinos que você vem mantendo. Vamos resolver isso hoje ainda? 😊\n\n*Valor:* R$ '+(parseFloat(s.valor)||0).toLocaleString('pt-BR',{minimumFractionDigits:2})+(chavePix?'\n*Chave Pix:* '+chavePix:'')+'\n\nQualquer dificuldade, me chama que a gente conversa. 🤝';
+  var msg=encodeURIComponent(msgInad);
   if(!historicoCob[sid])historicoCob[sid]=[];
   historicoCob[sid].push({data:new Date().toISOString(),tipo:'cobranca'});
   saveHistCob();
