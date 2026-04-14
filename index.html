@@ -710,6 +710,7 @@ var _syncTimer = null;
 var _applyingCloud = false;
 var _lastPushedTs = null;
 var _localModifiedTs = null;
+var _initialized = false;
 
 function _setSyncStatus(status, detail){
   var el=document.getElementById('sync-status'); if(!el) return;
@@ -735,6 +736,7 @@ function _getAllData(){
 }
 
 function _pushToCloud(){
+  if(!_initialized) return; // não sincronizar durante inicialização
   if(_syncTimer) clearTimeout(_syncTimer);
   _setSyncStatus('up');
   _localModifiedTs = new Date().toISOString();
@@ -812,7 +814,7 @@ function forceSyncFromCloud(){
   var orig=localStorage.setItem.bind(localStorage);
   localStorage.setItem=function(key,val){
     orig(key,val);
-    if(!_applyingCloud && key.indexOf('gp-')===0 && key!=='gp-sess' && key!=='gp-theme'){
+    if(_initialized && !_applyingCloud && key.indexOf('gp-')===0 && key!=='gp-sess' && key!=='gp-theme'){
       _localModifiedTs = new Date().toISOString();
       _pushToCloud();
     }
@@ -2564,6 +2566,8 @@ function initApp(){
     try{renderPaineis();}catch(e){}
     try{renderAutomacao();}catch(e){}
   },100);
+  // Só permite push/sync após Firebase entregar o primeiro snapshot (≈4s)
+  setTimeout(function(){ _initialized = true; }, 4000);
 }
 
 document.addEventListener('DOMContentLoaded', function() {
