@@ -938,6 +938,9 @@ function useReposicao(sid) {
 
 var diasPermitidos = [1,2,3,4,5,6];
 var horariosConfig = {}; // { hour: [dow, dow, ...] }  e.g. { 5:[1,4], 6:[1,2,3,4,5,6] }
+var chavePix = '';
+function loadChavePix(){ try{ chavePix=localStorage.getItem('gp-pix')||''; }catch(e){} }
+function saveChavePix(){ try{ localStorage.setItem('gp-pix',chavePix); }catch(e){} }
 
 function loadDiasPermitidos() {
   try {
@@ -1200,7 +1203,7 @@ function isHoliday(date) {
 
 function save() { try{localStorage.setItem('gp-s',JSON.stringify(students));}catch(e){} }
 function loadAll() {
-  loadPlanos(); syncPlanLegacy(); loadTreinos(); loadEvolucao(); loadHistoricoFin(); loadExcecoes(); loadDiasPermitidos(); loadHorariosConfig(); loadReposicoes(); loadPagamentos(); loadDespesas();
+  loadPlanos(); syncPlanLegacy(); loadTreinos(); loadEvolucao(); loadHistoricoFin(); loadExcecoes(); loadDiasPermitidos(); loadHorariosConfig(); loadChavePix(); loadReposicoes(); loadPagamentos(); loadDespesas();
   try{var s=localStorage.getItem('gp-s');if(s)students=JSON.parse(s);}catch(e){}
   try{var a=localStorage.getItem('gp-a');if(a)agendas=JSON.parse(a);}catch(e){}
   try{var p=localStorage.getItem('gp-p');if(p)presencas=JSON.parse(p);}catch(e){}
@@ -1490,9 +1493,14 @@ function renderPaineis(){
       var cor=d===0?'var(--danger)':d<=2?'var(--warning)':'var(--accent)';
       var lbl=d===0?'Vence hoje':'Vence em '+d+'d';
       var ph=waPhone(s);
-      var diasTexto=d===0?'*hoje*':d===1?'*amanhã*':'em *'+d+' dias*';
       var dataFmt=new Date(s.vencimento+'T12:00:00').toLocaleDateString('pt-BR');
-      var msgVenc='Oi, '+s.nome.split(' ')[0]+'! 👋\n\nPassando aqui para te avisar que seu plano *'+getPlanNome(s.plano)+'* vence '+diasTexto+', no dia *'+dataFmt+'*.\n\nJá vamos adiantando a renovação? Garanta seu horário e continue sem interrupção nos treinos. 🗓️💪\n\nMe confirma e te mando tudo certinho!';
+      var msgVenc;
+      if(d===0){
+        msgVenc='Oi, '+s.nome.split(' ')[0]+'! Hoje é o dia! 📅\n\nSeu plano *'+getPlanNome(s.plano)+'* vence hoje, *'+dataFmt+'*. Que tal já aproveitar e renovar agora para continuar treinando sem nenhuma pausa?\n\nVocê vem evoluindo muito, seria uma pena parar agora. 💪🔥\n\n*Valor:* R$ '+(parseFloat(s.valor)||0).toLocaleString('pt-BR',{minimumFractionDigits:2})+(chavePix?'\n*Chave Pix:* '+chavePix:'')+'\n\nMe manda o comprovante assim que fizer e tá confirmado!';
+      } else {
+        var diasTexto=d===1?'*amanhã*':'em *'+d+' dias*';
+        msgVenc='Oi, '+s.nome.split(' ')[0]+'! 👋\n\nPassando aqui para te avisar que seu plano *'+getPlanNome(s.plano)+'* vence '+diasTexto+', no dia *'+dataFmt+'*.\n\nJá vamos adiantando a renovação? Garanta seu horário e continue sem interrupção nos treinos. 🗓️💪\n\nMe confirma e te mando tudo certinho!';
+      }
       var msg=encodeURIComponent(msgVenc);
       out+='<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-left:3px solid '+cor+';background:var(--card);margin-bottom:2px;">';
       out+='<div><div style="font-size:0.88rem;font-weight:600;color:var(--white);">'+s.nome+'</div><div style="font-size:0.72rem;color:'+cor+';font-weight:600;">'+lbl+'</div></div>';
@@ -1845,9 +1853,15 @@ function openDetail(id){
   if(ph){
     var msgL=encodeURIComponent('Ola '+nome1+'! So lembrando do seu treino hoje. Ate logo!');
     var diasRestC=s.vencimento?Math.ceil((new Date(s.vencimento+'T12:00:00')-new Date())/86400000):null;
-    var diasTextoC=diasRestC===null?'em breve':diasRestC<=0?'*hoje*':diasRestC===1?'*amanhã*':'em *'+diasRestC+' dias*';
     var dataFmtC=s.vencimento?new Date(s.vencimento+'T12:00:00').toLocaleDateString('pt-BR'):'';
-    var msgC=encodeURIComponent('Oi, '+nome1+'! 👋\n\nPassando aqui para te avisar que seu plano *'+getPlanNome(s.plano)+'* vence '+diasTextoC+(dataFmtC?', no dia *'+dataFmtC+'*':'')+'. \n\nJá vamos adiantando a renovação? Garanta seu horário e continue sem interrupção nos treinos. 🗓️💪\n\nMe confirma e te mando tudo certinho!');
+    var msgCStr;
+    if(diasRestC!==null&&diasRestC<=0){
+      msgCStr='Oi, '+nome1+'! Hoje é o dia! 📅\n\nSeu plano *'+getPlanNome(s.plano)+'* vence hoje, *'+dataFmtC+'*. Que tal já aproveitar e renovar agora para continuar treinando sem nenhuma pausa?\n\nVocê vem evoluindo muito, seria uma pena parar agora. 💪🔥\n\n*Valor:* R$ '+(parseFloat(s.valor)||0).toLocaleString('pt-BR',{minimumFractionDigits:2})+(chavePix?'\n*Chave Pix:* '+chavePix:'')+'\n\nMe manda o comprovante assim que fizer e tá confirmado!';
+    } else {
+      var diasTextoC=diasRestC===null?'em breve':diasRestC===1?'*amanhã*':'em *'+diasRestC+' dias*';
+      msgCStr='Oi, '+nome1+'! 👋\n\nPassando aqui para te avisar que seu plano *'+getPlanNome(s.plano)+'* vence '+diasTextoC+(dataFmtC?', no dia *'+dataFmtC+'*':'')+'. \n\nJá vamos adiantando a renovação? Garanta seu horário e continue sem interrupção nos treinos. 🗓️💪\n\nMe confirma e te mando tudo certinho!';
+    }
+    var msgC=encodeURIComponent(msgCStr);
     var msgR=encodeURIComponent('Ola '+nome1+'! Percebi que faz um tempo que voce nao aparece. Tudo bem?');
     waHtml='<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">'
       +'<div style="font-family:Raleway,sans-serif;font-size:0.58rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--accent-l);margin-bottom:8px;">WhatsApp</div>'
@@ -2658,6 +2672,15 @@ function renderConfiguracoes() {
   out += '</div>';
   out += '<button class="btn btn-outline" style="width:100%;height:38px;margin-top:8px;" onclick="adicionarFeriadoCfg()">+ Adicionar feriado</button>';
   out += '</div>';
+
+  // Chave Pix
+  out += '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">';
+  out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Dados para cobran\u00E7a</div>';
+  out += '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:8px;">Chave Pix exibida nas mensagens de cobran\u00E7a:</div>';
+  out += '<div style="display:flex;gap:8px;">';
+  out += '<input type="text" id="cfg-pix-input" placeholder="CPF, e-mail, telefone ou chave aleat\u00F3ria" value="'+chavePix+'" style="flex:1;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;">';
+  out += '<button class="btn btn-primary" style="height:42px;padding:0 16px;white-space:nowrap;" onclick="salvarChavePix()">Salvar</button>';
+  out += '</div></div>';
 
   body.innerHTML = out;
 
@@ -4316,6 +4339,13 @@ function renderRelatorioMensal() {
   }
 
   panel.innerHTML = out;
+}
+
+function salvarChavePix() {
+  var v = (document.getElementById('cfg-pix-input').value||'').trim();
+  chavePix = v;
+  saveChavePix();
+  toast('Chave Pix salva!');
 }
 
 function adicionarFeriadoCfg() {
