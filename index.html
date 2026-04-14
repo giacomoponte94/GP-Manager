@@ -125,8 +125,10 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
 .cal-event.status-ok{background:rgba(46,204,113,0.15);border-color:var(--success);color:var(--success);}
 .cal-event.status-late{background:rgba(231,76,60,0.15);border-color:var(--danger);color:var(--danger);}
 .cal-event.status-neutral{background:rgba(200,210,220,0.1);border-color:rgba(200,210,220,0.4);color:rgba(200,210,220,0.85);}
-.feriado-col{background:rgba(243,156,18,0.05)!important;}
+.feriado-col{background:rgba(243,156,18,0.08)!important;cursor:default!important;}
 .feriado-col .cal-day-num{color:var(--warning)!important;}
+.feriado-col .cal-event{display:none!important;}
+.cal-slot-cell.feriado-col:hover{background:rgba(243,156,18,0.08)!important;}
 .view-toggle{display:inline-flex;border:1px solid var(--border);overflow:hidden;border-radius:6px;}
 .vt-btn{padding:9px 22px;font-family:'Raleway',sans-serif;font-size:0.6rem;letter-spacing:0.12em;text-transform:uppercase;background:none;border:none;color:var(--white-dim);cursor:pointer;}
 .vt-btn.active{background:var(--accent);color:#fff;}
@@ -226,8 +228,10 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
 [data-theme="light"] .cal-event.status-neutral{background:rgba(100,116,139,0.12);border-color:#64748b;color:#334155;}
 [data-theme="light"] .day-event.status-neutral{background:rgba(100,116,139,0.10);border-color:#64748b;color:#334155;}
 /* Feriado — tinta mais visível em fundo claro */
-[data-theme="light"] .feriado-col{background:rgba(183,89,10,0.07)!important;}
+[data-theme="light"] .feriado-col{background:rgba(243,156,18,0.12)!important;cursor:default!important;}
 [data-theme="light"] .feriado-col .cal-day-num{color:#92400e!important;}
+[data-theme="light"] .feriado-col .cal-event{display:none!important;}
+[data-theme="light"] .cal-slot-cell.feriado-col:hover{background:rgba(243,156,18,0.12)!important;}
 /* Hover das células do calendário */
 [data-theme="light"] .cal-slot-cell:hover,[data-theme="light"] .day-slot-content:hover{background:rgba(45,106,159,0.07);}
 /* Coluna de hoje em modo claro */
@@ -1425,6 +1429,16 @@ function getAulasDoMes(sid){
   var s=students.find(function(x){return x.id===sid;}); if(!s||!s.plano)return{feitas:0,direito:0,faltas:0};
   var spw=PLAN_DAYS[s.plano]||0,now=new Date(),y=now.getFullYear(),m=now.getMonth();
   var dim=new Date(y,m+1,0).getDate(),dir=Math.round(spw*dim/7),f=0,fa=0;
+  // Descontar feriados que caem nos dias fixos do aluno (não geram reposição)
+  var sAgs=agendas.filter(function(a){return a.alunoId===sid;});
+  var dowsAluno=[];
+  sAgs.forEach(function(a){a.days.forEach(function(dw){if(dowsAluno.indexOf(dw)===-1)dowsAluno.push(dw);});});
+  if(dowsAluno.length){
+    for(var day=1;day<=dim;day++){
+      var dCheck=new Date(y,m,day);
+      if(isHoliday(dCheck)&&dowsAluno.indexOf(dCheck.getDay())!==-1) dir=Math.max(0,dir-1);
+    }
+  }
   Object.keys(presencas).forEach(function(k){
     if(k.indexOf(sid+'_')!==0)return;
     var ds=k.replace(sid+'_',''),d=new Date(ds+'T12:00:00');
@@ -2048,9 +2062,9 @@ function renderWeek(){
     var hdr=document.createElement('div');
     hdr.className='cal-header'+(fer?' feriado-col':'');
     if(fer)hdr.title=fer;
-    hdr.innerHTML='<div class="cal-day-name">'+DAY_NAMES[d.getDay()]+'</div>'
+    hdr.innerHTML='<div class="cal-day-name" style="'+(fer?'color:var(--warning);':'')+'">'+DAY_NAMES[d.getDay()]+'</div>'
       +'<div class="cal-day-num'+(isT?' today':'')+'">'+d.getDate()+'</div>'
-      +(fer?'<div style="font-size:0.45rem;color:var(--warning);">\uDF8C</div>':'');
+      +(fer?'<div style="font-size:0.48rem;color:var(--warning);font-weight:700;letter-spacing:0.06em;text-transform:uppercase;margin-top:2px;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Feriado</div>':'');
     var dCopy=new Date(d);
     hdr.onclick=function(){currentDay=new Date(dCopy);setView('dia');};
     grid.appendChild(hdr);
