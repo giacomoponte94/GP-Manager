@@ -1489,7 +1489,11 @@ function renderPaineis(){
       var d=Math.ceil((v-t)/86400000);
       var cor=d===0?'var(--danger)':d<=2?'var(--warning)':'var(--accent)';
       var lbl=d===0?'Vence hoje':'Vence em '+d+'d';
-      var ph=waPhone(s); var msg=encodeURIComponent('Ola '+s.nome.split(' ')[0]+'! Seu plano '+(s.plano||'')+' vence '+(d===0?'hoje':'em '+d+' dias')+'. Para continuar treinando sem interrupcao, renove quando puder!');
+      var ph=waPhone(s);
+      var diasTexto=d===0?'*hoje*':d===1?'*amanhã*':'em *'+d+' dias*';
+      var dataFmt=new Date(s.vencimento+'T12:00:00').toLocaleDateString('pt-BR');
+      var msgVenc='Oi, '+s.nome.split(' ')[0]+'! 👋\n\nPassando aqui para te avisar que seu plano *'+getPlanNome(s.plano)+'* vence '+diasTexto+', no dia *'+dataFmt+'*.\n\nJá vamos adiantando a renovação? Garanta seu horário e continue sem interrupção nos treinos. 🗓️💪\n\nMe confirma e te mando tudo certinho!';
+      var msg=encodeURIComponent(msgVenc);
       out+='<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-left:3px solid '+cor+';background:var(--card);margin-bottom:2px;">';
       out+='<div><div style="font-size:0.88rem;font-weight:600;color:var(--white);">'+s.nome+'</div><div style="font-size:0.72rem;color:'+cor+';font-weight:600;">'+lbl+'</div></div>';
       out+='<div style="display:flex;gap:6px;">';
@@ -1840,7 +1844,10 @@ function openDetail(id){
   var waHtml='';
   if(ph){
     var msgL=encodeURIComponent('Ola '+nome1+'! So lembrando do seu treino hoje. Ate logo!');
-    var msgC=encodeURIComponent('Ola '+nome1+'! Seu plano '+(s.plano||'')+' vence em '+fmtDate(s.vencimento)+'. Renove para continuar!');
+    var diasRestC=s.vencimento?Math.ceil((new Date(s.vencimento+'T12:00:00')-new Date())/86400000):null;
+    var diasTextoC=diasRestC===null?'em breve':diasRestC<=0?'*hoje*':diasRestC===1?'*amanhã*':'em *'+diasRestC+' dias*';
+    var dataFmtC=s.vencimento?new Date(s.vencimento+'T12:00:00').toLocaleDateString('pt-BR'):'';
+    var msgC=encodeURIComponent('Oi, '+nome1+'! 👋\n\nPassando aqui para te avisar que seu plano *'+getPlanNome(s.plano)+'* vence '+diasTextoC+(dataFmtC?', no dia *'+dataFmtC+'*':'')+'. \n\nJá vamos adiantando a renovação? Garanta seu horário e continue sem interrupção nos treinos. 🗓️💪\n\nMe confirma e te mando tudo certinho!');
     var msgR=encodeURIComponent('Ola '+nome1+'! Percebi que faz um tempo que voce nao aparece. Tudo bem?');
     waHtml='<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">'
       +'<div style="font-family:Raleway,sans-serif;font-size:0.58rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--accent-l);margin-bottom:8px;">WhatsApp</div>'
