@@ -150,11 +150,25 @@
   .reveal-delay-2 { transition-delay: 0.2s; }
   .reveal-delay-3 { transition-delay: 0.3s; }
 
+  /* HAMBURGER */
+  .nav-hamburger { display: none; flex-direction: column; justify-content: center; gap: 5px; background: none; border: none; cursor: pointer; padding: 6px; z-index: 600; }
+  .nav-hamburger span { display: block; width: 24px; height: 2px; background: var(--off-white); border-radius: 2px; transition: transform 0.3s, opacity 0.3s; }
+  .nav-hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+  .nav-hamburger.open span:nth-child(2) { opacity: 0; }
+  .nav-hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+  .nav-mobile-menu { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(17,29,41,0.98); z-index: 490; flex-direction: column; align-items: center; justify-content: center; }
+  .nav-mobile-menu.open { display: flex; }
+  .nav-mobile-menu ul { list-style: none; display: flex; flex-direction: column; align-items: center; gap: 36px; }
+  .nav-mobile-menu a { color: var(--off-white); text-decoration: none; font-size: 1.4rem; font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.15em; text-transform: uppercase; transition: color 0.3s; }
+  .nav-mobile-menu a:hover { color: var(--accent); }
+
   @media (max-width: 900px) {
     nav, section, footer { padding-left: 26px; padding-right: 26px; }
-    nav { justify-content: center; }
+    nav { justify-content: space-between; }
     nav.scrolled { padding-left: 26px; padding-right: 26px; }
     .nav-links { display: none; }
+    .nav-hamburger { display: flex; }
     .about-inner, .contact-inner { grid-template-columns: 1fr; gap: 50px; }
     .plans-grid { grid-template-columns: 1fr; }
     .plans-row2 { grid-template-columns: 1fr; max-width: 100%; }
@@ -308,7 +322,19 @@
     <li><a href="#contato">Contato</a></li>
     <li><a href="https://giacomoponte94.github.io/GP-Manager" target="_blank">App</a></li>
   </ul>
+  <button class="nav-hamburger" id="navHamburger" aria-label="Menu">
+    <span></span><span></span><span></span>
+  </button>
 </nav>
+
+<div class="nav-mobile-menu" id="navMobileMenu">
+  <ul>
+    <li><a href="#sobre">Sobre</a></li>
+    <li><a href="#planos">Planos</a></li>
+    <li><a href="#contato">Contato</a></li>
+    <li><a href="https://giacomoponte94.github.io/GP-Manager" target="_blank">App</a></li>
+  </ul>
+</div>
 
 <section class="hero" id="home">
   <div class="hero-bg"></div>
@@ -504,6 +530,23 @@
     document.getElementById('formSuccess').style.display = 'block';
     f.reset();
   }
+</script>
+
+<script>
+  const hamburger = document.getElementById('navHamburger');
+  const mobileMenu = document.getElementById('navMobileMenu');
+  hamburger.addEventListener('click', () => {
+    hamburger.classList.toggle('open');
+    mobileMenu.classList.toggle('open');
+    document.body.style.overflow = mobileMenu.classList.contains('open') ? 'hidden' : '';
+  });
+  mobileMenu.querySelectorAll('a').forEach(link => {
+    link.addEventListener('click', () => {
+      hamburger.classList.remove('open');
+      mobileMenu.classList.remove('open');
+      document.body.style.overflow = '';
+    });
+  });
 </script>
 
 <!-- Floating WhatsApp -->
