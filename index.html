@@ -709,6 +709,7 @@ var _dbRef = firebase.database().ref('gp/data');
 var _syncTimer = null;
 var _applyingCloud = false;
 var _lastPushedTs = null;
+var _localModifiedTs = null;
 
 function _setSyncStatus(status, detail){
   var el=document.getElementById('sync-status'); if(!el) return;
@@ -736,9 +737,13 @@ function _getAllData(){
 function _pushToCloud(){
   if(_syncTimer) clearTimeout(_syncTimer);
   _setSyncStatus('up');
+  _localModifiedTs = new Date().toISOString();
+  var capturedTs = _localModifiedTs;
   _syncTimer = setTimeout(function(){
+    _syncTimer = null;
     var d=_getAllData();
-    _lastPushedTs=d.ts;
+    d.ts = capturedTs;
+    _lastPushedTs = capturedTs;
     _dbRef.set(d)
       .then(function(){ _setSyncStatus('ok'); })
       .catch(function(e){ _setSyncStatus('err', e); });
@@ -749,12 +754,25 @@ function _applyCloud(data){
   if(!data) return;
   if(data.ts && data.ts===_lastPushedTs) return; // eco do próprio push
 
-  // Proteção: se nuvem tem menos alunos que local, empurra local em vez de sobrescrever
+  // Se há push pendente (mudanças locais ainda não enviadas), não sobrescrever
+  if(_syncTimer){
+    console.log('[GP Sync] Push pendente — ignorando dados da nuvem.');
+    return;
+  }
+
+  // Se dados locais são mais recentes que a nuvem, envia local e não aplica
+  if(_localModifiedTs && data.ts && _localModifiedTs > data.ts){
+    console.log('[GP Sync] Local mais recente ('+_localModifiedTs+' > '+data.ts+') — enviando local.');
+    _pushToCloud();
+    return;
+  }
+
+  // Proteção por contagem de alunos
   var localCount=0; var cloudCount=0;
   try{ localCount=(JSON.parse(localStorage.getItem('gp-s')||'[]')).length; }catch(e){}
   try{ cloudCount=(JSON.parse(data.students||'[]')).length; }catch(e){}
   if(localCount > cloudCount){
-    console.log('[GP Sync] Local tem mais dados ('+localCount+' > '+cloudCount+'), enviando local para nuvem.');
+    console.log('[GP Sync] Local tem mais alunos ('+localCount+' > '+cloudCount+') — enviando local.');
     _pushToCloud();
     return;
   }
@@ -795,6 +813,7 @@ function forceSyncFromCloud(){
   localStorage.setItem=function(key,val){
     orig(key,val);
     if(!_applyingCloud && key.indexOf('gp-')===0 && key!=='gp-sess' && key!=='gp-theme'){
+      _localModifiedTs = new Date().toISOString();
       _pushToCloud();
     }
   };
