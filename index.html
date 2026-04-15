@@ -2306,7 +2306,7 @@ function renderWeek(){
           var pk=presKey(s.id,dStr);var ps=presencas[pk];
           var cls=ps==='presente'?'status-ok':ps==='faltou'?'status-late':'status-neutral';
           var ev2=document.createElement('div');ev2.className='cal-event '+cls;
-          ev2.textContent=s.nome.split(' ')[0].substring(0,6)+(ag.tipo==='reposicao'?' ↩':'');
+          ev2.textContent=s.nome.split(' ')[0].substring(0,6)+(ag.tipo==='reposicao'?' ↩':'')+(isEmLicenca(s.id,dStr)?' 🏖':'');
           var dCopy2=dow; var hCopy2=h; var dStrCopy2=dStr;
           ev2.onclick=function(e){e.stopPropagation();openSlotModal(dCopy2,hCopy2,dStrCopy2);};
           cell.appendChild(ev2);
