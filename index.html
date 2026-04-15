@@ -2245,19 +2245,10 @@ function navScrollToCurrentHour(){
   var target=null;
   labels.forEach(function(el){
     var t=parseInt(el.textContent);
-    if(!target&&t>=nowH-1)target=el;
+    if(!target&&t>=Math.max(0,nowH-1))target=el;
   });
   if(!target&&labels.length)target=labels[0];
-  if(target){
-    var main=document.querySelector('.main');
-    if(main){
-      var rect=target.getBoundingClientRect();
-      var mainRect=main.getBoundingClientRect();
-      main.scrollTop=main.scrollTop+(rect.top-mainRect.top)-80;
-    } else {
-      target.scrollIntoView({behavior:'smooth',block:'start'});
-    }
-  }
+  if(target) target.scrollIntoView({behavior:'smooth',block:'center'});
 }
 function navToday(){
   currentDay=new Date();
