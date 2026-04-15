@@ -1013,14 +1013,35 @@ function addLicenca(sid, inicio, fim) {
   });
   if(overlap) { toast('Já existe uma licença nesse período.'); return false; }
   if(!licencas[sid]) licencas[sid] = [];
-  licencas[sid].push({id: Date.now()+'', inicio: inicio, fim: fim, criadaEm: new Date().toISOString()});
+  licencas[sid].push({id: Date.now()+'', inicio: inicio, fim: fim, diasExtendidos: dias, criadaEm: new Date().toISOString()});
   saveLicencas();
+  // Estender vencimento pelo número de dias da licença
+  var s = students.find(function(x){ return x.id === sid; });
+  if(s && s.vencimento) {
+    var v = new Date(s.vencimento + 'T12:00:00');
+    v.setDate(v.getDate() + dias);
+    s.vencimento = v.toISOString().split('T')[0];
+    save();
+    toast('Licença de '+dias+'d adicionada. Vencimento atualizado para '+fmtDate(s.vencimento)+'.');
+  }
   return true;
 }
 function removeLicenca(sid, licId) {
   if(!licencas[sid]) return;
+  var lic = licencas[sid].find(function(l){ return l.id === licId; });
   licencas[sid] = licencas[sid].filter(function(l){ return l.id !== licId; });
   saveLicencas();
+  // Reverter extensão do vencimento
+  if(lic) {
+    var dias = lic.diasExtendidos || (Math.round((new Date(lic.fim+'T00:00:00') - new Date(lic.inicio+'T00:00:00')) / 86400000) + 1);
+    var s = students.find(function(x){ return x.id === sid; });
+    if(s && s.vencimento) {
+      var v = new Date(s.vencimento + 'T12:00:00');
+      v.setDate(v.getDate() - dias);
+      s.vencimento = v.toISOString().split('T')[0];
+      save();
+    }
+  }
 }
 
 
@@ -2139,7 +2160,6 @@ function openDetail(id){
       var fim=licPanel.querySelector('.lic-fim').value;
       if(!ini||!fim){toast('Preencha as datas.');return;}
       if(addLicenca(s.id,ini,fim)){
-        toast('Licença adicionada!');
         renderLicPanel();
         renderCalendar();
         refreshAll();
