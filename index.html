@@ -726,7 +726,8 @@ var _SYNC_KEYS = {
   historicoFin:'gp-hfin', feriadosCustom:'gp-fe', bloqueios:'gp-bl',
   diasPermitidos:'gp-dias-perm', treinosData:'gp-treinos',
   evolucaoCargas:'gp-evolucao', pagamentos:'gp-pagamentos', historicoCob:'gp-hc',
-  despesas:'gp-desp', horariosConfig:'gp-hconf'
+  despesas:'gp-desp', horariosConfig:'gp-hconf',
+  repHistorico:'gp-rep-hist', licencas:'gp-lic'
 };
 
 function _getAllData(){
@@ -931,28 +932,95 @@ function safeVal(id, def) {
   return el ? (el.value || def || '') : (def || '');
 }
 
-var reposicoes = {}; 
+var reposicoes = {};
+var repHistorico = {};
+var licencas = {};
 
 function loadReposicoes() {
   try { var r=localStorage.getItem('gp-rep'); if(r) reposicoes=JSON.parse(r); } catch(e) {}
+  try { var h=localStorage.getItem('gp-rep-hist'); if(h) repHistorico=JSON.parse(h); } catch(e) {}
+  try { var l=localStorage.getItem('gp-lic'); if(l) licencas=JSON.parse(l); } catch(e) {}
 }
 function saveReposicoes() {
   try { localStorage.setItem('gp-rep',JSON.stringify(reposicoes)); } catch(e) {}
 }
+function saveRepHistorico() {
+  try { localStorage.setItem('gp-rep-hist',JSON.stringify(repHistorico)); } catch(e) {}
+}
+function saveLicencas() {
+  try { localStorage.setItem('gp-lic',JSON.stringify(licencas)); } catch(e) {}
+}
 function getReposicoes(sid) {
   return reposicoes[sid] || 0;
 }
-function addReposicao(sid) {
+// Count reposições added (not used) in the current calendar month
+function getRepDoMes(sid) {
+  var h = repHistorico[sid] || [];
+  var now = new Date(), y = now.getFullYear(), mo = now.getMonth();
+  return h.filter(function(e){
+    if(e.tipo !== 'add') return false;
+    var d = new Date(e.date + 'T12:00:00');
+    return d.getFullYear()===y && d.getMonth()===mo;
+  }).length;
+}
+var REP_LIMIT_MES = 4;
+function addReposicao(sid, motivo) {
+  var noMes = getRepDoMes(sid);
+  if(noMes >= REP_LIMIT_MES) {
+    toast('Limite de '+REP_LIMIT_MES+' reposições no mês atingido.');
+    return false;
+  }
   reposicoes[sid] = (reposicoes[sid]||0) + 1;
   saveReposicoes();
+  if(!repHistorico[sid]) repHistorico[sid] = [];
+  repHistorico[sid].push({tipo:'add', date:new Date().toISOString().split('T')[0], motivo: motivo||'manual', ts: new Date().toISOString()});
+  saveRepHistorico();
+  return true;
 }
-function useReposicao(sid) {
+function useReposicao(sid, motivo) {
   if ((reposicoes[sid]||0) > 0) {
     reposicoes[sid]--;
     saveReposicoes();
+    if(!repHistorico[sid]) repHistorico[sid] = [];
+    repHistorico[sid].push({tipo:'use', date:new Date().toISOString().split('T')[0], motivo: motivo||'agendado', ts: new Date().toISOString()});
+    saveRepHistorico();
     return true;
   }
   return false;
+}
+// --- Licença ---
+function getLicencasAluno(sid) { return licencas[sid] || []; }
+function isEmLicenca(sid, dateStr) {
+  var lics = getLicencasAluno(sid);
+  var d = new Date(dateStr + 'T12:00:00');
+  return lics.some(function(l){
+    var ini = new Date(l.inicio + 'T00:00:00');
+    var fim = new Date(l.fim + 'T23:59:59');
+    return d >= ini && d <= fim;
+  });
+}
+function addLicenca(sid, inicio, fim) {
+  // Validate: max 7 days
+  var iniD = new Date(inicio + 'T00:00:00'), fimD = new Date(fim + 'T00:00:00');
+  var dias = Math.round((fimD - iniD) / 86400000) + 1;
+  if(dias < 1 || dias > 7) { toast('Licença deve ser de 1 a 7 dias corridos.'); return false; }
+  if(iniD > fimD) { toast('Data inicial deve ser anterior à final.'); return false; }
+  // Check overlap with existing active licença
+  var lics = getLicencasAluno(sid);
+  var overlap = lics.some(function(l){
+    var li = new Date(l.inicio+'T00:00:00'), lf = new Date(l.fim+'T23:59:59');
+    return iniD <= lf && fimD >= li;
+  });
+  if(overlap) { toast('Já existe uma licença nesse período.'); return false; }
+  if(!licencas[sid]) licencas[sid] = [];
+  licencas[sid].push({id: Date.now()+'', inicio: inicio, fim: fim, criadaEm: new Date().toISOString()});
+  saveLicencas();
+  return true;
+}
+function removeLicenca(sid, licId) {
+  if(!licencas[sid]) return;
+  licencas[sid] = licencas[sid].filter(function(l){ return l.id !== licId; });
+  saveLicencas();
 }
 
 
@@ -1450,14 +1518,17 @@ function getAulasDoMes(sid){
   var s=students.find(function(x){return x.id===sid;}); if(!s||!s.plano)return{feitas:0,direito:0,faltas:0};
   var spw=PLAN_DAYS[s.plano]||0,now=new Date(),y=now.getFullYear(),m=now.getMonth();
   var dim=new Date(y,m+1,0).getDate(),dir=Math.round(spw*dim/7),f=0,fa=0;
-  // Descontar feriados que caem nos dias fixos do aluno (não geram reposição)
   var sAgs=agendas.filter(function(a){return a.alunoId===sid;});
   var dowsAluno=[];
   sAgs.forEach(function(a){a.days.forEach(function(dw){if(dowsAluno.indexOf(dw)===-1)dowsAluno.push(dw);});});
   if(dowsAluno.length){
     for(var day=1;day<=dim;day++){
       var dCheck=new Date(y,m,day);
+      var dStr=dCheck.toISOString().split('T')[0];
+      // Feriados não geram reposição — descontam do direito
       if(isHoliday(dCheck)&&dowsAluno.indexOf(dCheck.getDay())!==-1) dir=Math.max(0,dir-1);
+      // Licença — dias em licença nos dias fixos do aluno também descontam do direito
+      else if(isEmLicenca(sid,dStr)&&dowsAluno.indexOf(dCheck.getDay())!==-1) dir=Math.max(0,dir-1);
     }
   }
   Object.keys(presencas).forEach(function(k){
@@ -1948,25 +2019,43 @@ function openDetail(id){
   btnDel.onclick=function(){cancelarCadastro();
   var md=document.getElementById('modal-detail');if(md)md.style.display='none';deleteStudent(s.id);};
   actDiv.appendChild(btnDel);
-  // Painel de saldo de reposições com ajuste manual
+  // Painel de reposições com histórico e limite mensal
   var repPanel=document.createElement('div');
   repPanel.style.cssText='margin-top:12px;background:var(--card);padding:12px 16px;';
   function renderRepPanel(){
     var saldo=getReposicoes(s.id);
+    var noMes=getRepDoMes(s.id);
+    var hist=(repHistorico[s.id]||[]).slice().reverse().slice(0,10);
+    var motLabel={'desmarcacao':'Desmarcação','manual':'Ajuste manual','agendado':'Agendada'};
+    var histHtml=hist.length?hist.map(function(e){
+      var cor=e.tipo==='add'?'var(--warning)':'var(--success)';
+      var icon=e.tipo==='add'?'+1':'−1';
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:0.72rem;">'
+        +'<span style="color:'+cor+';font-weight:700;margin-right:8px;">'+icon+'</span>'
+        +'<span style="flex:1;color:var(--white-dim);">'+(motLabel[e.motivo]||e.motivo)+'</span>'
+        +'<span style="color:var(--white-dim);font-size:0.65rem;">'+e.date+'</span></div>';
+    }).join(''):'<div style="font-size:0.7rem;color:var(--white-dim);padding:4px 0;">Sem histórico</div>';
+
     repPanel.innerHTML=''
-      +'<div style="display:flex;align-items:center;justify-content:space-between;">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
       +'<div>'
       +'<div style="font-family:Raleway,sans-serif;font-size:0.52rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);margin-bottom:3px;">Reposi\u00e7\u00f5es</div>'
-      +'<div style="font-size:1rem;font-weight:700;color:'+(saldo>0?'var(--warning)':'var(--white-dim)')+';">'+saldo+' dispon\u00edvel'+(saldo!==1?'is':'')+'</div>'
+      +'<div style="font-size:1rem;font-weight:700;color:'+(saldo>0?'var(--warning)':'var(--white-dim)')+';">'
+      +saldo+' dispon\u00edvel'+(saldo!==1?'is':'')+' <span style="font-size:0.65rem;font-weight:400;color:var(--white-dim);">('+noMes+'/'+REP_LIMIT_MES+' neste m\u00eas)</span></div>'
       +'</div>'
-      +'<button class="btn btn-outline btn-sm rep-admin-btn" style="height:30px;font-size:0.55rem;opacity:0.45;">\u270F Ajuste admin</button>'
+      +'<button class="btn btn-outline btn-sm rep-admin-btn" style="height:30px;font-size:0.55rem;opacity:0.45;">\u270F Admin</button>'
       +'</div>'
+      // histórico
+      +'<details style="margin-bottom:8px;">'
+      +'<summary style="font-size:0.65rem;color:var(--accent-l);cursor:pointer;list-style:none;margin-bottom:4px;">\u25B8 Hist\u00f3rico ('+hist.length+(hist.length<(repHistorico[s.id]||[]).length?'+':'')+')</summary>'
+      +'<div style="margin-top:4px;">'+histHtml+'</div>'
+      +'</details>'
       +'<div class="rep-admin-panel" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'
-      +'<div style="font-size:0.72rem;color:var(--white-dim);margin-bottom:8px;">Confirme a senha para ajustar manualmente:</div>'
+      +'<div style="font-size:0.72rem;color:var(--white-dim);margin-bottom:8px;">Senha para ajuste manual:</div>'
       +'<div style="display:flex;gap:6px;">'
       +'<input type="password" class="rep-admin-pass" placeholder="Senha" style="flex:1;height:36px;padding:0 10px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.85rem;outline:none;">'
       +'<button class="btn btn-outline btn-sm rep-minus" style="width:36px;height:36px;font-size:1rem;padding:0;" '+(saldo<=0?'disabled':'')+'>\u2212</button>'
-      +'<button class="btn btn-outline btn-sm rep-plus" style="width:36px;height:36px;font-size:1rem;padding:0;">+</button>'
+      +'<button class="btn btn-outline btn-sm rep-plus" style="width:36px;height:36px;font-size:1rem;padding:0;" '+(noMes>=REP_LIMIT_MES?'disabled title="Limite do m\u00eas atingido"':'')+'><span style="pointer-events:none;">+</span></button>'
       +'</div>'
       +'</div>';
 
@@ -1983,17 +2072,93 @@ function openDetail(id){
     repPanel.querySelector('.rep-minus').onclick=function(){
       if(!checkPass()){toast('Senha incorreta.');return;}
       if(getReposicoes(s.id)<=0)return;
-      useReposicao(s.id);
+      useReposicao(s.id,'manual');
       renderRepPanel();
     };
     repPanel.querySelector('.rep-plus').onclick=function(){
       if(!checkPass()){toast('Senha incorreta.');return;}
-      addReposicao(s.id);
+      if(!addReposicao(s.id,'manual'))return;
       renderRepPanel();
     };
   }
   renderRepPanel();
   document.getElementById('det-body').appendChild(repPanel);
+
+  // Painel de Licença
+  var licPanel=document.createElement('div');
+  licPanel.style.cssText='margin-top:12px;background:var(--card);padding:12px 16px;';
+  function renderLicPanel(){
+    var lics=getLicencasAluno(s.id);
+    var today=new Date(); today.setHours(0,0,0,0);
+    var licHtml=lics.length?lics.slice().reverse().map(function(l){
+      var ini=new Date(l.inicio+'T00:00:00'), fim=new Date(l.fim+'T23:59:59');
+      var ativa=today>=ini&&today<=fim;
+      var dias=Math.round((new Date(l.fim+'T00:00:00')-new Date(l.inicio+'T00:00:00'))/86400000)+1;
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);gap:6px;">'
+        +'<div style="flex:1;">'
+        +'<span style="font-size:0.72rem;color:'+(ativa?'var(--warning)':'var(--white-dim)')+';">'
+        +l.inicio+' → '+l.fim+' ('+dias+'d'+(ativa?' · <b style=\'color:var(--warning)\'>ativa</b>':'')+')</span>'
+        +'</div>'
+        +'<button data-lic-id="'+l.id+'" class="btn btn-outline btn-sm lic-del-btn" style="height:26px;font-size:0.65rem;padding:0 8px;color:var(--danger);">✕</button>'
+        +'</div>';
+    }).join(''):'<div style="font-size:0.7rem;color:var(--white-dim);padding:4px 0;">Nenhuma licença</div>';
+
+    licPanel.innerHTML=''
+      +'<div style="font-family:Raleway,sans-serif;font-size:0.52rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);margin-bottom:8px;">Licen\u00e7a / Congelamento</div>'
+      +'<div style="font-size:0.72rem;color:var(--white-dim);margin-bottom:10px;">At\u00e9 7 dias corridos por per\u00edodo. Dias em licen\u00e7a s\u00e3o descontados do direito mensal.</div>'
+      +licHtml
+      +'<div class="lic-admin-toggle" style="margin-top:10px;">'
+      +'<button class="btn btn-outline btn-sm lic-open-btn" style="height:30px;font-size:0.6rem;width:100%;">+ Incluir Licen\u00e7a</button>'
+      +'</div>'
+      +'<div class="lic-add-panel" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
+      +'<div><div style="font-size:0.65rem;color:var(--white-dim);margin-bottom:3px;">In\u00edcio</div>'
+      +'<input type="date" class="lic-ini" style="width:100%;background:var(--dark);border:1px solid var(--border);color:var(--white);padding:8px;font-size:0.82rem;outline:none;border-radius:4px;"></div>'
+      +'<div><div style="font-size:0.65rem;color:var(--white-dim);margin-bottom:3px;">Fim (m\u00e1x 7 dias)</div>'
+      +'<input type="date" class="lic-fim" style="width:100%;background:var(--dark);border:1px solid var(--border);color:var(--white);padding:8px;font-size:0.82rem;outline:none;border-radius:4px;"></div>'
+      +'</div>'
+      +'<input type="password" class="lic-pass" placeholder="Senha admin" style="width:100%;height:36px;padding:0 10px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.85rem;outline:none;margin-bottom:8px;box-sizing:border-box;">'
+      +'<button class="btn btn-primary lic-salvar-btn" style="width:100%;height:38px;font-size:0.82rem;">Salvar Licen\u00e7a</button>'
+      +'</div>';
+
+    licPanel.querySelector('.lic-open-btn').onclick=function(){
+      var p=licPanel.querySelector('.lic-add-panel');
+      var open=p.style.display!=='none';
+      p.style.display=open?'none':'block';
+      if(!open){
+        // Default: today + 3 days
+        var td=new Date(); var tf=new Date(); tf.setDate(td.getDate()+2);
+        licPanel.querySelector('.lic-ini').value=td.toISOString().split('T')[0];
+        licPanel.querySelector('.lic-fim').value=tf.toISOString().split('T')[0];
+      }
+    };
+    licPanel.querySelector('.lic-salvar-btn').onclick=function(){
+      var pass=licPanel.querySelector('.lic-pass').value;
+      if(pass!==CREDENTIALS.pass){toast('Senha incorreta.');return;}
+      var ini=licPanel.querySelector('.lic-ini').value;
+      var fim=licPanel.querySelector('.lic-fim').value;
+      if(!ini||!fim){toast('Preencha as datas.');return;}
+      if(addLicenca(s.id,ini,fim)){
+        toast('Licença adicionada!');
+        renderLicPanel();
+        renderCalendar();
+        refreshAll();
+      }
+    };
+    licPanel.querySelectorAll('.lic-del-btn').forEach(function(btn){
+      btn.onclick=function(){
+        var id=btn.getAttribute('data-lic-id');
+        if(confirm('Remover esta licença?')){
+          removeLicenca(s.id,id);
+          renderLicPanel();
+          renderCalendar();
+          refreshAll();
+        }
+      };
+    });
+  }
+  renderLicPanel();
+  document.getElementById('det-body').appendChild(licPanel);
 
   // Botão registrar pagamento
   var btnPag=document.createElement('button');
@@ -2289,6 +2454,8 @@ function renderSlotModal(){
         if(agsNoDia.some(function(a){return a.alunoId===s.id&&parseInt(a.inicio.split(':')[0])===agSlotHour;})) return null;
         // Já tem aula em outro horário neste dia?
         if(agsNoDia.some(function(a){return a.alunoId===s.id;})) return null;
+        // Em licença neste dia?
+        if(slotDateChk && isEmLicenca(s.id, slotDateChk)) return null;
         var planoS=getPlano(s.plano);
         var repS=getReposicoes(s.id);
         var temQualquerRec=agendas.some(function(a){return a.alunoId===s.id;});
@@ -2370,7 +2537,7 @@ function renderSlotModal(){
       removerDeData(agId, dt);
 
       // Gerar 1 reposição
-      addReposicao(sid);
+      addReposicao(sid, 'desmarcacao');
       savePresencas();
 
       var s=students.find(function(x){return x.id===sid;});
@@ -2411,7 +2578,7 @@ function renderSlotModal(){
     // Adicionar com tipo correto
     adicionarEmData(sid,hora,slotDateAdd,tipoAdd);
     if(tipoAdd==='reposicao'){
-      useReposicao(sid);saveReposicoes();
+      useReposicao(sid, 'agendado');saveReposicoes();
       toast(nome2+': reposi\u00e7\u00e3o agendada. Restam '+getReposicoes(sid)+'.');
     } else if(tipoAdd==='pacote'){
       toast(nome2+' adicionado (pacote).');
@@ -3978,7 +4145,7 @@ function agendarReposicao(sid, dateStr, hora) {
   }
   var horaStr = String(hora).padStart(2,'0') + ':00';
   adicionarEmData(sid, horaStr, dateStr, 'reposicao'); // marca como reposição
-  useReposicao(sid); // consome 1 do saldo
+  useReposicao(sid, 'agendado'); // consome 1 do saldo
   saveReposicoes();
   closeModal('modal-reposicao');
   renderCalendar();
