@@ -1359,7 +1359,7 @@ function showTab(tab){
       if(tab==='dashboard'){renderDashboard();}
       else if(tab==='alunos'){renderTable();renderStats();renderNotifs();renderLockIn();renderPaineis();renderAutomacao();}
       else if(tab==='treino'){renderTabTreino();}
-      else if(tab==='agenda'){renderCalendar();}
+      else if(tab==='agenda'){renderCalendar();setTimeout(function(){navScrollToCurrentHour();},80);}
       else if(tab==='financeiro'){renderFinanceiro();renderSimulacao();renderComparativo();renderHistoricoVisual();}
     }catch(e){}
   },20);
@@ -2054,7 +2054,32 @@ function setView(v){
 }
 function navBack()   {if(calView==='dia')navDay(-1);else navWeek(-1);}
 function navFwd()    {if(calView==='dia')navDay(1); else navWeek(1);}
-function navToday()  {currentDay=new Date();currentWeekStart=getMonday(new Date());renderCalendar();}
+function navScrollToCurrentHour(){
+  var nowH=new Date().getHours();
+  var labels=document.querySelectorAll('.cal-time-label');
+  var target=null;
+  labels.forEach(function(el){
+    var t=parseInt(el.textContent);
+    if(!target&&t>=nowH-1)target=el;
+  });
+  if(!target&&labels.length)target=labels[0];
+  if(target){
+    var main=document.querySelector('.main');
+    if(main){
+      var rect=target.getBoundingClientRect();
+      var mainRect=main.getBoundingClientRect();
+      main.scrollTop=main.scrollTop+(rect.top-mainRect.top)-80;
+    } else {
+      target.scrollIntoView({behavior:'smooth',block:'start'});
+    }
+  }
+}
+function navToday(){
+  currentDay=new Date();
+  currentWeekStart=getMonday(new Date());
+  renderCalendar();
+  setTimeout(navScrollToCurrentHour,80);
+}
 function navDay(dir) {currentDay.setDate(currentDay.getDate()+dir);renderCalendar();}
 function navWeek(dir){currentWeekStart.setDate(currentWeekStart.getDate()+dir*7);renderCalendar();}
 
