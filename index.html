@@ -426,7 +426,7 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
       <div class="app-logo">Personal <span>Pro</span></div>
     </div>
     <div class="app-header-actions">
-      <span id="sync-status" style="font-size:0.62rem;font-family:'Raleway',sans-serif;color:var(--white-dim);letter-spacing:0.05em;cursor:pointer;" onclick="forceSyncFromCloud()" title="Toque para sincronizar agora"></span>
+      <span id="sync-status" style="font-size:0.62rem;font-family:'Raleway',sans-serif;color:var(--white-dim);letter-spacing:0.05em;cursor:pointer;" onclick="forceSyncFromCloud()" title="Toque para sincronizar agora"></span><button onclick="openSyncHistory()" title="Histórico de versões" style="background:none;border:none;color:var(--white-dim);cursor:pointer;font-size:0.7rem;padding:2px 4px;opacity:0.6;" id="hist-btn">&#128337;</button>
       <button id="theme-btn" class="btn btn-outline btn-sm" onclick="toggleTheme()" title="Modo claro">&#9728;&#65039;</button>
     </div>
   </div>
@@ -596,6 +596,16 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
 <div id="modal-slot" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,0.7);z-index:500;align-items:flex-end;justify-content:center;">
   <div class="modal"><div class="modal-header"><div class="modal-title" id="slot-title">Hor&aacute;rio</div><button class="modal-close" onclick="document.getElementById('modal-slot').style.display='none'">&#215;</button></div><div id="slot-body"></div></div>
 </div>
+<div id="modal-sync-hist" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,0.7);z-index:500;align-items:flex-end;justify-content:center;">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-header">
+      <div class="modal-title">Hist&#243;rico de Vers&#245;es</div>
+      <button class="modal-close" onclick="document.getElementById('modal-sync-hist').style.display='none'">&#215;</button>
+    </div>
+    <div style="font-size:0.72rem;color:var(--white-dim);margin-bottom:12px;">Salvo automaticamente a cada 5 min. Toque em <b>Restaurar</b> para voltar a uma vers&#227;o anterior.</div>
+    <div id="sync-hist-body"></div>
+  </div>
+</div>
 <div id="modal-recibo" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,0.7);z-index:500;align-items:flex-end;justify-content:center;">
   <div class="modal" style="max-width:400px;"><div class="modal-header"><div class="modal-title">Comprovante</div><button class="modal-close" onclick="document.getElementById('modal-recibo').style.display='none'">&#215;</button></div><pre id="recibo-txt" style="background:var(--card);border:1px solid var(--border);padding:14px;font-size:0.78rem;color:var(--white);white-space:pre-wrap;word-break:break-word;line-height:1.6;margin-bottom:14px;border-radius:4px;"></pre><div style="display:flex;flex-direction:column;gap:8px;"><button id="recibo-wa" class="wa-btn" style="width:100%;height:40px;justify-content:center;">Enviar pelo WhatsApp</button><button id="recibo-copy" class="btn btn-outline" style="width:100%;height:40px;">Copiar texto</button></div></div>
 </div>
@@ -706,17 +716,28 @@ firebase.initializeApp({
   databaseURL:"https://gp-manager-8e604-default-rtdb.firebaseio.com"
 });
 var _dbRef = firebase.database().ref('gp/data');
+var _histRef = firebase.database().ref('gp/history');
 var _syncTimer = null;
 var _applyingCloud = false;
 var _lastPushedTs = null;
-var _localModifiedTs = null;
+var _pendingPush = false;
 var _initialized = false;
+var _lastHistoryTs = 0;
+
+function _getDeviceLabel(){
+  try{
+    var cached=localStorage.getItem('gp-device-id'); if(cached) return cached;
+    var mob=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    var label=(mob?'Mobile':'Desktop')+'-'+Math.random().toString(36).substr(2,5).toUpperCase();
+    localStorage.setItem('gp-device-id',label); return label;
+  }catch(e){return 'Dispositivo';}
+}
 
 function _setSyncStatus(status, detail){
   var el=document.getElementById('sync-status'); if(!el) return;
-  if(status==='ok')  { el.textContent='☁ Sync'; el.style.color='var(--success)'; }
-  else if(status==='up')  { el.textContent='↑ Enviando...'; el.style.color='var(--accent-l)'; }
-  else if(status==='err') { el.textContent='⚠ Sem sync'; el.style.color='var(--warning)'; if(detail) console.error('[GP Sync]', detail); }
+  if(status==='ok')  { el.textContent='\u2601 Sync'; el.style.color='var(--success)'; }
+  else if(status==='up')  { el.textContent='\u2191 Enviando...'; el.style.color='var(--accent-l)'; }
+  else if(status==='err') { el.textContent='\u26a0 Sem sync'; el.style.color='var(--warning)'; if(detail) console.error('[GP Sync]', detail); }
   else { el.textContent=''; }
 }
 
@@ -736,87 +757,131 @@ function _getAllData(){
   return d;
 }
 
+function _saveHistory(d){
+  try{
+    var now=Date.now();
+    if(now-_lastHistoryTs < 5*60*1000) return; // max 1 entrada a cada 5 min
+    _lastHistoryTs=now;
+    var key=new Date().toISOString().replace(/[:.]/g,'-');
+    var device=_getDeviceLabel();
+    var label=new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+    _histRef.child('index').child(key).set({ts:d.ts,device:device,label:label});
+    _histRef.child('snaps').child(key).set(d);
+    // Manter apenas os ultimos 15 snapshots
+    _histRef.child('index').orderByKey().once('value',function(snap){
+      var keys=[]; snap.forEach(function(c){keys.push(c.key);});
+      if(keys.length>15) keys.slice(0,keys.length-15).forEach(function(k){
+        _histRef.child('index').child(k).remove();
+        _histRef.child('snaps').child(k).remove();
+      });
+    });
+  }catch(e){}
+}
+
 function _pushToCloud(){
-  if(!_initialized) return; // não sincronizar durante inicialização
+  if(!_initialized) return;
+  _pendingPush=true;
   if(_syncTimer) clearTimeout(_syncTimer);
   _setSyncStatus('up');
-  _localModifiedTs = new Date().toISOString();
-  var capturedTs = _localModifiedTs;
-  _syncTimer = setTimeout(function(){
-    _syncTimer = null;
+  _syncTimer=setTimeout(function(){
+    _syncTimer=null;
+    var ts=new Date().toISOString();
     var d=_getAllData();
-    d.ts = capturedTs;
-    _lastPushedTs = capturedTs;
+    d.ts=ts; d.device=_getDeviceLabel();
+    _lastPushedTs=ts;
+    _pendingPush=false;
     _dbRef.set(d)
-      .then(function(){ _setSyncStatus('ok'); })
-      .catch(function(e){ _setSyncStatus('err', e); });
-  }, 1500);
+      .then(function(){ _setSyncStatus('ok'); _saveHistory(d); })
+      .catch(function(e){ _setSyncStatus('err',e); _pendingPush=true; });
+  },1500);
 }
 
 function _applyCloud(data){
   if(!data) return;
-  if(data.ts && data.ts===_lastPushedTs) return; // eco do próprio push
-
-  // Se há push pendente (mudanças locais ainda não enviadas), não sobrescrever
-  if(_syncTimer){
-    console.log('[GP Sync] Push pendente — ignorando dados da nuvem.');
+  if(data.ts && data.ts===_lastPushedTs) return; // eco do proprio push
+  // Se temos mudancas locais nao enviadas, nao sobrescrever
+  if(_pendingPush||_syncTimer){
+    console.log('[GP Sync] Mudancas locais pendentes - ignorando cloud de '+(data.device||'?'));
     return;
   }
-
-  // Se dados locais são mais recentes que a nuvem, envia local e não aplica
-  if(_localModifiedTs && data.ts && _localModifiedTs > data.ts){
-    console.log('[GP Sync] Local mais recente ('+_localModifiedTs+' > '+data.ts+') — enviando local.');
-    _pushToCloud();
-    return;
-  }
-
-  // Proteção por contagem de alunos
-  var localCount=0; var cloudCount=0;
-  try{ localCount=(JSON.parse(localStorage.getItem('gp-s')||'[]')).length; }catch(e){}
-  try{ cloudCount=(JSON.parse(data.students||'[]')).length; }catch(e){}
-  if(localCount > cloudCount){
-    console.log('[GP Sync] Local tem mais alunos ('+localCount+' > '+cloudCount+') — enviando local.');
-    _pushToCloud();
-    return;
-  }
-
-  _applyingCloud = true;
+  console.log('[GP Sync] Aplicando dados de '+(data.device||'?')+' ('+data.ts+')');
+  _applyingCloud=true;
   Object.keys(_SYNC_KEYS).forEach(function(field){
-    if(data[field]) try{ localStorage.setItem(_SYNC_KEYS[field], data[field]); }catch(e){}
+    if(data[field]!==undefined&&data[field]!==null)
+      try{ localStorage.setItem(_SYNC_KEYS[field],data[field]); }catch(e){}
   });
-  try{ loadAll(); }catch(e){ console.error('[GP Sync] loadAll', e); }
-  _applyingCloud = false;
+  try{ loadAll(); }catch(e){ console.error('[GP Sync] loadAll',e); }
+  _applyingCloud=false;
   try{ refreshAll(); }catch(e){}
   try{ renderCalendar(); }catch(e){}
   try{ renderFinanceiro(); }catch(e){}
   _setSyncStatus('ok');
+  // Marcar como inicializado apos primeiro snapshot da nuvem
+  if(!_initialized) setTimeout(function(){ _initialized=true; },500);
 }
 
 function startCloudSync(){
-  // Ouvir mudanças em tempo real
-  _dbRef.on('value', function(snapshot){
-    var data = snapshot.val();
+  _dbRef.on('value',function(snapshot){
+    var data=snapshot.val();
     if(data){ _applyCloud(data); }
-    else { _pushToCloud(); } // banco vazio: envia dados locais
-  }, function(e){ _setSyncStatus('err', e); });
+    else {
+      // Banco vazio: este dispositivo e a fonte
+      if(!_initialized) setTimeout(function(){ _initialized=true; _pushToCloud(); },500);
+      else _pushToCloud();
+    }
+  },function(e){ _setSyncStatus('err',e); });
 }
 
 function forceSyncFromCloud(){
   _setSyncStatus('up');
   _dbRef.once('value').then(function(snapshot){
-    var data = snapshot.val();
-    if(data){ _lastPushedTs=null; _applyCloud(data); toast('Dados atualizados da nuvem!'); }
+    var data=snapshot.val();
+    if(data){ _lastPushedTs=null; _pendingPush=false; _applyCloud(data); toast('Dados atualizados da nuvem!'); }
     else { _pushToCloud(); toast('Nuvem vazia \u2014 dados locais enviados.'); }
-  }).catch(function(e){ _setSyncStatus('err', e); toast('Erro ao buscar dados.'); });
+  }).catch(function(e){ _setSyncStatus('err',e); toast('Erro ao buscar dados.'); });
 }
 
-// Interceptar setItem gp-* para push automático
+function openSyncHistory(){
+  _histRef.child('index').orderByKey().limitToLast(15).once('value').then(function(snap){
+    var entries=[];
+    snap.forEach(function(c){ entries.unshift({key:c.key,data:c.val()}); });
+    var body=document.getElementById('sync-hist-body');
+    if(!body) return;
+    if(!entries.length){
+      body.innerHTML='<div style="color:var(--white-dim);font-size:0.82rem;padding:12px 0;">Nenhum hist\u00f3rico ainda. O hist\u00f3rico \u00e9 salvo automaticamente a cada 5 minutos ap\u00f3s uma altera\u00e7\u00e3o.</div>';
+    } else {
+      body.innerHTML=entries.map(function(e){
+        return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);gap:8px;">'
+          +'<div><div style="font-size:0.85rem;font-weight:600;">'+e.data.label+'</div>'
+          +'<div style="font-size:0.65rem;color:var(--accent-l);margin-top:2px;">'+e.data.device+'</div></div>'
+          +'<button onclick="restoreHistory(\''+e.key+'\')" class="btn btn-outline btn-sm" style="height:32px;font-size:0.65rem;flex-shrink:0;">Restaurar</button>'
+          +'</div>';
+      }).join('');
+    }
+    document.getElementById('modal-sync-hist').style.display='flex';
+  }).catch(function(e){ toast('Erro ao carregar hist\u00f3rico: '+e.message); });
+}
+
+function restoreHistory(key){
+  if(!confirm('Restaurar esta vers\u00e3o? Os dados atuais ser\u00e3o substitu\u00eddos.')) return;
+  _setSyncStatus('up');
+  _histRef.child('snaps').child(key).once('value').then(function(snap){
+    var data=snap.val();
+    if(!data){ toast('Snapshot n\u00e3o encontrado.'); _setSyncStatus('err'); return; }
+    _lastPushedTs=null; _pendingPush=false;
+    _applyCloud(data);
+    setTimeout(function(){ _initialized=true; _pushToCloud(); },800);
+    toast('Vers\u00e3o restaurada!');
+    document.getElementById('modal-sync-hist').style.display='none';
+  }).catch(function(e){ _setSyncStatus('err',e); toast('Erro ao restaurar: '+e.message); });
+}
+
+// Interceptar setItem gp-* para push automatico
 (function(){
   var orig=localStorage.setItem.bind(localStorage);
   localStorage.setItem=function(key,val){
     orig(key,val);
-    if(_initialized && !_applyingCloud && key.indexOf('gp-')===0 && key!=='gp-sess' && key!=='gp-theme'){
-      _localModifiedTs = new Date().toISOString();
+    if(_initialized&&!_applyingCloud&&key.indexOf('gp-')===0&&key!=='gp-sess'&&key!=='gp-theme'&&key!=='gp-device-id'){
       _pushToCloud();
     }
   };
@@ -2758,6 +2823,8 @@ function initApp(){
   try{refreshAll();}catch(e){}
   try{showTab('dashboard');}catch(e){}
   try{startCloudSync();}catch(e){ _setSyncStatus('err'); }
+  // Fallback: se Firebase demorar >8s, libera edicao local
+  setTimeout(function(){ if(!_initialized){ _initialized=true; console.log('[GP Sync] Init fallback timeout'); } },8000);
   setTimeout(function(){
     try{renderDashboard();}catch(e){}
     try{renderCalendar();}catch(e){}
@@ -2769,8 +2836,6 @@ function initApp(){
     try{renderPaineis();}catch(e){}
     try{renderAutomacao();}catch(e){}
   },100);
-  // Só permite push/sync após Firebase entregar o primeiro snapshot (≈4s)
-  setTimeout(function(){ _initialized = true; }, 4000);
 }
 
 document.addEventListener('DOMContentLoaded', function() {
