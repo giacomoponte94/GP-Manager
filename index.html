@@ -441,10 +441,20 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
         <div class="page-sub" id="dash-data"></div>
       </div>
       <div class="dash-kpi-grid" id="dash-kpis"></div>
+      <div class="dash-section" id="dash-aniv"></div>
       <div class="dash-section" id="dash-hoje"></div>
       <div class="dash-section" id="dash-venc"></div>
-      <div class="dash-section" id="dash-aniv"></div>
-      <div class="dash-section" id="dash-pagtos"></div>
+    </div>
+
+    <!-- Modal: grupo de alunos do dashboard -->
+    <div id="modal-dash-grupo" class="modal-overlay" style="display:none;align-items:center;justify-content:center;">
+      <div class="modal" style="max-width:420px;width:100%;">
+        <div class="modal-header">
+          <div class="modal-title" id="dash-grupo-title">Alunos</div>
+          <button class="modal-close" onclick="document.getElementById('modal-dash-grupo').style.display='none'">&#215;</button>
+        </div>
+        <div id="dash-grupo-body" style="max-height:60vh;overflow-y:auto;padding-top:4px;"></div>
+      </div>
     </div>
 
     <!-- ALUNOS -->
@@ -4499,22 +4509,18 @@ function renderDashboard() {
   var total = students.length;
   var emDia = students.filter(function(s){ return s.status==='em dia'; }).length;
   var inad  = students.filter(function(s){ return s.status==='atrasado'; }).length;
-  var recBruta = students.filter(function(s){ return s.status==='em dia'; })
-    .reduce(function(a,s){ return a+(parseFloat(s.valor)||0); },0);
-  var ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  var totalDesp=getTotalDespesasMes(ym);
-  var recLiq=recBruta-totalDesp;
-  var aulasM=getTotalAulasMes();
-  var custoAula=aulasM>0?Math.round(totalDesp/aulasM):0;
 
   var kpisEl = document.getElementById('dash-kpis');
   if(kpisEl) kpisEl.innerHTML =
-    '<div class="dash-kpi"><div class="dash-kpi-val">'+total+'</div><div class="dash-kpi-lbl">Alunos</div></div>'
-   +'<div class="dash-kpi ok"><div class="dash-kpi-val">'+emDia+'</div><div class="dash-kpi-lbl">Em dia</div></div>'
-   +'<div class="dash-kpi"><div class="dash-kpi-val">R$\u00A0'+Math.round(recBruta).toLocaleString('pt-BR')+'</div><div class="dash-kpi-lbl">Rec. Bruta</div></div>'
-   +'<div class="dash-kpi'+(recLiq<0?' danger':'')+'"><div class="dash-kpi-val">R$\u00A0'+Math.round(recLiq).toLocaleString('pt-BR')+'</div><div class="dash-kpi-lbl">Rec. L\u00edquida</div></div>'
-   +(custoAula>0?'<div class="dash-kpi"><div class="dash-kpi-val">R$\u00A0'+custoAula.toLocaleString('pt-BR')+'</div><div class="dash-kpi-lbl">Custo/aula</div></div>':'')
-   +'<div class="dash-kpi danger"><div class="dash-kpi-val">'+inad+'</div><div class="dash-kpi-lbl">Inadimplentes</div></div>';
+    '<div class="dash-kpi" style="cursor:pointer;" onclick="openDashGrupo(&quot;total&quot;)">'
+      +'<div class="dash-kpi-val">'+total+'</div><div class="dash-kpi-lbl">Total de alunos</div>'
+    +'</div>'
+   +'<div class="dash-kpi ok" style="cursor:pointer;" onclick="openDashGrupo(&quot;ativos&quot;)">'
+      +'<div class="dash-kpi-val">'+emDia+'</div><div class="dash-kpi-lbl">Ativos</div>'
+    +'</div>'
+   +'<div class="dash-kpi danger" style="grid-column:1/-1;cursor:pointer;" onclick="openDashGrupo(&quot;inadimplentes&quot;)">'
+      +'<div class="dash-kpi-val">'+inad+'</div><div class="dash-kpi-lbl">Inadimplentes</div>'
+    +'</div>';
 
   // Aulas hoje
   var ds = todayStr();
@@ -4578,60 +4584,72 @@ function renderDashboard() {
     }
   }
 
-  // Aniversariantes do mês
+  // Aniversariantes: hoje e proximos 5 dias
   var anivEl = document.getElementById('dash-aniv');
   if(anivEl){
-    var mesAtual = now.getMonth()+1;
-    var diaAtual = now.getDate();
-    var anivMes = students.filter(function(s){
-      if(!s.nascimento) return false;
-      var p = s.nascimento.split('-');
-      return parseInt(p[1]) === mesAtual;
-    }).sort(function(a,b){
-      return parseInt(a.nascimento.split('-')[2]) - parseInt(b.nascimento.split('-')[2]);
-    });
-    if(anivMes.length){
-      var arows = anivMes.map(function(s){
-        var p = s.nascimento.split('-');
-        var dia = parseInt(p[2]);
-        var isHoje = dia === diaAtual;
-        var isFuturo = dia > diaAtual;
-        var idade = getIdade(s.nascimento) + (isHoje ? 0 : (isFuturo ? 0 : 1));
-        // if birthday already happened this year, age is current age; if today, age turns today
-        var idadeLabel = isHoje ? (getIdade(s.nascimento))+' anos hoje!' : getIdade(s.nascimento)+(isFuturo?'+1':'')+' anos · dia '+dia;
-        var cor = isHoje ? 'var(--warning)' : 'var(--white-dim)';
-        return '<div class="dash-row" style="background:var(--card);cursor:pointer;'+(isHoje?'border-left:2px solid var(--warning);':'')+'" onclick="openDetail(\''+s.id+'\')">'
-          +'<div>'
-          +'<div class="dash-row-name">'+(isHoje?'&#127881; ':'')+s.nome+'</div>'
-          +'<div class="dash-row-sub" style="color:'+cor+';">'+idadeLabel+'</div>'
-          +'</div>'
-          +(isHoje?'<span class="badge badge-warn">Hoje!</span>':'<span style="font-size:1.1rem;">&#127874;</span>')
-          +'</div>';
-      }).join('');
-      anivEl.innerHTML = '<div class="dash-section-title" style="color:var(--warning);">&#127874; Aniversariantes de '+mesNomes[now.getMonth()]+' ('+anivMes.length+')</div>'+arows;
-    } else {
-      anivEl.innerHTML = '';
+    var diasNomes=['Dom','Seg','Ter','Qua','Qui','Sex','S\u00e1b'];
+    var anivProx=[];
+    for(var di=0; di<=5; di++){
+      var d2=new Date(now); d2.setDate(now.getDate()+di); d2.setHours(12,0,0,0);
+      var dm=d2.getMonth()+1, dd=d2.getDate();
+      students.forEach(function(s){
+        if(!s.nascimento) return;
+        var p=s.nascimento.split('-');
+        if(parseInt(p[1])===dm && parseInt(p[2])===dd) anivProx.push({s:s,dias:di,date:d2});
+      });
+    }
+    anivEl.innerHTML='';
+    if(anivProx.length){
+      var atitle=document.createElement('div');
+      atitle.className='dash-section-title';
+      atitle.style.color='var(--warning)';
+      atitle.innerHTML='\u2728 Anivers\u00e1rios ('+anivProx.length+')';
+      anivEl.appendChild(atitle);
+      anivProx.forEach(function(item){
+        var s=item.s, di=item.dias;
+        var isHoje=di===0;
+        var idade=getIdade(s.nascimento);
+        var dLabel=isHoje?'Hoje!':(di===1?'Amanh\u00e3':diasNomes[item.date.getDay()]+', daqui '+di+' dias');
+        var row=document.createElement('div');
+        row.className='dash-row';
+        row.style.cssText='background:var(--card);cursor:pointer;'+(isHoje?'border-left:3px solid var(--warning);':'');
+        row.innerHTML='<div><div class="dash-row-name">'+(isHoje?'\u{1F381} ':'')+s.nome+'</div>'
+          +'<div class="dash-row-sub" style="color:'+(isHoje?'var(--warning)':'var(--white-dim)')+';">'
+          +dLabel+' \u00B7 '+idade+(isHoje?'+1':'')+' anos</div></div>'
+          +(isHoje?'<span class="badge badge-warn">Hoje!</span>':'<span style="font-size:1.1rem;">\u{1F382}</span>');
+        row.onclick=(function(sid){ return function(){ openDetail(sid); }; })(s.id);
+        anivEl.appendChild(row);
+      });
     }
   }
+}
 
-  // Últimos pagamentos
-  var pagEl = document.getElementById('dash-pagtos');
-  if(pagEl){
-    var ultPags = pagamentos.slice().sort(function(a,b){ return b.data.localeCompare(a.data); }).slice(0,5);
-    if(ultPags.length){
-      var prows = ultPags.map(function(p){
-        var s = students.find(function(x){ return x.id===p.alunoId; });
-        var nome = s ? s.nome.split(' ')[0] : '?';
-        return '<div class="dash-row" style="background:var(--card);">'
-          +'<div><div class="dash-row-name">'+nome+'</div><div class="dash-row-sub">'+fmtDate(p.data)+' · '+p.forma+'</div></div>'
-          +'<span style="font-size:0.88rem;font-weight:700;color:var(--success);">R$\u00A0'+Math.round(p.valor).toLocaleString('pt-BR')+'</span>'
-          +'</div>';
-      }).join('');
-      pagEl.innerHTML = '<div class="dash-section-title">Últimos pagamentos</div>'+prows;
-    } else {
-      pagEl.innerHTML = '';
-    }
+function openDashGrupo(tipo){
+  var title='', lista=[];
+  if(tipo==='total'){ title='Todos os alunos ('+students.length+')'; lista=students.slice(); }
+  else if(tipo==='ativos'){ lista=students.filter(function(s){ return s.status==='em dia'; }); title='Alunos ativos ('+lista.length+')'; }
+  else if(tipo==='inadimplentes'){ lista=students.filter(function(s){ return s.status==='atrasado'; }); title='Inadimplentes ('+lista.length+')'; }
+  lista=lista.slice().sort(function(a,b){ return a.nome.localeCompare(b.nome,'pt-BR'); });
+  document.getElementById('dash-grupo-title').textContent=title;
+  var body=document.getElementById('dash-grupo-body');
+  body.innerHTML='';
+  if(!lista.length){
+    body.innerHTML='<div style="color:var(--white-dim);font-size:0.85rem;padding:12px 0;">Nenhum aluno.</div>';
+  } else {
+    lista.forEach(function(s){
+      var cor=s.status==='atrasado'?'var(--danger)':s.status==='vencendo'?'var(--warning)':'var(--success)';
+      var stLabel=s.status==='em dia'?'Ativo':s.status==='vencendo'?'Vencendo':'Inativo';
+      var sub=(s.plano?getPlanNome(s.plano):'')+(s.vencimento?' \u00B7 Venc. '+fmtDate(s.vencimento):'');
+      var row=document.createElement('div');
+      row.className='dash-row';
+      row.style.cssText='background:var(--card);border-left:3px solid '+cor+';margin-bottom:4px;cursor:pointer;';
+      row.innerHTML='<div><div class="dash-row-name">'+s.nome+'</div>'+(sub?'<div class="dash-row-sub">'+sub+'</div>':'')+'</div>'
+        +'<span style="font-size:0.7rem;font-weight:600;color:'+cor+';">'+stLabel+'</span>';
+      row.onclick=(function(sid){ return function(){ document.getElementById('modal-dash-grupo').style.display='none'; openDetail(sid); }; })(s.id);
+      body.appendChild(row);
+    });
   }
+  document.getElementById('modal-dash-grupo').style.display='flex';
 }
 
 function renderRelatorioMensal() {
