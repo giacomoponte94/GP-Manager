@@ -716,7 +716,6 @@ firebase.initializeApp({
   databaseURL:"https://gp-manager-8e604-default-rtdb.firebaseio.com"
 });
 var _dbRef = firebase.database().ref('gp/data');
-_dbRef.keepSynced(true); // mantém cache local sempre atualizado → once() resolves instantaneamente
 var _histRef = firebase.database().ref('gp/history');
 var _syncTimer = null;
 var _applyingCloud = false;
