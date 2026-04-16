@@ -1531,7 +1531,7 @@ function renderTable(){
     var mS=!fS||s.status===fS; var mP=!fP||s.plano===fP; var mM=!fM||s.modalidade===fM;
     var mH=!hojeIds||hojeIds.includes(s.id);
     return mQ&&mS&&mP&&mM&&mH;
-  });
+  }).slice().sort(function(a,b){ return a.nome.localeCompare(b.nome,'pt-BR'); });
   var tbody=document.getElementById('st-tbody');
   if(!f.length){tbody.innerHTML='<div class="empty-state"><p>'+(students.length?'Nenhum aluno encontrado.':'Nenhum aluno cadastrado.')+'</p></div>';return;}
   tbody.innerHTML=f.map(function(s){
