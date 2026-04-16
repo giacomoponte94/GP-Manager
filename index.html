@@ -2893,7 +2893,6 @@ function initApp(){
   try{loadAll();}catch(e){}
   try{atualizarSelectsPlanos();}catch(e){}
   try{refreshAll();}catch(e){}
-  _startupComplete=true; // a partir daqui, escritas no localStorage sao do usuario
   try{showTab('dashboard');}catch(e){}
   try{startCloudSync();}catch(e){ _setSyncStatus('err'); }
   setTimeout(function(){
@@ -2906,6 +2905,9 @@ function initApp(){
     try{renderLockIn();}catch(e){}
     try{renderPaineis();}catch(e){}
     try{renderAutomacao();}catch(e){}
+    // Apenas apos todos os renders iniciais marcar como pronto para rastrear
+    // alteracoes do usuario — evita que renders de startup ativem gp-dirty
+    _startupComplete=true;
   },100);
 }
 
