@@ -4455,6 +4455,12 @@ function renderDashboard() {
     } else {
       var agsHoje = getAgendasParaData(ds);
       var idHoje = agsHoje.filter(function(a){ return students.some(function(s){ return s.id===a.alunoId; }); }).map(function(a){ return a.alunoId; }).filter(function(id,i,ar){ return ar.indexOf(id)===i; });
+      // Ordenar por horário de início
+      idHoje.sort(function(a,b){
+        var hA=(agsHoje.find(function(x){return x.alunoId===a;})||{}).inicio||'';
+        var hB=(agsHoje.find(function(x){return x.alunoId===b;})||{}).inicio||'';
+        return hA.localeCompare(hB);
+      });
       if(idHoje.length){
         var rows = idHoje.map(function(id){
           var s = students.find(function(x){ return x.id===id; }); if(!s) return '';
