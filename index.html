@@ -723,6 +723,7 @@ var _lastPushedTs = null;
 var _pendingPush = false;
 var _initialized = false;
 var _lastHistoryTs = 0;
+var _startupComplete = false;
 
 function _getDeviceLabel(){
   try{
@@ -792,7 +793,7 @@ function _pushToCloud(){
     _pendingPush=false;
     try{ localStorage.setItem('gp-last-push-ts', ts); }catch(e){}
     _dbRef.set(d)
-      .then(function(){ _setSyncStatus('ok'); _saveHistory(d); })
+      .then(function(){ _setSyncStatus('ok'); _saveHistory(d); try{ localStorage.removeItem('gp-dirty'); }catch(e){} })
       .catch(function(e){ _setSyncStatus('err',e); _pendingPush=true; });
   },600);
 }
@@ -834,20 +835,23 @@ function startCloudSync(){
     var cloudData=snapshot.val();
     var localTs='';
     try{ localTs=localStorage.getItem('gp-last-push-ts')||''; }catch(e){}
+    var isDirty=false;
+    try{ isDirty=localStorage.getItem('gp-dirty')==='1'; }catch(e){}
 
     if(!cloudData||!cloudData.ts){
       // Nuvem vazia: este dispositivo e a fonte
       console.log('[GP Sync] Nuvem vazia - enviando dados locais');
       _initialized=true;
       _pushToCloud();
-    } else if(localTs && localTs>cloudData.ts){
-      // Dados locais sao mais recentes: enviar para nuvem
-      console.log('[GP Sync] Local ('+localTs+') > cloud ('+cloudData.ts+') - enviando local');
+    } else if(isDirty||(localTs&&localTs>cloudData.ts)){
+      // Alteracoes locais nao sincronizadas OU local mais recente: enviar local
+      console.log('[GP Sync] Local nao sincronizado (dirty='+isDirty+', localTs='+localTs+', cloudTs='+cloudData.ts+') - enviando local');
       _initialized=true;
       _pushToCloud();
     } else {
-      // Nuvem e mais recente (ou igual): aplicar dados da nuvem
+      // Nuvem e mais recente (ou igual) e sem alteracoes locais: aplicar dados da nuvem
       console.log('[GP Sync] Cloud ('+cloudData.ts+') >= local ('+localTs+') - aplicando cloud');
+      _lastPushedTs=cloudData.ts; // evita double-apply pelo listener em tempo real
       _applyingCloud=true;
       Object.keys(_SYNC_KEYS).forEach(function(field){
         if(cloudData[field]!==undefined&&cloudData[field]!==null)
@@ -917,13 +921,15 @@ function restoreHistory(key){
   }).catch(function(e){ _setSyncStatus('err',e); toast('Erro ao restaurar: '+e.message); });
 }
 
-// Interceptar setItem gp-* para push automatico
+// Interceptar setItem gp-* para push automatico e rastrear alteracoes locais
 (function(){
   var orig=localStorage.setItem.bind(localStorage);
   localStorage.setItem=function(key,val){
     orig(key,val);
-    if(_initialized&&!_applyingCloud&&key.indexOf('gp-')===0&&key!=='gp-sess'&&key!=='gp-theme'&&key!=='gp-device-id'&&key!=='gp-last-push-ts'){
-      _pushToCloud();
+    var isDataKey=key.indexOf('gp-')===0&&key!=='gp-sess'&&key!=='gp-theme'&&key!=='gp-device-id'&&key!=='gp-last-push-ts'&&key!=='gp-dirty';
+    if(_startupComplete&&!_applyingCloud&&isDataKey){
+      try{ orig('gp-dirty','1'); }catch(e){}
+      if(_initialized){ _pushToCloud(); }
     }
   };
 })();
@@ -2872,6 +2878,7 @@ function initApp(){
   try{loadAll();}catch(e){}
   try{atualizarSelectsPlanos();}catch(e){}
   try{refreshAll();}catch(e){}
+  _startupComplete=true; // a partir daqui, escritas no localStorage sao do usuario
   try{showTab('dashboard');}catch(e){}
   try{startCloudSync();}catch(e){ _setSyncStatus('err'); }
   setTimeout(function(){
