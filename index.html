@@ -560,18 +560,18 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
       </div>
       <div style="display:flex;flex-direction:column;gap:16px;">
         <div><label class="form-label">Nome *</label><input type="text" id="f-nome" class="form-inp"></div>
-        <div><label class="form-label">Telefone</label><input type="text" id="f-tel" class="form-inp"></div>
-        <div><label class="form-label">Email</label><input type="email" id="f-email" class="form-inp"></div>
         <div><label class="form-label">CPF</label><input type="text" id="f-cpf" placeholder="000.000.000-00" class="form-inp"></div>
         <div><label class="form-label">Nascimento</label><input type="date" id="f-nasc" class="form-inp"></div>
-        <div><label class="form-label">Objetivo</label><input type="text" id="f-obj" placeholder="Ex: Hipertrofia, Emagrecimento..." class="form-inp"></div>
+        <div><label class="form-label">Telefone</label><input type="text" id="f-tel" class="form-inp"></div>
+        <div><label class="form-label">Email</label><input type="email" id="f-email" class="form-inp"></div>
+        <div><label class="form-label">Status</label><select id="f-status" class="form-sel"><option value="em dia">Ativo</option><option value="vencendo">Vencendo</option><option value="atrasado">Inativo</option></select></div>
         <div><label class="form-label">Obs. de sa&uacute;de</label><textarea id="f-obs" class="form-ta"></textarea></div>
+        <div><label class="form-label">Objetivo</label><input type="text" id="f-obj" placeholder="Ex: Hipertrofia, Emagrecimento..." class="form-inp"></div>
         <div><label class="form-label">Plano</label><select id="f-plano" onchange="autoFillValor()" class="form-sel"><option value="">&mdash;</option></select></div>
         <div><label class="form-label">Modalidade</label><select id="f-modal" onchange="autoFillValor()" class="form-sel"><option value="">&mdash;</option><option value="Individual">Individual</option><option value="Duo">Duo</option></select></div>
         <div><label class="form-label">In&iacute;cio</label><input type="date" id="f-inicio" onchange="autoFillValor()" class="form-inp"></div>
         <div><label class="form-label">Vencimento</label><input type="date" id="f-venc" class="form-inp"></div>
         <div><label class="form-label">Valor (R$)</label><input type="number" id="f-valor" class="form-inp"></div>
-        <div><label class="form-label">Status</label><select id="f-status" class="form-sel"><option value="em dia">Ativo</option><option value="vencendo">Vencendo</option><option value="atrasado">Inativo</option></select></div>
       </div>
       <div id="f-agenda-wrap" style="display:none;margin-top:20px;padding-top:20px;border-top:1px solid var(--border);">
         <div class="form-label" style="margin-bottom:6px;">Dias e Hor&aacute;rios</div>
