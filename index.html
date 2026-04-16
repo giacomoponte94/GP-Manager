@@ -790,10 +790,11 @@ function _pushToCloud(){
     d.ts=ts; d.device=_getDeviceLabel();
     _lastPushedTs=ts;
     _pendingPush=false;
+    try{ localStorage.setItem('gp-last-push-ts', ts); }catch(e){}
     _dbRef.set(d)
       .then(function(){ _setSyncStatus('ok'); _saveHistory(d); })
       .catch(function(e){ _setSyncStatus('err',e); _pendingPush=true; });
-  },1500);
+  },600);
 }
 
 function _applyCloud(data){
@@ -804,6 +805,14 @@ function _applyCloud(data){
     console.log('[GP Sync] Mudancas locais pendentes - ignorando cloud de '+(data.device||'?'));
     return;
   }
+  // Se o ultimo push local foi mais recente que os dados da nuvem, enviar local
+  var localPushTs=''; try{ localPushTs=localStorage.getItem('gp-last-push-ts')||''; }catch(e){}
+  if(localPushTs && data.ts && localPushTs > data.ts){
+    console.log('[GP Sync] Local ('+localPushTs+') mais recente que cloud ('+data.ts+') - enviando local');
+    if(!_initialized) setTimeout(function(){ _initialized=true; _pushToCloud(); },500);
+    else _pushToCloud();
+    return;
+  }
   console.log('[GP Sync] Aplicando dados de '+(data.device||'?')+' ('+data.ts+')');
   _applyingCloud=true;
   Object.keys(_SYNC_KEYS).forEach(function(field){
@@ -811,10 +820,10 @@ function _applyCloud(data){
       try{ localStorage.setItem(_SYNC_KEYS[field],data[field]); }catch(e){}
   });
   try{ loadAll(); }catch(e){ console.error('[GP Sync] loadAll',e); }
-  _applyingCloud=false;
   try{ refreshAll(); }catch(e){}
   try{ renderCalendar(); }catch(e){}
   try{ renderFinanceiro(); }catch(e){}
+  _applyingCloud=false;
   _setSyncStatus('ok');
   // Marcar como inicializado apos primeiro snapshot da nuvem
   if(!_initialized) setTimeout(function(){ _initialized=true; },500);
@@ -881,11 +890,21 @@ function restoreHistory(key){
   var orig=localStorage.setItem.bind(localStorage);
   localStorage.setItem=function(key,val){
     orig(key,val);
-    if(_initialized&&!_applyingCloud&&key.indexOf('gp-')===0&&key!=='gp-sess'&&key!=='gp-theme'&&key!=='gp-device-id'){
+    if(_initialized&&!_applyingCloud&&key.indexOf('gp-')===0&&key!=='gp-sess'&&key!=='gp-theme'&&key!=='gp-device-id'&&key!=='gp-last-push-ts'){
       _pushToCloud();
     }
   };
 })();
+// Flush imediato ao fechar/recarregar a pagina
+window.addEventListener('beforeunload', function(){
+  if(!_initialized||(!_pendingPush&&!_syncTimer)) return;
+  if(_syncTimer){ clearTimeout(_syncTimer); _syncTimer=null; }
+  var ts=new Date().toISOString();
+  var d=_getAllData(); d.ts=ts; d.device=_getDeviceLabel();
+  _lastPushedTs=ts; _pendingPush=false;
+  try{ localStorage.setItem('gp-last-push-ts',ts); }catch(e){}
+  try{ _dbRef.set(d); }catch(e){}
+});
 /* ============================= */
 
 
