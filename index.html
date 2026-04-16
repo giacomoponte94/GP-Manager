@@ -800,17 +800,8 @@ function _pushToCloud(){
 function _applyCloud(data){
   if(!data) return;
   if(data.ts && data.ts===_lastPushedTs) return; // eco do proprio push
-  // Se temos mudancas locais nao enviadas, nao sobrescrever
   if(_pendingPush||_syncTimer){
     console.log('[GP Sync] Mudancas locais pendentes - ignorando cloud de '+(data.device||'?'));
-    return;
-  }
-  // Se o ultimo push local foi mais recente que os dados da nuvem, enviar local
-  var localPushTs=''; try{ localPushTs=localStorage.getItem('gp-last-push-ts')||''; }catch(e){}
-  if(localPushTs && data.ts && localPushTs > data.ts){
-    console.log('[GP Sync] Local ('+localPushTs+') mais recente que cloud ('+data.ts+') - enviando local');
-    if(!_initialized) setTimeout(function(){ _initialized=true; _pushToCloud(); },500);
-    else _pushToCloud();
     return;
   }
   console.log('[GP Sync] Aplicando dados de '+(data.device||'?')+' ('+data.ts+')');
@@ -825,20 +816,61 @@ function _applyCloud(data){
   try{ renderFinanceiro(); }catch(e){}
   _applyingCloud=false;
   _setSyncStatus('ok');
-  // Marcar como inicializado apos primeiro snapshot da nuvem
-  if(!_initialized) setTimeout(function(){ _initialized=true; },500);
+}
+
+function _registerRealtimeListener(){
+  _dbRef.on('value',function(snapshot){
+    if(!_initialized) return;
+    var data=snapshot.val();
+    if(!data) return;
+    if(data.ts && data.ts===_lastPushedTs) return;
+    if(_pendingPush||_syncTimer) return;
+    _applyCloud(data);
+  },function(e){ _setSyncStatus('err',e); });
 }
 
 function startCloudSync(){
-  _dbRef.on('value',function(snapshot){
-    var data=snapshot.val();
-    if(data){ _applyCloud(data); }
-    else {
-      // Banco vazio: este dispositivo e a fonte
-      if(!_initialized) setTimeout(function(){ _initialized=true; _pushToCloud(); },500);
-      else _pushToCloud();
+  _dbRef.once('value').then(function(snapshot){
+    var cloudData=snapshot.val();
+    var localTs='';
+    try{ localTs=localStorage.getItem('gp-last-push-ts')||''; }catch(e){}
+
+    if(!cloudData||!cloudData.ts){
+      // Nuvem vazia: este dispositivo e a fonte
+      console.log('[GP Sync] Nuvem vazia - enviando dados locais');
+      _initialized=true;
+      _pushToCloud();
+    } else if(localTs && localTs>cloudData.ts){
+      // Dados locais sao mais recentes: enviar para nuvem
+      console.log('[GP Sync] Local ('+localTs+') > cloud ('+cloudData.ts+') - enviando local');
+      _initialized=true;
+      _pushToCloud();
+    } else {
+      // Nuvem e mais recente (ou igual): aplicar dados da nuvem
+      console.log('[GP Sync] Cloud ('+cloudData.ts+') >= local ('+localTs+') - aplicando cloud');
+      _applyingCloud=true;
+      Object.keys(_SYNC_KEYS).forEach(function(field){
+        if(cloudData[field]!==undefined&&cloudData[field]!==null)
+          try{ localStorage.setItem(_SYNC_KEYS[field],cloudData[field]); }catch(e){}
+      });
+      try{ loadAll(); }catch(e){}
+      try{ refreshAll(); }catch(e){}
+      try{ renderCalendar(); }catch(e){}
+      try{ renderFinanceiro(); }catch(e){}
+      _applyingCloud=false;
+      _setSyncStatus('ok');
+      _initialized=true;
     }
-  },function(e){ _setSyncStatus('err',e); });
+
+    // Registrar listener em tempo real DEPOIS da decisao de startup
+    _registerRealtimeListener();
+
+  }).catch(function(e){
+    console.warn('[GP Sync] Erro ao buscar snapshot inicial:',e);
+    _setSyncStatus('err',e);
+    _initialized=true;
+    _registerRealtimeListener();
+  });
 }
 
 function forceSyncFromCloud(){
@@ -2842,8 +2874,6 @@ function initApp(){
   try{refreshAll();}catch(e){}
   try{showTab('dashboard');}catch(e){}
   try{startCloudSync();}catch(e){ _setSyncStatus('err'); }
-  // Fallback: se Firebase demorar >8s, libera edicao local
-  setTimeout(function(){ if(!_initialized){ _initialized=true; console.log('[GP Sync] Init fallback timeout'); } },8000);
   setTimeout(function(){
     try{renderDashboard();}catch(e){}
     try{renderCalendar();}catch(e){}
