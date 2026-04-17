@@ -554,7 +554,7 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
       <div id="hist-panel" style="background:var(--card);padding:16px 18px;margin-bottom:20px;border-radius:4px;"></div>
       <div id="rel-mensal-panel" style="margin-bottom:20px;"></div>
       <div class="fin-table-wrap">
-        <table><thead><tr><th>Aluno</th><th>Plano</th><th>Mod.</th><th>Valor</th><th>Vencimento</th><th>Status</th><th>A&ccedil;&atilde;o</th></tr></thead><tbody id="fin-tbody"></tbody></table>
+        <table style="white-space:nowrap;"><thead><tr><th>Aluno</th><th>Plano</th><th>Mod.</th><th>Valor</th><th>Vencimento</th><th>Status</th><th>A&ccedil;&atilde;o</th></tr></thead><tbody id="fin-tbody"></tbody></table>
       </div>
     </div>
 
@@ -2854,12 +2854,12 @@ function renderFinanceiro(){
     var bl=s.status==='em dia'?'Marcar inativo':'Marcar pago';
     var ren=(s.status==='atrasado'||s.status==='vencendo')?'<button class="btn btn-primary btn-sm" style="margin-left:4px;" onclick="renovarAluno(this.dataset.sid)" data-sid="'+s.id+'">Renovar</button>':'';
     return '<tr>'
-      +'<td style="padding:10px 12px;"><span class="student-name">'+s.nome+'</span></td>'
-      +'<td style="padding:10px 8px;color:var(--white-dim);font-size:0.82rem;">'+(getPlanNome(s.plano)||'\u2014')+'</td>'
-      +'<td style="padding:10px 8px;">'+(s.modalidade==='Duo'?'<span class="badge badge-duo">Duo</span>':'<span class="badge badge-solo">Ind</span>')+'</td>'
-      +'<td style="padding:10px 8px;font-weight:600;">'+valor+'</td>'
-      +'<td style="padding:10px 8px;color:var(--white-dim);font-size:0.82rem;">'+venc+'</td>'
-      +'<td style="padding:10px 8px;">'+sb+'</td>'
+      +'<td style="padding:10px 12px;white-space:nowrap;"><span class="student-name" style="font-size:0.85rem;">'+s.nome+'</span></td>'
+      +'<td style="padding:10px 8px;white-space:nowrap;color:var(--white-dim);font-size:0.82rem;">'+(getPlanNome(s.plano)||'\u2014')+'</td>'
+      +'<td style="padding:10px 8px;white-space:nowrap;">'+(s.modalidade==='Duo'?'<span class="badge badge-duo">Duo</span>':'<span class="badge badge-solo">Ind</span>')+'</td>'
+      +'<td style="padding:10px 8px;white-space:nowrap;font-weight:600;">'+valor+'</td>'
+      +'<td style="padding:10px 8px;white-space:nowrap;color:var(--white-dim);font-size:0.82rem;">'+venc+'</td>'
+      +'<td style="padding:10px 8px;white-space:nowrap;">'+sb+'</td>'
       +'<td style="padding:10px 8px;white-space:nowrap;">'
       +'<button class="btn btn-outline btn-sm" onclick="toggleStatus(this.dataset.sid,this.dataset.ns)" data-sid="'+s.id+'" data-ns="'+ns+'">'+bl+'</button>'
       +ren
