@@ -2785,14 +2785,14 @@ function renderFinanceiro(){
   var out='';
   
   out+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px;margin-bottom:2px;">';
-  out+='<div class="stat-card" style="border-top:2px solid var(--success);"><div class="stat-num" style="color:var(--success);font-size:1.1rem;">'+fmt(rec)+'</div><div class="stat-lbl">Recebido</div></div>';
-  out+='<div class="stat-card" style="border-top:2px solid var(--warning);"><div class="stat-num" style="color:var(--warning);font-size:1.1rem;">'+fmt(ven)+'</div><div class="stat-lbl">A vencer</div></div>';
-  out+='<div class="stat-card danger" style="border-top:2px solid var(--danger);"><div class="stat-num" style="font-size:1.1rem;">'+fmt(at)+'</div><div class="stat-lbl">Em atraso</div></div>';
+  out+='<div class="stat-card" style="border-top:2px solid var(--success);padding:12px 8px;"><div class="stat-num" style="color:var(--success);font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(rec)+'</div><div class="stat-lbl">Recebido</div></div>';
+  out+='<div class="stat-card" style="border-top:2px solid var(--warning);padding:12px 8px;"><div class="stat-num" style="color:var(--warning);font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(ven)+'</div><div class="stat-lbl">A vencer</div></div>';
+  out+='<div class="stat-card danger" style="border-top:2px solid var(--danger);padding:12px 8px;"><div class="stat-num" style="font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(at)+'</div><div class="stat-lbl">Em atraso</div></div>';
   out+='</div>';
   out+='<div style="background:var(--card);padding:14px 18px;margin-bottom:2px;">';
-  out+='<div style="display:flex;justify-content:space-between;margin-bottom:6px;">';
-  out+='<span style="font-family:Raleway,sans-serif;font-size:0.58rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--accent-l);">Receita recebida</span>';
-  out+='<span style="font-size:0.82rem;color:var(--white);font-weight:600;">'+pct+'% <span style="color:var(--white-dim);font-weight:300;">'+fmt(rec)+' de '+fmt(total)+'</span></span>';
+  out+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px;">';
+  out+='<span style="font-family:Raleway,sans-serif;font-size:0.58rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--accent-l);white-space:nowrap;flex-shrink:0;">Receita recebida</span>';
+  out+='<span style="font-size:0.82rem;color:var(--white);font-weight:600;text-align:right;">'+pct+'%&nbsp;<span style="color:var(--white-dim);font-weight:300;font-size:0.75rem;">'+fmt(rec)+' de '+fmt(total)+'</span></span>';
   out+='</div><div style="height:8px;background:rgba(74,127,165,0.15);border-radius:4px;overflow:hidden;">';
   out+='<div style="height:100%;width:'+pct+'%;background:var(--success);border-radius:4px;"></div></div></div>';
   var meta=getMeta();
@@ -2800,18 +2800,18 @@ function renderFinanceiro(){
     var pm=Math.min(100,Math.round(rec/meta*100));
     var mc=pm>=100?'var(--success)':pm>=60?'var(--warning)':'var(--accent)';
     out+='<div style="background:var(--card);padding:14px 18px;margin-bottom:2px;">';
-    out+='<div style="display:flex;justify-content:space-between;margin-bottom:6px;">';
-    out+='<span style="font-family:Raleway,sans-serif;font-size:0.58rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--accent-l);">Meta mensal</span>';
-    out+='<span style="font-size:0.82rem;color:var(--white);font-weight:600;">'+pm+'% <span style="color:var(--white-dim);font-weight:300;">'+fmt(rec)+' / '+fmt(meta)+'</span></span>';
+    out+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px;">';
+    out+='<span style="font-family:Raleway,sans-serif;font-size:0.58rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--accent-l);white-space:nowrap;flex-shrink:0;">Meta mensal</span>';
+    out+='<span style="font-size:0.82rem;color:var(--white);font-weight:600;text-align:right;">'+pm+'%&nbsp;<span style="color:var(--white-dim);font-weight:300;font-size:0.75rem;">'+fmt(rec)+' / '+fmt(meta)+'</span></span>';
     out+='</div><div style="height:8px;background:rgba(74,127,165,0.15);border-radius:4px;overflow:hidden;">';
     out+='<div style="height:100%;width:'+pm+'%;background:'+mc+';border-radius:4px;"></div></div>';
-    out+='<div style="font-size:0.72rem;color:'+mc+';margin-top:4px;">'+(pm>=100?' Meta atingida!':'Faltam '+fmt(meta-rec)+' para a meta')+'</div>';
+    out+='<div style="font-size:0.72rem;color:'+mc+';margin-top:4px;">'+(pm>=100?'Meta atingida!':'Faltam '+fmt(meta-rec)+' para a meta')+'</div>';
     out+='<button onclick="abrirMeta()" style="background:none;border:none;color:var(--white-dim);font-size:0.62rem;cursor:pointer;padding:0;margin-top:2px;">\u270F editar meta</button>';
     out+='</div>';
   } else {
-    out+='<div style="background:var(--card);padding:12px 18px;margin-bottom:2px;display:flex;justify-content:space-between;align-items:center;">';
+    out+='<div style="background:var(--card);padding:12px 18px;margin-bottom:2px;display:flex;justify-content:space-between;align-items:center;gap:8px;">';
     out+='<span style="font-size:0.78rem;color:var(--white-dim);">Sem meta definida</span>';
-    out+='<button onclick="abrirMeta()" class="btn btn-outline btn-sm"> Definir meta</button>';
+    out+='<button onclick="abrirMeta()" class="btn btn-outline btn-sm">Definir meta</button>';
     out+='</div>';
   }
   
@@ -2829,7 +2829,7 @@ function renderFinanceiro(){
   out+='</div>';
   dash.innerHTML=out;
 
-  var sorted=students.slice().sort(function(a,b){var o={atrasado:0,vencendo:1,'em dia':2};return (o[a.status]||9)-(o[b.status]||9);});
+  var sorted=students.slice().sort(function(a,b){return a.nome.localeCompare(b.nome,'pt-BR');});
   try{renderDespesasPanel();}catch(e){}
   try{renderSimulacao();}catch(e){}
   try{renderComparativo();}catch(e){}
