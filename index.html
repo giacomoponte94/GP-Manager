@@ -816,6 +816,7 @@ function _applyCloud(data){
     return;
   }
   console.log('[GP Sync] Aplicando dados de '+(data.device||'?')+' ('+data.ts+')');
+  if(data.ts) _lastPushedTs=data.ts; // evita re-aplicação por echo subsequente
   _applyingCloud=true;
   Object.keys(_SYNC_KEYS).forEach(function(field){
     if(data[field]!==undefined&&data[field]!==null)
@@ -955,17 +956,27 @@ function _flushIfPending(){
   try{ localStorage.setItem('gp-last-push-ts',ts); }catch(e){}
   try{ _dbRef.set(d).then(function(){ try{ localStorage.removeItem('gp-dirty'); }catch(e){} }); }catch(e){}
 }
-// Desktop: beforeunload
-window.addEventListener('beforeunload', _flushIfPending);
-// iOS Safari: pagehide dispara quando aba e fechada ou app vai para background
-window.addEventListener('pagehide', _flushIfPending);
-// Qualquer plataforma: visibilitychange hidden (app minimizada no mobile)
-document.addEventListener('visibilitychange', function(){
-  if(document.visibilityState==='hidden'){
-    _flushIfPending();
-  } else {
-    try{ firebase.database().goOnline(); }catch(e){}
+// Ao voltar ao primeiro plano: reconecta Firebase e envia dados sujos pendentes
+function _onAppForeground(){
+  try{ firebase.database().goOnline(); }catch(e){}
+  if(!_initialized) return;
+  var dirty=false;
+  try{ dirty=localStorage.getItem('gp-dirty')==='1'; }catch(e){}
+  if(dirty){
+    // Marcar pendente ANTES do Firebase reconectar (async) para bloquear _applyCloud
+    _pendingPush=true;
+    _pushToCloud();
   }
+}
+window.addEventListener('beforeunload', _flushIfPending);
+window.addEventListener('pagehide', _flushIfPending);
+// BFCache (iOS Safari): pageshow com persisted=true = página restaurada do cache
+window.addEventListener('pageshow', function(e){
+  if(e.persisted){ _onAppForeground(); }
+});
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState==='hidden'){ _flushIfPending(); }
+  else { _onAppForeground(); }
 });
 /* ============================= */
 
