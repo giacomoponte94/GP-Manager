@@ -723,6 +723,8 @@ firebase.initializeApp({
   appId:"1:680333411172:web:ec373d87f989a8eea1f071",
   databaseURL:"https://gp-manager-8e604-default-rtdb.firebaseio.com"
 });
+// Persiste writes pendentes em IndexedDB — sobrevivem a reloads/BFCache no mobile
+try{ firebase.database().setPersistenceEnabled(true); }catch(e){}
 var _dbRef = firebase.database().ref('gp/data');
 var _histRef = firebase.database().ref('gp/history');
 var _syncTimer = null;
@@ -755,14 +757,18 @@ var _SYNC_KEYS = {
   excecoes:'gp-exc', reposicoes:'gp-rep', planos:'gp-planos',
   historicoFin:'gp-hfin', feriadosCustom:'gp-fe', bloqueios:'gp-bl',
   diasPermitidos:'gp-dias-perm', treinosData:'gp-treinos',
-  evolucaoCargas:'gp-evolucao', pagamentos:'gp-pagamentos', historicoCob:'gp-hc',
+  evolucaoCargas:'gp-evolucao', evolucaoLegada:'gp-ev',
+  pagamentos:'gp-pagamentos', historicoCob:'gp-hc',
   despesas:'gp-desp', horariosConfig:'gp-hconf',
   repHistorico:'gp-rep-hist', licencas:'gp-lic'
 };
 
 function _getAllData(){
   var d={ts:new Date().toISOString()};
-  Object.keys(_SYNC_KEYS).forEach(function(f){ d[f]=localStorage.getItem(_SYNC_KEYS[f])||''; });
+  Object.keys(_SYNC_KEYS).forEach(function(f){
+    var v=localStorage.getItem(_SYNC_KEYS[f]);
+    if(v!==null) d[f]=v; // omite chaves ausentes; nunca envia string vazia ao Firebase
+  });
   return d;
 }
 
@@ -831,7 +837,7 @@ function _applyCloud(data){
   if(data.ts) _lastPushedTs=data.ts; // evita re-aplicação por echo subsequente
   _applyingCloud=true;
   Object.keys(_SYNC_KEYS).forEach(function(field){
-    if(data[field]!==undefined&&data[field]!==null)
+    if(data[field]!==undefined&&data[field]!==null&&data[field]!=='')
       try{ localStorage.setItem(_SYNC_KEYS[field],data[field]); }catch(e){}
   });
   try{ loadAll(); }catch(e){ console.error('[GP Sync] loadAll',e); }
@@ -877,7 +883,7 @@ function startCloudSync(){
       _lastPushedTs=cloudData.ts; // evita double-apply pelo listener em tempo real
       _applyingCloud=true;
       Object.keys(_SYNC_KEYS).forEach(function(field){
-        if(cloudData[field]!==undefined&&cloudData[field]!==null)
+        if(cloudData[field]!==undefined&&cloudData[field]!==null&&cloudData[field]!=='')
           try{ localStorage.setItem(_SYNC_KEYS[field],cloudData[field]); }catch(e){}
       });
       try{ loadAll(); }catch(e){}
