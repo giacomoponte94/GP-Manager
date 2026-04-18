@@ -723,7 +723,7 @@ firebase.initializeApp({
   appId:"1:680333411172:web:ec373d87f989a8eea1f071",
   databaseURL:"https://gp-manager-8e604-default-rtdb.firebaseio.com"
 });
-// Persiste writes pendentes em IndexedDB — sobrevivem a reloads/BFCache no mobile
+// [6] Persiste writes pendentes em IndexedDB — sobrevivem a reloads/BFCache no mobile
 try{ firebase.database().setPersistenceEnabled(true); }catch(e){}
 var _dbRef = firebase.database().ref('gp/data');
 var _histRef = firebase.database().ref('gp/history');
@@ -732,6 +732,7 @@ var _applyingCloud = false;
 var _lastPushedTs = null;
 var _pendingPush = false;
 var _initialized = false;
+var _isSyncing = false;   // [8] true durante startCloudSync; bloqueia writes do interceptor
 var _lastHistoryTs = 0;
 var _startupComplete = false;
 
@@ -764,10 +765,13 @@ var _SYNC_KEYS = {
 };
 
 function _getAllData(){
-  var d={ts:new Date().toISOString()};
+  var d={
+    ts: new Date().toISOString(),
+    serverTs: firebase.database.ServerValue.TIMESTAMP // [7] timestamp do servidor para rastreio
+  };
   Object.keys(_SYNC_KEYS).forEach(function(f){
     var v=localStorage.getItem(_SYNC_KEYS[f]);
-    if(v!==null) d[f]=v; // omite chaves ausentes; nunca envia string vazia ao Firebase
+    if(v!==null) d[f]=v; // [1] omite chaves ausentes; nunca envia string vazia ao Firebase
   });
   return d;
 }
@@ -793,59 +797,76 @@ function _saveHistory(d){
   }catch(e){}
 }
 
+// [5] async/await + [4] .update() em vez de .set()
 function _pushToCloud(){
   if(!_initialized) return;
   _pendingPush=true;
   if(_syncTimer) clearTimeout(_syncTimer);
   _setSyncStatus('up');
-  _syncTimer=setTimeout(function(){
+  console.log('[GP Sync] Push agendado...');
+  _syncTimer=setTimeout(async function(){
     _syncTimer=null;
     var ts=new Date().toISOString();
     var d=_getAllData();
     d.ts=ts; d.device=_getDeviceLabel();
     _lastPushedTs=ts;
-    // _pendingPush permanece true enquanto o push está em trânsito
-    // (evita que listener aplique dados antigos caso Firebase reverta otimisticamente)
     try{ localStorage.setItem('gp-last-push-ts', ts); }catch(e){}
-    _dbRef.set(d)
-      .then(function(){ _pendingPush=false; _setSyncStatus('ok'); _saveHistory(d); try{ localStorage.removeItem('gp-dirty'); }catch(e){} })
-      .catch(function(e){
-        _setSyncStatus('err',e);
-        setTimeout(function(){
-          if(localStorage.getItem('gp-dirty')!=='1'){ _pendingPush=false; return; }
-          // Antes de retentar: verificar se outro dispositivo já enviou dados mais novos.
-          // Se sim, aceitar o cloud e parar o loop — evita sobrescrever mudanças de outro dispositivo.
-          var lts=''; try{ lts=localStorage.getItem('gp-last-push-ts')||''; }catch(x){}
-          _dbRef.once('value').then(function(snap){
-            var c=snap.val(), cts=(c&&c.ts)||'';
-            if(cts && lts && cts>lts){ _pendingPush=false; _applyCloud(c); try{ localStorage.removeItem('gp-dirty'); }catch(x){} }
-            else { _pendingPush=true; _pushToCloud(); }
-          }).catch(function(){ _pendingPush=true; _pushToCloud(); });
-        }, 3000);
-      });
-  },0);
+    console.log('[GP Sync] Enviando para Firebase — device='+d.device+' ts='+ts);
+    try {
+      await _dbRef.update(d); // [4] update: preserva campos não enviados; não sobrescreve o doc inteiro
+      _pendingPush=false;
+      _setSyncStatus('ok');
+      _saveHistory(d);
+      try{ localStorage.removeItem('gp-dirty'); }catch(e){}
+      console.log('[GP Sync] ✓ Firebase confirmou escrita (ts='+ts+')');
+    } catch(e) {
+      console.error('[GP Sync] ✗ Push falhou:', e.message||e);
+      _setSyncStatus('err', e);
+      // Retry com verificação de timestamp para evitar sobrescrever dado mais novo
+      setTimeout(async function(){
+        if(localStorage.getItem('gp-dirty')!=='1'){ _pendingPush=false; return; }
+        var lts=''; try{ lts=localStorage.getItem('gp-last-push-ts')||''; }catch(x){}
+        console.log('[GP Sync] Retry: verificando cloud antes de retentar (localTs='+lts+')');
+        try {
+          var snap=await _dbRef.once('value');
+          var c=snap.val(), cts=(c&&c.ts)||'';
+          if(cts && lts && cts>lts){
+            console.log('[GP Sync] Cloud mais recente ('+cts+') — parando retry, aceitando cloud');
+            _pendingPush=false; _applyCloud(c); try{ localStorage.removeItem('gp-dirty'); }catch(x){}
+          } else {
+            console.log('[GP Sync] Retentando push (localTs='+lts+' >= cloudTs='+cts+')');
+            _pendingPush=true; _pushToCloud();
+          }
+        } catch(x){
+          console.warn('[GP Sync] Sem acesso ao Firebase no retry — retentando');
+          _pendingPush=true; _pushToCloud();
+        }
+      }, 3000);
+    }
+  }, 0);
 }
 
 function _applyCloud(data){
   if(!data) return;
-  if(data.ts && data.ts===_lastPushedTs) return; // eco do proprio push
+  if(data.ts && data.ts===_lastPushedTs){ console.log('[GP Sync] Eco próprio ignorado (ts='+data.ts+')'); return; }
   if(_pendingPush||_syncTimer){
-    console.log('[GP Sync] Mudancas locais pendentes - ignorando cloud de '+(data.device||'?'));
+    console.log('[GP Sync] Push pendente — ignorando dado remoto de '+(data.device||'?'));
     return;
   }
-  console.log('[GP Sync] Aplicando dados de '+(data.device||'?')+' ('+data.ts+')');
-  if(data.ts) _lastPushedTs=data.ts; // evita re-aplicação por echo subsequente
+  console.log('[GP Sync] Recebendo dados de '+(data.device||'?')+' (ts='+data.ts+')'); // [11]
+  if(data.ts) _lastPushedTs=data.ts;
   _applyingCloud=true;
   Object.keys(_SYNC_KEYS).forEach(function(field){
-    if(data[field]!==undefined&&data[field]!==null&&data[field]!=='')
+    if(data[field]!==undefined&&data[field]!==null&&data[field]!=='') // [2] rejeita string vazia
       try{ localStorage.setItem(_SYNC_KEYS[field],data[field]); }catch(e){}
   });
-  try{ loadAll(); }catch(e){ console.error('[GP Sync] loadAll',e); }
+  try{ loadAll(); }catch(e){ console.error('[GP Sync] loadAll erro:',e); }
   try{ refreshAll(); }catch(e){}
   try{ renderCalendar(); }catch(e){}
   try{ renderFinanceiro(); }catch(e){}
   _applyingCloud=false;
   _setSyncStatus('ok');
+  console.log('[GP Sync] ✓ Dados remotos aplicados ao localStorage'); // [11]
 }
 
 function _registerRealtimeListener(){
@@ -855,11 +876,14 @@ function _registerRealtimeListener(){
     if(!data) return;
     if(data.ts && data.ts===_lastPushedTs) return;
     if(_pendingPush||_syncTimer) return;
+    console.log('[GP Sync] Listener: mudança remota detectada de '+(data.device||'?')); // [11]
     _applyCloud(data);
-  },function(e){ _setSyncStatus('err',e); });
+  },function(e){ console.error('[GP Sync] Listener erro:',e); _setSyncStatus('err',e); });
 }
 
 function startCloudSync(){
+  _isSyncing=true; // [8] bloqueia interceptor durante sync inicial
+  console.log('[GP Sync] Iniciando sincronização com Firebase...'); // [11]
   _dbRef.once('value').then(function(snapshot){
     var cloudData=snapshot.val();
     var localTs='';
@@ -867,23 +891,22 @@ function startCloudSync(){
     var isDirty=false;
     try{ isDirty=localStorage.getItem('gp-dirty')==='1'; }catch(e){}
 
+    console.log('[GP Sync] Startup: dirty='+isDirty+' | localTs='+localTs+' | cloudTs='+(cloudData&&cloudData.ts||'(vazio)')); // [11]
+
     if(!cloudData||!cloudData.ts){
-      // Nuvem vazia: este dispositivo e a fonte
-      console.log('[GP Sync] Nuvem vazia - enviando dados locais');
-      _initialized=true;
+      console.log('[GP Sync] Nuvem vazia — enviando dados locais');
+      _initialized=true; _isSyncing=false; // [8]
       _pushToCloud();
     } else if(isDirty||(localTs&&localTs>cloudData.ts)){
-      // Alteracoes locais nao sincronizadas OU local mais recente: enviar local
-      console.log('[GP Sync] Local nao sincronizado (dirty='+isDirty+', localTs='+localTs+', cloudTs='+cloudData.ts+') - enviando local');
-      _initialized=true;
+      console.log('[GP Sync] Local mais recente ou não sincronizado — enviando local');
+      _initialized=true; _isSyncing=false; // [8]
       _pushToCloud();
     } else {
-      // Nuvem e mais recente (ou igual) e sem alteracoes locais: aplicar dados da nuvem
-      console.log('[GP Sync] Cloud ('+cloudData.ts+') >= local ('+localTs+') - aplicando cloud');
-      _lastPushedTs=cloudData.ts; // evita double-apply pelo listener em tempo real
+      console.log('[GP Sync] Cloud mais recente — aplicando cloud');
+      _lastPushedTs=cloudData.ts;
       _applyingCloud=true;
       Object.keys(_SYNC_KEYS).forEach(function(field){
-        if(cloudData[field]!==undefined&&cloudData[field]!==null&&cloudData[field]!=='')
+        if(cloudData[field]!==undefined&&cloudData[field]!==null&&cloudData[field]!=='') // [2]
           try{ localStorage.setItem(_SYNC_KEYS[field],cloudData[field]); }catch(e){}
       });
       try{ loadAll(); }catch(e){}
@@ -893,15 +916,19 @@ function startCloudSync(){
       _applyingCloud=false;
       _setSyncStatus('ok');
       _initialized=true;
+      _isSyncing=false; // [8]
+      // [8] Verificar se o usuário editou durante a janela de sync (entre _startupComplete e agora)
+      var postDirty=false;
+      try{ postDirty=localStorage.getItem('gp-dirty')==='1'; }catch(e){}
+      if(postDirty){ console.log('[GP Sync] Edição detectada durante sync — enviando'); _pushToCloud(); }
     }
 
-    // Registrar listener em tempo real DEPOIS da decisao de startup
     _registerRealtimeListener();
 
   }).catch(function(e){
-    console.warn('[GP Sync] Erro ao buscar snapshot inicial:',e);
+    console.warn('[GP Sync] Erro no startup sync:',e);
     _setSyncStatus('err',e);
-    _initialized=true;
+    _initialized=true; _isSyncing=false; // [8]
     _registerRealtimeListener();
   });
 }
@@ -950,19 +977,20 @@ function restoreHistory(key){
   }).catch(function(e){ _setSyncStatus('err',e); toast('Erro ao restaurar: '+e.message); });
 }
 
-// Interceptar setItem gp-* para push automatico e rastrear alteracoes locais
+// [11] Interceptar setItem gp-* para push automatico e rastrear alteracoes locais
 (function(){
   var orig=localStorage.setItem.bind(localStorage);
   localStorage.setItem=function(key,val){
     orig(key,val);
     var isDataKey=key.indexOf('gp-')===0&&key!=='gp-sess'&&key!=='gp-theme'&&key!=='gp-device-id'&&key!=='gp-last-push-ts'&&key!=='gp-dirty';
-    if(_startupComplete&&!_applyingCloud&&isDataKey){
+    if(_startupComplete&&!_applyingCloud&&!_isSyncing&&isDataKey){ // [8] bloqueia durante sync inicial
+      console.log('[GP Sync] Edição local detectada: '+key); // [11]
       try{ orig('gp-dirty','1'); }catch(e){}
       if(_initialized){ _pushToCloud(); }
     }
   };
 })();
-// Flush imediato: envia dados pendentes ao fechar/sair da pagina
+// [4][5] Flush imediato ao fechar/sair da pagina — usa update() e async/await
 function _flushIfPending(){
   if(!_initialized) return;
   var hasPending=_pendingPush||_syncTimer||localStorage.getItem('gp-dirty')==='1';
@@ -972,28 +1000,36 @@ function _flushIfPending(){
   var d=_getAllData(); d.ts=ts; d.device=_getDeviceLabel();
   _lastPushedTs=ts;
   try{ localStorage.setItem('gp-last-push-ts',ts); }catch(e){}
-  try{ _dbRef.set(d).then(function(){ _pendingPush=false; try{ localStorage.removeItem('gp-dirty'); }catch(e){} }).catch(function(){
-    setTimeout(function(){
-      if(localStorage.getItem('gp-dirty')!=='1'){ _pendingPush=false; return; }
-      var lts=''; try{ lts=localStorage.getItem('gp-last-push-ts')||''; }catch(x){}
-      _dbRef.once('value').then(function(snap){
-        var c=snap.val(), cts=(c&&c.ts)||'';
-        if(cts && lts && cts>lts){ _pendingPush=false; _applyCloud(c); try{ localStorage.removeItem('gp-dirty'); }catch(x){} }
-        else { _pendingPush=true; _pushToCloud(); }
-      }).catch(function(){ _pendingPush=true; _pushToCloud(); });
-    },3000);
-  }); }catch(e){ _pendingPush=false; }
+  console.log('[GP Sync] Flush de emergência (pagehide/visibilitychange)'); // [11]
+  try{
+    _dbRef.update(d) // [4] update em vez de set
+      .then(function(){ _pendingPush=false; try{ localStorage.removeItem('gp-dirty'); }catch(e){} console.log('[GP Sync] Flush confirmado'); })
+      .catch(function(){
+        console.warn('[GP Sync] Flush falhou — agendando retry'); // [11]
+        setTimeout(async function(){
+          if(localStorage.getItem('gp-dirty')!=='1'){ _pendingPush=false; return; }
+          var lts=''; try{ lts=localStorage.getItem('gp-last-push-ts')||''; }catch(x){}
+          try {
+            var snap=await _dbRef.once('value');
+            var c=snap.val(), cts=(c&&c.ts)||'';
+            if(cts && lts && cts>lts){
+              _pendingPush=false; _applyCloud(c); try{ localStorage.removeItem('gp-dirty'); }catch(x){}
+            } else {
+              _pendingPush=true; _pushToCloud();
+            }
+          } catch(x){ _pendingPush=true; _pushToCloud(); }
+        },3000);
+      });
+  }catch(e){ _pendingPush=false; }
 }
-// Ao voltar ao primeiro plano: reconecta Firebase e envia dados sujos pendentes
+// [9] Ao voltar ao primeiro plano: reconecta e envia dados sujos
 function _onAppForeground(){
   try{ firebase.database().goOnline(); }catch(e){}
   if(!_initialized) return;
   var dirty=false;
   try{ dirty=localStorage.getItem('gp-dirty')==='1'; }catch(e){}
   if(!dirty) return;
-  // gp-dirty=1 significa que o usuário fez alterações não confirmadas pelo Firebase.
-  // SEMPRE enviar os dados locais — nunca sobrescrever com cloud quando há mudanças pendentes.
-  // Se outro dispositivo também editou (conflito), as mudanças locais têm prioridade.
+  console.log('[GP Sync] App em primeiro plano com gp-dirty=1 — enviando imediatamente'); // [11]
   _pushToCloud();
 }
 window.addEventListener('beforeunload', _flushIfPending);
