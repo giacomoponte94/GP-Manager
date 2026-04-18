@@ -967,39 +967,10 @@ function _onAppForeground(){
   var dirty=false;
   try{ dirty=localStorage.getItem('gp-dirty')==='1'; }catch(e){}
   if(!dirty) return;
-  // Bloquear _applyCloud (goOnline é async, listener pode disparar antes da decisão)
-  _pendingPush=true;
-  var localTs='';
-  try{ localTs=localStorage.getItem('gp-last-push-ts')||''; }catch(e){}
-  _setSyncStatus('up');
-  // Comparar com o cloud antes de decidir push ou pull
-  _dbRef.once('value').then(function(snapshot){
-    var cloudData=snapshot.val();
-    var cloudTs=(cloudData&&cloudData.ts)||'';
-    if(!cloudTs||(localTs&&localTs>=cloudTs)){
-      // Local é igual ou mais novo: enviar
-      _pushToCloud();
-    } else {
-      // Cloud é mais novo: descartar dirty local e aplicar cloud
-      _pendingPush=false;
-      _applyingCloud=true;
-      Object.keys(_SYNC_KEYS).forEach(function(field){
-        if(cloudData[field]!==undefined&&cloudData[field]!==null)
-          try{ localStorage.setItem(_SYNC_KEYS[field],cloudData[field]); }catch(e){}
-      });
-      try{ loadAll(); }catch(e){}
-      try{ refreshAll(); }catch(e){}
-      try{ renderCalendar(); }catch(e){}
-      try{ renderFinanceiro(); }catch(e){}
-      _applyingCloud=false;
-      try{ localStorage.removeItem('gp-dirty'); }catch(e){}
-      if(cloudData.ts) _lastPushedTs=cloudData.ts;
-      _setSyncStatus('ok');
-    }
-  }).catch(function(){
-    // Sem acesso ao Firebase: enviar dados locais de qualquer forma
-    _pushToCloud();
-  });
+  // gp-dirty=1 significa que o usuário fez alterações não confirmadas pelo Firebase.
+  // SEMPRE enviar os dados locais — nunca sobrescrever com cloud quando há mudanças pendentes.
+  // Se outro dispositivo também editou (conflito), as mudanças locais têm prioridade.
+  _pushToCloud();
 }
 window.addEventListener('beforeunload', _flushIfPending);
 window.addEventListener('pagehide', _flushIfPending);
