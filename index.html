@@ -2851,7 +2851,7 @@ function renderFinanceiro(){
       var sb=s.status==='em dia'?'<span class="badge badge-ok">Em dia</span>':s.status==='atrasado'?'<span class="badge badge-late">Inativo</span>':'<span class="badge badge-warn">Vencendo</span>';
       var venc=fmtDate(s.vencimento);
       var valor=s.valor?'R$\u00a0'+parseFloat(s.valor).toLocaleString('pt-BR',{minimumFractionDigits:0}):'\u2014';
-      var mod=s.modalidade==='Duo'?'<span class="badge badge-duo">Duo</span>':'<span class="badge badge-solo" style="background:rgba(74,127,165,0.15);color:var(--accent-l);padding:3px 8px;border-radius:3px;font-family:Raleway,sans-serif;font-size:0.55rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">Ind</span>';
+      var mod=s.modalidade==='Duo'?'<span class="badge badge-duo">Duo</span>':'<span class="badge badge-solo" style="background:rgba(74,127,165,0.15);color:var(--accent-l);padding:3px 6px;border-radius:3px;font-family:Raleway,sans-serif;font-size:0.55rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">Ind</span>';
       var ns=s.status==='atrasado'?'em dia':s.status==='vencendo'?'em dia':'atrasado';
       var bl=s.status==='em dia'?'Marcar inativo':'Marcar pago';
       var ren=(s.status==='atrasado'||s.status==='vencendo')?'<button class="btn btn-primary btn-sm" onclick="renovarAluno(this.dataset.sid)" data-sid="'+s.id+'">Renovar</button>':'';
@@ -2860,14 +2860,11 @@ function renderFinanceiro(){
           +'<span style="font-weight:700;font-size:0.9rem;color:var(--white);line-height:1.3;">'+s.nome+'</span>'
           +sb
         +'</div>'
-        +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">'
-          +'<span style="font-size:0.78rem;color:var(--white-dim);">'+(getPlanNome(s.plano)||'\u2014')+'</span>'
-          +'<span style="color:var(--border);">\u00b7</span>'
+        +'<div style="display:grid;grid-template-columns:115px 42px 74px 1fr;align-items:center;gap:0 8px;margin-bottom:8px;">'
+          +'<span style="font-size:0.78rem;color:var(--white-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(getPlanNome(s.plano)||'\u2014')+'</span>'
           +mod
-          +'<span style="color:var(--border);">\u00b7</span>'
           +'<span style="font-size:0.82rem;font-weight:700;color:var(--white);">'+valor+'</span>'
-          +'<span style="color:var(--border);">\u00b7</span>'
-          +'<span style="font-size:0.78rem;color:var(--white-dim);">Venc. '+venc+'</span>'
+          +'<span style="font-size:0.78rem;color:var(--white-dim);white-space:nowrap;">'+venc+'</span>'
         +'</div>'
         +'<div style="display:flex;gap:6px;flex-wrap:wrap;">'
           +'<button class="btn btn-outline btn-sm" onclick="toggleStatus(this.dataset.sid,this.dataset.ns)" data-sid="'+s.id+'" data-ns="'+ns+'">'+bl+'</button>'
