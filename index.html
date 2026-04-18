@@ -2246,7 +2246,7 @@ function openDetail(id){
       +'<div>'
       +'<div style="font-family:Raleway,sans-serif;font-size:0.52rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);margin-bottom:3px;">Reposi\u00e7\u00f5es</div>'
       +'<div style="font-size:1rem;font-weight:700;color:'+(saldo>0?'var(--warning)':'var(--white-dim)')+';">'
-      +saldo+' dispon\u00edvel'+(saldo!==1?'is':'')+' <span style="font-size:0.65rem;font-weight:400;color:var(--white-dim);">('+noMes+'/'+REP_LIMIT_MES+' neste m\u00eas)</span></div>'
+      +saldo+(saldo===1?' dispon\u00edvel':' dispon\u00edveis')+' <span style="font-size:0.65rem;font-weight:400;color:var(--white-dim);">('+noMes+'/'+REP_LIMIT_MES+' neste m\u00eas)</span></div>'
       +'</div>'
       +'<button class="btn btn-outline btn-sm rep-admin-btn" style="height:30px;font-size:0.55rem;opacity:0.45;">\u270F Admin</button>'
       +'</div>'
