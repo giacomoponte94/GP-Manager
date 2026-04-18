@@ -32,9 +32,9 @@
 
   nav { position: fixed; top: 0; left: 0; right: 0; z-index: 500; padding: 22px 60px; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(to bottom, rgba(17,29,41,0.96), transparent); transition: padding 0.35s, background 0.35s; }
   nav.scrolled { padding: 14px 60px; background: rgba(17,29,41,0.97); border-bottom: 1px solid rgba(74,127,165,0.18); }
-  .nav-logo { background: rgba(255,255,255,0.10); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 6px; padding: 6px 12px; border: 1px solid rgba(255,255,255,0.12); }
-  .nav-logo img { height: 52px; width: auto; display: block; opacity: 0.92; transition: opacity 0.3s; }
-  .nav-logo img:hover { opacity: 1; }
+  .nav-logo { background: #ffffff; padding: 5px 14px; border-radius: 8px; box-shadow: 0 2px 16px rgba(0,0,0,0.35); transition: box-shadow 0.3s; }
+  .nav-logo:hover { box-shadow: 0 4px 24px rgba(0,0,0,0.5); }
+  .nav-logo img { height: 44px; width: auto; display: block; }
   .nav-links { display: flex; gap: 40px; list-style: none; }
   .nav-links a { color: rgba(240,237,232,0.9); text-decoration: none; font-size: 0.68rem; font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase; transition: color 0.25s; position: relative; }
   .nav-links a::after { content: ''; position: absolute; bottom: -5px; left: 0; width: 0; height: 1px; background: var(--accent); transition: width 0.3s ease; }
