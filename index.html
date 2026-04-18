@@ -2257,10 +2257,11 @@ function openDetail(id){
       +'</details>'
       +'<div class="rep-admin-panel" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'
       +'<div style="font-size:0.72rem;color:var(--white-dim);margin-bottom:8px;">Senha para ajuste manual:</div>'
-      +'<div style="display:flex;gap:6px;">'
-      +'<input type="password" class="rep-admin-pass" placeholder="Senha" style="flex:1;height:36px;padding:0 10px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.85rem;outline:none;">'
+      +'<div style="display:flex;gap:6px;flex-wrap:wrap;">'
+      +'<input type="password" class="rep-admin-pass" placeholder="Senha" style="flex:1;min-width:80px;height:36px;padding:0 10px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.85rem;outline:none;">'
       +'<button class="btn btn-outline btn-sm rep-minus" style="width:36px;height:36px;font-size:1rem;padding:0;" '+(saldo<=0?'disabled':'')+'>\u2212</button>'
       +'<button class="btn btn-outline btn-sm rep-plus" style="width:36px;height:36px;font-size:1rem;padding:0;" '+(noMes>=REP_LIMIT_MES?'disabled title="Limite do m\u00eas atingido"':'')+'><span style="pointer-events:none;">+</span></button>'
+      +'<button class="btn btn-danger btn-sm rep-zerar" style="height:36px;padding:0 10px;font-size:0.58rem;">Zerar</button>'
       +'</div>'
       +'</div>';
 
@@ -2284,6 +2285,14 @@ function openDetail(id){
       if(!checkPass()){toast('Senha incorreta.');return;}
       if(!addReposicao(s.id,'manual'))return;
       renderRepPanel();
+    };
+    repPanel.querySelector('.rep-zerar').onclick=function(){
+      if(!checkPass()){toast('Senha incorreta.');return;}
+      if(!confirm('Zerar saldo e histórico de reposições de '+s.nome+'?')) return;
+      reposicoes[s.id]=0; saveReposicoes();
+      repHistorico[s.id]=[]; saveRepHistorico();
+      renderRepPanel();
+      toast('Reposições zeradas.');
     };
   }
   renderRepPanel();
