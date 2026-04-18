@@ -804,10 +804,18 @@ function _pushToCloud(){
     _dbRef.set(d)
       .then(function(){ _pendingPush=false; _setSyncStatus('ok'); _saveHistory(d); try{ localStorage.removeItem('gp-dirty'); }catch(e){} })
       .catch(function(e){
-        // Manter _pendingPush=true para bloquear _applyCloud enquanto retry está pendente
-        // (Firebase reverte otimisticamente: listener dispara com dados antigos após falha)
         _setSyncStatus('err',e);
-        setTimeout(function(){ if(localStorage.getItem('gp-dirty')==='1'){ _pendingPush=true; _pushToCloud(); } else { _pendingPush=false; } }, 3000);
+        setTimeout(function(){
+          if(localStorage.getItem('gp-dirty')!=='1'){ _pendingPush=false; return; }
+          // Antes de retentar: verificar se outro dispositivo já enviou dados mais novos.
+          // Se sim, aceitar o cloud e parar o loop — evita sobrescrever mudanças de outro dispositivo.
+          var lts=''; try{ lts=localStorage.getItem('gp-last-push-ts')||''; }catch(x){}
+          _dbRef.once('value').then(function(snap){
+            var c=snap.val(), cts=(c&&c.ts)||'';
+            if(cts && lts && cts>lts){ _pendingPush=false; _applyCloud(c); try{ localStorage.removeItem('gp-dirty'); }catch(x){} }
+            else { _pendingPush=true; _pushToCloud(); }
+          }).catch(function(){ _pendingPush=true; _pushToCloud(); });
+        }, 3000);
       });
   },0);
 }
@@ -958,7 +966,17 @@ function _flushIfPending(){
   var d=_getAllData(); d.ts=ts; d.device=_getDeviceLabel();
   _lastPushedTs=ts;
   try{ localStorage.setItem('gp-last-push-ts',ts); }catch(e){}
-  try{ _dbRef.set(d).then(function(){ _pendingPush=false; try{ localStorage.removeItem('gp-dirty'); }catch(e){} }).catch(function(){ setTimeout(function(){ if(localStorage.getItem('gp-dirty')==='1'){ _pendingPush=true; _pushToCloud(); } else { _pendingPush=false; } },3000); }); }catch(e){ _pendingPush=false; }
+  try{ _dbRef.set(d).then(function(){ _pendingPush=false; try{ localStorage.removeItem('gp-dirty'); }catch(e){} }).catch(function(){
+    setTimeout(function(){
+      if(localStorage.getItem('gp-dirty')!=='1'){ _pendingPush=false; return; }
+      var lts=''; try{ lts=localStorage.getItem('gp-last-push-ts')||''; }catch(x){}
+      _dbRef.once('value').then(function(snap){
+        var c=snap.val(), cts=(c&&c.ts)||'';
+        if(cts && lts && cts>lts){ _pendingPush=false; _applyCloud(c); try{ localStorage.removeItem('gp-dirty'); }catch(x){} }
+        else { _pendingPush=true; _pushToCloud(); }
+      }).catch(function(){ _pendingPush=true; _pushToCloud(); });
+    },3000);
+  }); }catch(e){ _pendingPush=false; }
 }
 // Ao voltar ao primeiro plano: reconecta Firebase e envia dados sujos pendentes
 function _onAppForeground(){
