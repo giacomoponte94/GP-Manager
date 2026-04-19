@@ -957,6 +957,11 @@ function startCloudSync(){
       console.log('[GP Sync] Nuvem vazia — enviando dados locais');
       _initialized=true; _isSyncing=false;
       _pushToCloud();
+    } else if(cloudSts>0&&_lastServerTs>0&&cloudSts===_lastServerTs&&!isDirty){
+      // Já sincronizado: serverTs iguais e sem alterações locais — não fazer nada
+      console.log('[GP Sync] Já em sincronia (serverTs='+cloudSts+') — nenhuma ação');
+      _lastPushedTs=cloudData.ts;
+      _initialized=true; _isSyncing=false;
     } else {
       // [1] usar serverTs se ambos disponíveis; senão usar ts string como fallback
       var localIsNewer=(cloudSts>0&&_lastServerTs>0) ? _lastServerTs>cloudSts : (localTs&&localTs>cloudData.ts);
