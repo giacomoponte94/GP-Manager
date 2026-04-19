@@ -801,6 +801,7 @@ function _saveHistory(d){
 
 // [5] async/await + [4] .update() em vez de .set()
 function _pushToCloud(){
+  console.log('[GP Sync] _pushToCloud FOI CHAMADO');
   if(!_initialized) return;
   _pendingPush=true;
   if(_syncTimer) clearTimeout(_syncTimer);
@@ -815,15 +816,20 @@ function _pushToCloud(){
     try{ localStorage.setItem('gp-last-push-ts', ts); }catch(e){}
     console.log('[GP Sync] Enviando para Firebase — device='+d.device+' ts='+ts);
     console.log('[GP Sync] payload enviado:', d);
+    console.log('[GP Sync] dbRef:', _dbRef);
+    if(!_dbRef){ console.error('[GP Sync] ERRO: _dbRef undefined'); return; }
     try {
+      console.log('[GP Sync] enviando update...');
       await _dbRef.update(d); // [4] update: preserva campos não enviados; não sobrescreve o doc inteiro
+      console.log('[GP Sync] update FINALIZADO');
       _pendingPush=false;
       _setSyncStatus('ok');
       _saveHistory(d);
       try{ localStorage.removeItem('gp-dirty'); }catch(e){}
       console.log('[GP Sync] push confirmado');
     } catch(e) {
-      console.error('[GP Sync] erro no push:', e);
+      console.error('[GP Sync] ERRO REAL:', e);
+      alert('Erro Firebase: ' + (e && e.message ? e.message : e));
       _setSyncStatus('err', e);
       // Retry com verificação de timestamp para evitar sobrescrever dado mais novo
       setTimeout(async function(){
@@ -848,6 +854,19 @@ function _pushToCloud(){
     }
   }, 0);
 }
+
+// DIAGNÓSTICO: teste direto de escrita no Firebase (chamar via console: testFirebaseWrite())
+window.testFirebaseWrite = async function(){
+  try{
+    console.log('TESTE DIRETO INICIADO');
+    await _dbRef.update({ test: 'ok', ts: new Date().toISOString() });
+    console.log('TESTE DIRETO OK');
+    alert('Firebase OK');
+  }catch(e){
+    console.error('TESTE DIRETO ERRO:', e);
+    alert('Erro Firebase: ' + e.message);
+  }
+};
 
 function _applyCloud(data){
   if(!data) return;
