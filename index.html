@@ -961,6 +961,7 @@ function startCloudSync(){
       // Já sincronizado: serverTs iguais e sem alterações locais — não fazer nada
       console.log('[GP Sync] Já em sincronia (serverTs='+cloudSts+') — nenhuma ação');
       _lastPushedTs=cloudData.ts;
+      _setSyncStatus('ok');
       _initialized=true; _isSyncing=false;
     } else {
       // [1] usar serverTs se ambos disponíveis; senão usar ts string como fallback
