@@ -441,6 +441,7 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
         <div class="page-sub" id="dash-data"></div>
       </div>
       <div class="dash-kpi-grid" id="dash-kpis"></div>
+      <div class="dash-section" id="dash-dia"></div>
       <div class="dash-section" id="dash-aniv"></div>
       <div class="dash-section" id="dash-hoje"></div>
       <div class="dash-section" id="dash-venc"></div>
@@ -4671,6 +4672,151 @@ function getPagamentosAluno(sid) {
 }
 
 /* ===== DASHBOARD ===== */
+// ===== DASHBOARD DO DIA =====
+function getAlunosHoje(){
+  var ds = todayStr();
+  var slots = getAgendasParaData(ds);
+  var seen = {}, result = [];
+  slots.forEach(function(slot){
+    if(seen[slot.alunoId]) return;
+    var s = students.find(function(x){ return x.id===slot.alunoId; });
+    if(!s) return;
+    seen[slot.alunoId] = true;
+    result.push({ student:s, slot:slot, status: presencas[presKey(s.id, ds)]||'sem registro' });
+  });
+  return result.sort(function(a,b){ return a.slot.inicio.localeCompare(b.slot.inicio); });
+}
+
+function getFaltaramOntem(){
+  var d = new Date(); d.setDate(d.getDate()-1);
+  var ys = d.toISOString().split('T')[0];
+  var slots = getAgendasParaData(ys);
+  var seen = {}, result = [];
+  slots.forEach(function(slot){
+    if(seen[slot.alunoId]) return;
+    var s = students.find(function(x){ return x.id===slot.alunoId; });
+    if(!s) return;
+    seen[slot.alunoId] = true;
+    if(presencas[presKey(s.id, ys)]==='presente') return;
+    result.push({ student:s, slot:slot });
+  });
+  return result.sort(function(a,b){ return a.slot.inicio.localeCompare(b.slot.inicio); });
+}
+
+function getCobrancasHoje(){
+  var hoje = new Date(); hoje.setHours(0,0,0,0);
+  return students
+    .filter(function(s){ return s.status==='atrasado'||s.status==='vencendo'; })
+    .map(function(s){
+      var vd = s.vencimento ? new Date(s.vencimento+'T12:00:00') : null;
+      if(vd) vd.setHours(0,0,0,0);
+      return { student:s, diff: vd ? Math.ceil((vd-hoje)/86400000) : null };
+    })
+    .sort(function(a,b){ return (a.diff===null?999:a.diff)-(b.diff===null?999:b.diff); });
+}
+
+function getAlunosEmRisco(){
+  return students
+    .filter(function(s){ return s.status!=='atrasado'; })
+    .map(function(s){ return { student:s, dias:getDaysAbsent(s.id) }; })
+    .filter(function(it){ return it.dias!==null && it.dias>=3; })
+    .sort(function(a,b){ return b.dias-a.dias; });
+}
+
+function renderDashboardDia(){
+  var el = document.getElementById('dash-dia');
+  if(!el) return;
+  var MAX = 5;
+  var EMPTY = '<div style="font-size:0.78rem;color:var(--white-dim);padding:8px 0 4px;">Nada por aqui hoje 👌</div>';
+
+  function bloco(emoji, titulo, count, btnLabel, btnAction, rows){
+    var btn = btnLabel
+      ? '<button onclick="'+btnAction+'" style="background:none;border:1px solid var(--border);color:var(--white-dim);border-radius:4px;font-size:0.6rem;padding:4px 9px;cursor:pointer;font-family:inherit;letter-spacing:0.04em;">'+btnLabel+'</button>'
+      : '';
+    return '<div style="margin-bottom:20px;">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
+      +'<div class="dash-section-title">'+emoji+' '+titulo+' <span style="font-weight:400;opacity:0.6;">('+count+')</span></div>'
+      +btn+'</div>'+rows+'</div>';
+  }
+
+  var html = '<div style="font-size:0.6rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent-l);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border);">📋 Dashboard do Dia</div>';
+
+  // 1. Alunos de Hoje
+  var hoje = getAlunosHoje();
+  var r1 = '';
+  hoje.slice(0,MAX).forEach(function(it){
+    var s=it.student, slot=it.slot;
+    var bc = it.status==='presente'?'badge-ok':it.status==='faltou'?'badge-late':'badge-solo';
+    var bl = it.status==='presente'?'Presente':it.status==='faltou'?'Faltou':'Pendente';
+    r1 += '<div class="dash-row notif-info" style="cursor:pointer;margin-bottom:2px;" onclick="openDetail(\''+s.id+'\')">'
+      +'<div><div class="dash-row-name">'+s.nome+'</div>'
+      +'<div class="dash-row-sub">'+slot.inicio+(slot.fim?' – '+slot.fim:'')+'</div></div>'
+      +'<span class="badge '+bc+'">'+bl+'</span></div>';
+  });
+  if(!hoje.length) r1 = EMPTY;
+  else if(hoje.length>MAX) r1 += '<div style="font-size:0.7rem;color:var(--white-dim);padding:4px 0;">+'+(hoje.length-MAX)+' mais</div>';
+  html += bloco('🏋️','Alunos de Hoje', hoje.length, 'Ver agenda', "showTab('agenda')", r1);
+
+  // 2. Faltaram Ontem
+  var ontem = getFaltaramOntem();
+  var r2 = '';
+  ontem.slice(0,MAX).forEach(function(it){
+    var s=it.student, slot=it.slot;
+    r2 += '<div class="dash-row notif-warn" style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">'
+      +'<div onclick="openDetail(\''+s.id+'\')" style="cursor:pointer;flex:1;min-width:0;">'
+      +'<div class="dash-row-name">'+s.nome+'</div>'
+      +'<div class="dash-row-sub">'+slot.inicio+'</div></div>'
+      +'<button onclick="reengajarAluno(\''+s.id+'\')" style="background:none;border:1px solid rgba(37,211,102,0.3);color:#25D366;border-radius:4px;font-size:0.6rem;padding:5px 9px;cursor:pointer;font-family:inherit;flex-shrink:0;">💬 Reengajar</button>'
+      +'</div>';
+  });
+  if(!ontem.length) r2 = EMPTY;
+  else if(ontem.length>MAX) r2 += '<div style="font-size:0.7rem;color:var(--white-dim);padding:4px 0;">+'+(ontem.length-MAX)+' mais</div>';
+  html += bloco('⚠️','Faltaram Ontem', ontem.length, '', '', r2);
+
+  // 3. Cobranças Pendentes
+  var cobs = getCobrancasHoje();
+  var r3 = '';
+  cobs.slice(0,MAX).forEach(function(it){
+    var s=it.student, diff=it.diff;
+    var atrasado = s.status==='atrasado';
+    var diffLabel = diff===null?'Atrasado':diff<0?Math.abs(diff)+' dias em atraso':diff===0?'Vence hoje':'Em '+diff+' dias';
+    var valor = s.valor ? 'R$ '+parseFloat(s.valor).toFixed(2).replace('.',',') : '';
+    r3 += '<div class="dash-row '+(atrasado?'notif-danger':'notif-warn')+'" style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">'
+      +'<div onclick="openDetail(\''+s.id+'\')" style="cursor:pointer;flex:1;min-width:0;">'
+      +'<div class="dash-row-name">'+s.nome+'</div>'
+      +'<div class="dash-row-sub">'+valor+(s.vencimento?' · '+fmtDate(s.vencimento):'')+'</div></div>'
+      +'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">'
+      +'<span class="badge '+(atrasado?'badge-late':'badge-warn')+'">'+diffLabel+'</span>'
+      +'<button onclick="cobrarAluno(\''+s.id+'\')" style="background:none;border:1px solid rgba(37,211,102,0.3);color:#25D366;border-radius:4px;font-size:0.6rem;padding:4px 8px;cursor:pointer;font-family:inherit;">💬 Cobrar</button>'
+      +'</div></div>';
+  });
+  if(!cobs.length) r3 = EMPTY;
+  else if(cobs.length>MAX) r3 += '<div style="font-size:0.7rem;color:var(--white-dim);padding:4px 0;">+'+(cobs.length-MAX)+' mais</div>';
+  html += bloco('💰','Cobranças Pendentes', cobs.length, '', '', r3);
+
+  // 4. Alunos em Risco
+  var risco = getAlunosEmRisco();
+  var r4 = '';
+  risco.slice(0,MAX).forEach(function(it){
+    var s=it.student, dias=it.dias;
+    var bc = dias>=14?'badge-late':dias>=7?'badge-warn':'badge-solo';
+    var borderCol = dias>=14?'var(--danger)':dias>=7?'var(--warning)':'var(--accent)';
+    r4 += '<div class="dash-row" style="background:var(--card);display:flex;align-items:center;gap:8px;border-left:3px solid '+borderCol+';margin-bottom:2px;">'
+      +'<div onclick="openDetail(\''+s.id+'\')" style="cursor:pointer;flex:1;min-width:0;">'
+      +'<div class="dash-row-name">'+s.nome+'</div>'
+      +'<div class="dash-row-sub">'+dias+' dias sem treinar</div></div>'
+      +'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">'
+      +'<span class="badge '+bc+'">'+dias+'d</span>'
+      +'<button onclick="reengajarAluno(\''+s.id+'\')" style="background:none;border:1px solid rgba(37,211,102,0.3);color:#25D366;border-radius:4px;font-size:0.6rem;padding:4px 8px;cursor:pointer;font-family:inherit;">💬 Reengajar</button>'
+      +'</div></div>';
+  });
+  if(!risco.length) r4 = EMPTY;
+  else if(risco.length>MAX) r4 += '<div style="font-size:0.7rem;color:var(--white-dim);padding:4px 0;">+'+(risco.length-MAX)+' mais</div>';
+  html += bloco('🚨','Alunos em Risco', risco.length, '', '', r4);
+
+  el.innerHTML = html;
+}
+
 function renderDashboard() {
   var now = new Date();
   var mesNomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
@@ -4694,6 +4840,8 @@ function renderDashboard() {
    +'<div class="dash-kpi danger" style="grid-column:1/-1;cursor:pointer;" onclick="openDashGrupo(&quot;inadimplentes&quot;)">'
       +'<div class="dash-kpi-val">'+inad+'</div><div class="dash-kpi-lbl">Inadimplentes</div>'
     +'</div>';
+
+  renderDashboardDia();
 
   // Aulas hoje
   var ds = todayStr();
