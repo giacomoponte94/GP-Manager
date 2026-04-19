@@ -4980,5 +4980,70 @@ function adicionarHorarioCfg() {
 
 
 </script>
+
+<!-- PAINEL DE DEBUG IN-APP -->
+<div id="debug-panel" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.95);z-index:99999;flex-direction:column;font-family:monospace;">
+  <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #333;flex-shrink:0;">
+    <span style="color:#6fa3c8;font-weight:bold;font-size:0.85rem;">🔍 Debug Firebase</span>
+    <button onclick="window._dbgTestWrite()" style="margin-left:auto;background:#27ae60;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:0.75rem;cursor:pointer;">Testar Write</button>
+    <button onclick="document.getElementById('debug-log').innerHTML=''" style="background:#555;color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:0.75rem;cursor:pointer;">Limpar</button>
+    <button onclick="document.getElementById('debug-panel').style.display='none'" style="background:#e74c3c;color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:0.75rem;cursor:pointer;">✕</button>
+  </div>
+  <div id="debug-log" style="flex:1;overflow-y:auto;padding:10px 12px;font-size:0.7rem;line-height:1.6;color:#ccc;"></div>
+</div>
+
+<script>
+// Ativar painel: tocar 5x rápido no status de Sync
+(function(){
+  var _taps=0, _tapTimer=null;
+  var syncEl=document.getElementById('sync-status');
+  if(syncEl){
+    syncEl.addEventListener('click',function(e){
+      e.stopPropagation();
+      _taps++;
+      clearTimeout(_tapTimer);
+      _tapTimer=setTimeout(function(){ _taps=0; },1500);
+      if(_taps>=5){
+        _taps=0;
+        document.getElementById('debug-panel').style.display='flex';
+      }
+    });
+  }
+
+  // Capturar console.log / warn / error
+  function _appendLog(type, args){
+    var el=document.getElementById('debug-log');
+    if(!el) return;
+    var color={log:'#ccc',warn:'#f39c12',error:'#e74c3c'}[type]||'#ccc';
+    var prefix={log:'','warn':'⚠ ','error':'✗ '}[type]||'';
+    var text=Array.from(args).map(function(a){
+      if(typeof a==='object'){ try{ return JSON.stringify(a,null,0); }catch(x){ return String(a); } }
+      return String(a);
+    }).join(' ');
+    var row=document.createElement('div');
+    row.style.cssText='color:'+color+';border-bottom:1px solid #222;padding:3px 0;word-break:break-all;';
+    row.textContent=prefix+text;
+    el.appendChild(row);
+    el.scrollTop=el.scrollHeight;
+  }
+  var _origLog=console.log.bind(console);
+  var _origWarn=console.warn.bind(console);
+  var _origErr=console.error.bind(console);
+  console.log=function(){ _origLog.apply(console,arguments); _appendLog('log',arguments); };
+  console.warn=function(){ _origWarn.apply(console,arguments); _appendLog('warn',arguments); };
+  console.error=function(){ _origErr.apply(console,arguments); _appendLog('error',arguments); };
+
+  // Botão Testar Write
+  window._dbgTestWrite=async function(){
+    console.log('TESTE DIRETO INICIADO');
+    try{
+      await _dbRef.update({ test:'ok', ts:new Date().toISOString() });
+      console.log('TESTE DIRETO OK — Firebase gravou!');
+    }catch(e){
+      console.error('TESTE DIRETO ERRO:', e && e.message ? e.message : e);
+    }
+  };
+})();
+</script>
 </body>
 </html>
