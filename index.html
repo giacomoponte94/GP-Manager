@@ -673,6 +673,16 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
   <div class="modal" style="max-width:400px;"><div class="modal-header"><div class="modal-title">Agendar aula</div><button class="modal-close" onclick="document.getElementById('modal-slot-picker').style.display='none'">&#215;</button></div><div id="slot-picker-body"></div><div style="display:flex;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border);"><button class="btn btn-outline" style="flex:1;height:40px;" onclick="document.getElementById('modal-slot-picker').style.display='none'">Cancelar</button><button class="btn btn-primary" style="flex:2;height:40px;" onclick="confirmarSlotPicker()">Abrir hor&aacute;rio</button></div></div>
 </div>
 
+<div id="modal-modo-rapido" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,0.7);z-index:500;align-items:flex-end;justify-content:center;">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-header">
+      <div class="modal-title">&#9889; Modo R&#225;pido</div>
+      <button class="modal-close" onclick="document.getElementById('modal-modo-rapido').style.display='none'">&#215;</button>
+    </div>
+    <div id="modo-rapido-body"></div>
+  </div>
+</div>
+
 <div id="modal-pagamento" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,0.7);z-index:500;align-items:flex-end;justify-content:center;">
   <div class="modal" style="max-width:420px;">
     <div class="modal-header"><div class="modal-title">Registrar Pagamento</div><button class="modal-close" onclick="closeModal('modal-pagamento')">&#215;</button></div>
@@ -761,7 +771,7 @@ var _SYNC_KEYS = {
   students:'gp-s', agendas:'gp-a', presencas:'gp-p', notasSessao:'gp-n',
   excecoes:'gp-exc', reposicoes:'gp-rep', planos:'gp-planos',
   historicoFin:'gp-hfin', feriadosCustom:'gp-fe', bloqueios:'gp-bl',
-  diasPermitidos:'gp-dias-perm', treinosData:'gp-treinos',
+  diasPermitidos:'gp-dias-perm', treinosData:'gp-treinos', treinosLog:'gp-treinos-log',
   evolucaoCargas:'gp-evolucao', evolucaoLegada:'gp-ev',
   pagamentos:'gp-pagamentos', historicoCob:'gp-hc',
   despesas:'gp-desp', horariosConfig:'gp-hconf',
@@ -1619,7 +1629,7 @@ function isHoliday(date) {
 
 function save() { try{localStorage.setItem('gp-s',JSON.stringify(students));}catch(e){} }
 function loadAll() {
-  loadPlanos(); syncPlanLegacy(); loadTreinos(); loadEvolucao(); loadHistoricoFin(); loadExcecoes(); loadDiasPermitidos(); loadHorariosConfig(); loadChavePix(); loadReposicoes(); loadPagamentos(); loadDespesas();
+  loadPlanos(); syncPlanLegacy(); loadTreinos(); loadTreinosLog(); loadEvolucao(); loadHistoricoFin(); loadExcecoes(); loadDiasPermitidos(); loadHorariosConfig(); loadChavePix(); loadReposicoes(); loadPagamentos(); loadDespesas();
   try{var s=localStorage.getItem('gp-s');if(s)students=JSON.parse(s);}catch(e){}
   try{var a=localStorage.getItem('gp-a');if(a)agendas=JSON.parse(a);}catch(e){}
   try{var p=localStorage.getItem('gp-p');if(p)presencas=JSON.parse(p);}catch(e){}
@@ -2765,6 +2775,7 @@ function renderSlotModal(){
         +'</div>'
         // Bot?o Desmarcar: sempre vis?vel (admin pode sempre; aluno: s? at? 3h antes)
         // O bot?o REMOVE a aula desse dia E gera reposi??o
+        +_tlogRow(s.id,slotDate)
         +'<button class="btn btn-sm repos-btn" data-sid="'+s.id+'" data-agid="'+ag.id+'" data-date="'+slotDate+'" data-slot-dt="'+slotDT.toISOString()+'"'
         +' style="width:100%;height:30px;font-size:0.6rem;margin-top:6px;background:rgba(243,156,18,0.1);border:1px solid rgba(243,156,18,0.35);color:var(--warning);">Desmarcar \u2013 gerar reposi\u00e7\u00e3o</button>'
         +'<textarea class="nota-ta" data-sid="'+s.id+'" data-date="'+slotDate+'"'
@@ -2846,6 +2857,17 @@ function renderSlotModal(){
       var k=presKey(sid,dt);
       if(presencas[k]===st)delete presencas[k]; else presencas[k]=st;
       savePresencas();renderSlotModal();renderCalendar();renderStats();
+    };
+  });
+  body.querySelectorAll('.tlog-btn').forEach(function(btn){
+    btn.onclick=function(){
+      var sid=btn.getAttribute('data-sid'),dt=btn.getAttribute('data-date');
+      var st=btn.getAttribute('data-status'),div=btn.getAttribute('data-div')||'';
+      if(!treinosLog[sid]) treinosLog[sid]=[];
+      var idx=treinosLog[sid].findIndex(function(e){return e.data===dt;});
+      if(idx>=0){ if(treinosLog[sid][idx].status===st) treinosLog[sid].splice(idx,1); else treinosLog[sid][idx].status=st; }
+      else treinosLog[sid].push({data:dt,divisao:div,status:st});
+      saveTreinosLog(); renderSlotModal();
     };
   });
 
@@ -3456,11 +3478,19 @@ function initTheme() {
 }
 
 var treinosData = {};
+var treinosLog = {}; // {idAluno:[{data,divisao,status}]}
 var evolucaoCargas = {}; 
 
 function loadTreinos() {
   var t=localStorage.getItem('gp-treinos');
   if(t) try{treinosData=JSON.parse(t);}catch(e){}
+}
+function loadTreinosLog() {
+  var t=localStorage.getItem('gp-treinos-log');
+  if(t) try{treinosLog=JSON.parse(t);}catch(e){}
+}
+function saveTreinosLog() {
+  localStorage.setItem('gp-treinos-log',JSON.stringify(treinosLog));
 }
 function saveTreinos() {
   localStorage.setItem('gp-treinos',JSON.stringify(treinosData));
@@ -3581,14 +3611,21 @@ function renderTreinoEditor(sid) {
           var miniChart=renderMiniChart(sid,exKey);
           var lastEntries='';
           if(hist.length){
-            var last2=hist.slice(-2).reverse();
-            lastEntries='<div style="margin-top:5px;display:flex;gap:8px;">';
-            last2.forEach(function(e){
-              var d=e.data?new Date(e.data+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}):'';
-              lastEntries+='<span style="font-size:0.65rem;background:rgba(74,127,165,0.12);padding:2px 7px;border-radius:10px;color:var(--white-dim);">'
-                +d+(e.carga?' \u00B7 '+e.carga+'kg':'')+(e.reps?' \u00B7 '+e.reps:'')
-                +'</span>';
-            });
+            var last=hist[hist.length-1];
+            var prev=hist.length>=2?hist[hist.length-2]:null;
+            var delta=null;
+            if(prev&&last.carga&&prev.carga){
+              var dv=parseFloat(last.carga)-parseFloat(prev.carga);
+              if(!isNaN(dv)&&dv!==0) delta=(dv>0?'↑ +':'↓ ')+Math.abs(dv)+'kg';
+            }
+            var ld=last.data?new Date(last.data+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}):'';
+            lastEntries='<div style="margin-top:5px;display:flex;align-items:center;gap:6px;">'
+              +'<span style="font-size:0.65rem;background:rgba(74,127,165,0.12);padding:2px 7px;border-radius:10px;color:var(--white-dim);">'
+              +ld+(last.carga?' \u00B7 '+last.carga+'kg':'')+(last.reps?' \u00B7 '+last.reps:'')+'</span>';
+            if(delta){
+              var deltaColor=delta.indexOf('\u2191')>=0?'var(--success)':'var(--danger)';
+              lastEntries+='<span style="font-size:0.65rem;color:'+deltaColor+';font-weight:600;">'+delta+'</span>';
+            }
             lastEntries+='</div>';
           }
           out+='<div style="padding:8px 0;border-bottom:1px solid rgba(74,127,165,0.08);">';
@@ -4686,6 +4723,72 @@ function getPagamentosAluno(sid) {
 
 /* ===== DASHBOARD ===== */
 // ===== DASHBOARD DO DIA =====
+
+// Retorna HTML dos 3 botões de status de treino para o modal de slot
+function _tlogRow(sid, date){
+  var tls=((treinosLog[sid]||[]).find(function(e){return e.data===date;})||{}).status||null;
+  var tdiv=treinosData[sid]&&treinosData[sid].divisoes&&treinosData[sid].divisoes.length===1?treinosData[sid].divisoes[0].nome:'';
+  return '<div style="display:flex;gap:5px;margin-top:6px;">'
+    +'<button class="btn btn-sm tlog-btn" data-sid="'+sid+'" data-date="'+date+'" data-status="completo" data-div="'+tdiv+'" style="flex:1;height:28px;font-size:0.57rem;background:'+(tls==='completo'?'rgba(39,174,96,0.2)':'transparent')+';border:1px solid rgba(39,174,96,0.4);color:'+(tls==='completo'?'var(--success)':'rgba(39,174,96,0.6)')+';padding:0;">\u2705 Completo</button>'
+    +'<button class="btn btn-sm tlog-btn" data-sid="'+sid+'" data-date="'+date+'" data-status="parcial" data-div="'+tdiv+'" style="flex:1;height:28px;font-size:0.57rem;background:'+(tls==='parcial'?'rgba(243,156,18,0.2)':'transparent')+';border:1px solid rgba(243,156,18,0.4);color:'+(tls==='parcial'?'var(--warning)':'rgba(243,156,18,0.6)')+';padding:0;">\u26a1 Parcial</button>'
+    +'<button class="btn btn-sm tlog-btn" data-sid="'+sid+'" data-date="'+date+'" data-status="nao_fez" data-div="'+tdiv+'" style="flex:1;height:28px;font-size:0.57rem;background:'+(tls==='nao_fez'?'rgba(231,76,60,0.2)':'transparent')+';border:1px solid rgba(231,76,60,0.4);color:'+(tls==='nao_fez'?'var(--danger)':'rgba(231,76,60,0.5)')+';padding:0;">\u274c N\u00e3o fez</button>'
+    +'</div>';
+}
+
+function getAcaoDoDia(){
+  // Prioridade 1: em risco + inadimplente
+  var found=null;
+  students.forEach(function(s){
+    if(found) return;
+    var d=getDaysAbsent(s.id);
+    if(d!==null&&d>=3&&s.status==='atrasado') found={student:s,motivo:s.nome.split(' ')[0]+' n\u00e3o treina h\u00e1 '+d+' dias e est\u00e1 em atraso',acaoFn:function(){cobrarAluno(s.id);}};
+  });
+  if(found) return found;
+  // Prioridade 2: em risco
+  var risco=students.filter(function(s){ var d=getDaysAbsent(s.id); return d!==null&&d>=3&&s.status!=='atrasado'; })
+    .sort(function(a,b){return (getDaysAbsent(b.id)||0)-(getDaysAbsent(a.id)||0);});
+  if(risco.length){ var s=risco[0],d=getDaysAbsent(s.id); return {student:s,motivo:s.nome.split(' ')[0]+' n\u00e3o treina h\u00e1 '+d+' dias',acaoFn:function(){reengajarAluno(s.id);}}; }
+  // Prioridade 3: cobrança atrasada
+  var cob=students.filter(function(s){ return s.status==='atrasado'; });
+  if(cob.length){ var s=cob[0]; return {student:s,motivo:s.nome.split(' ')[0]+' est\u00e1 com pagamento em atraso',acaoFn:function(){cobrarAluno(s.id);}}; }
+  // Prioridade 4: faltou ontem
+  var ontem=getFaltaramOntem();
+  if(ontem.length){ var s=ontem[0].student; return {student:s,motivo:s.nome.split(' ')[0]+' faltou o treino ontem',acaoFn:function(){reengajarAluno(s.id);}}; }
+  return null;
+}
+
+function openModoRapido(){
+  document.getElementById('modal-modo-rapido').style.display='flex';
+  renderModoRapido();
+}
+function renderModoRapido(){
+  var body=document.getElementById('modo-rapido-body'); if(!body) return;
+  var ds=todayStr();
+  var hoje=getAlunosHoje();
+  if(!hoje.length){ body.innerHTML='<div style="text-align:center;padding:32px;color:var(--white-dim);font-size:0.85rem;">Nenhum aluno agendado para hoje.</div>'; return; }
+  var out='<div style="font-size:0.72rem;color:var(--white-dim);margin-bottom:14px;">'+new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'})+'</div>';
+  hoje.forEach(function(it){
+    var s=it.student,slot=it.slot;
+    var ps=presencas[presKey(s.id,ds)]||null;
+    out+='<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">'
+      +'<div style="flex:1;min-width:0;cursor:pointer;" onclick="document.getElementById(\'modal-modo-rapido\').style.display=\'none\';openDetail(\''+s.id+'\')">'
+      +'<div style="font-weight:600;font-size:0.88rem;color:var(--white);">'+s.nome+'</div>'
+      +'<div style="font-size:0.7rem;color:var(--accent-l);">'+slot.inicio+(slot.fim?' \u2013 '+slot.fim:'')+'</div></div>'
+      +'<button class="mr-btn" data-sid="'+s.id+'" data-st="presente" style="height:36px;padding:0 12px;font-size:0.65rem;border-radius:4px;border:1px solid '+(ps==='presente'?'var(--success)':'rgba(39,174,96,0.4)')+';background:'+(ps==='presente'?'rgba(39,174,96,0.2)':'transparent')+';color:'+(ps==='presente'?'var(--success)':'rgba(39,174,96,0.7)')+';cursor:pointer;font-family:inherit;font-weight:600;">\u2714 Presente</button>'
+      +'<button class="mr-btn" data-sid="'+s.id+'" data-st="faltou" style="height:36px;padding:0 12px;font-size:0.65rem;border-radius:4px;border:1px solid '+(ps==='faltou'?'var(--danger)':'rgba(231,76,60,0.35)')+';background:'+(ps==='faltou'?'rgba(231,76,60,0.2)':'transparent')+';color:'+(ps==='faltou'?'var(--danger)':'rgba(231,76,60,0.55)')+';cursor:pointer;font-family:inherit;font-weight:600;">\u2715 Faltou</button>'
+      +'</div>';
+  });
+  body.innerHTML=out;
+  body.querySelectorAll('.mr-btn').forEach(function(btn){
+    btn.onclick=function(){
+      var sid=btn.getAttribute('data-sid'),st=btn.getAttribute('data-st');
+      var k=presKey(sid,ds);
+      if(presencas[k]===st) delete presencas[k]; else presencas[k]=st;
+      savePresencas(); renderModoRapido(); renderCalendar(); renderStats();
+    };
+  });
+}
+
 function getAlunosHoje(){
   var ds = todayStr();
   var slots = getAgendasParaData(ds);
@@ -4752,7 +4855,19 @@ function renderDashboardDia(){
       +btn+'</div>'+rows+'</div>';
   }
 
-  var html = '<div style="font-size:0.6rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent-l);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border);">📋 Dashboard do Dia</div>';
+  var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border);">'
+    +'<div style="font-size:0.6rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent-l);">📋 Dashboard do Dia</div>'
+    +'<button onclick="openModoRapido()" style="background:rgba(74,127,165,0.15);border:1px solid var(--accent);color:var(--accent-l);border-radius:4px;font-size:0.62rem;padding:5px 11px;cursor:pointer;font-family:inherit;font-weight:600;">⚡ Modo Rápido</button>'
+    +'</div>';
+  var acao = getAcaoDoDia();
+  window._acaoDoDiaFn = acao ? acao.acaoFn : null;
+  if(acao){
+    html += '<div style="background:rgba(231,76,60,0.08);border:1px solid rgba(231,76,60,0.25);border-radius:6px;padding:14px 16px;margin-bottom:20px;">'
+      +'<div style="font-size:0.6rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--danger);margin-bottom:6px;">🔥 Ação do Dia</div>'
+      +'<div style="font-size:0.85rem;color:var(--white);margin-bottom:10px;">'+acao.motivo+'</div>'
+      +'<button onclick="if(window._acaoDoDiaFn)window._acaoDoDiaFn()" style="background:none;border:1px solid rgba(37,211,102,0.4);color:#25D366;border-radius:4px;font-size:0.68rem;padding:7px 14px;cursor:pointer;font-family:inherit;font-weight:600;">👉 Resolver agora</button>'
+      +'</div>';
+  }
 
   // 1. Alunos de Hoje
   var hoje = getAlunosHoje();
