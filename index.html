@@ -1980,6 +1980,23 @@ function getLastPresenca(sid){
   if(!dates.length)return null;
   return dates.sort(function(a,b){return b-a;})[0];
 }
+
+// Conta faltas consecutivas em sessões AGENDADAS (a partir da mais recente para trás).
+// Só conta marcações explícitas de 'falta'; para ao encontrar 'presente' ou sessão não marcada.
+function getMissedSessionsStreak(sid){
+  var today=new Date(); today.setHours(0,0,0,0);
+  var streak=0;
+  for(var i=1;i<=90;i++){
+    var d=new Date(today); d.setDate(today.getDate()-i);
+    var dStr=d.toISOString().split('T')[0];
+    var ags=getAgendasParaData(dStr);
+    if(!ags.some(function(a){return a.alunoId===sid;})) continue; // dia sem sessão — pula
+    var p=presencas[sid+'_'+dStr];
+    if(p==='falta'){ streak++; }
+    else { break; } // presente ou não marcado — interrompe contagem
+  }
+  return streak;
+}
 function getDaysAbsent(sid){var l=getLastPresenca(sid);if(!l)return null;var t=new Date();t.setHours(0,0,0,0);return Math.floor((t-l)/86400000);}
 function getAbsenceBadge(sid){
   var d=getDaysAbsent(sid); if(d===null)return '';
@@ -2100,8 +2117,8 @@ function renderNotifs(){
     var vr=inad.reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
     notifs.push({p:0,icon:'',msg:'<strong>'+fmt(vr)+'</strong> em atraso \u2014 '+inad.length+' aluno'+(inad.length>1?'s':''),tipo:'danger',cta:{lbl:'Cobrar',fn:'cobrarInadimplentes()'}});
   }
-  var aus=students.filter(function(s){var d=getDaysAbsent(s.id);return d!==null&&d>=3&&s.status!=='atrasado';});
-  if(aus.length) notifs.push({p:1,icon:'!',msg:'<strong>'+aus.length+' aluno'+(aus.length>1?'s':'')+' sem treinar ha 3+ dias</strong>',tipo:'warn',cta:null});
+  var aus=students.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;});
+  if(aus.length) notifs.push({p:1,icon:'!',msg:'<strong>'+aus.length+' aluno'+(aus.length>1?'s':'')+' faltando aulas agendadas</strong>',tipo:'warn',cta:null});
   var dow=new Date().getDay();
   var ds2=new Date().toISOString().split('T')[0];
   if(!isHoliday(new Date())){
@@ -3072,8 +3089,8 @@ function renderFinanceiro(){
   var ativos=students.filter(function(s){return s.status!=='atrasado';}).length;
   var inat=students.filter(function(s){return s.status==='atrasado';}).length;
   var freq=calcFreqMedia();
-  var risco=students.filter(function(s){var d=getDaysAbsent(s.id);return d!==null&&d>=3&&s.status!=='atrasado';}).length;
-  var recRisco=students.filter(function(s){var d=getDaysAbsent(s.id);return d!==null&&d>=3&&s.status!=='atrasado';}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
+  var risco=students.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;}).length;
+  var recRisco=students.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
   var proj=students.filter(function(s){return s.status==='em dia'||s.status==='vencendo';}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
 
   var dash=document.getElementById('fin-dash'); if(!dash)return;
@@ -4838,18 +4855,17 @@ function _tlogRow(sid, date){
 }
 
 function getAcaoDoDia(){
-  // Prioridade 1: em risco + inadimplente
+  // Prioridade 1: faltou sessões agendadas + inadimplente
   var found=null;
   students.forEach(function(s){
     if(found) return;
-    var d=getDaysAbsent(s.id);
-    if(d!==null&&d>=3&&s.status==='atrasado') found={student:s,motivo:s.nome.split(' ')[0]+' n\u00e3o treina h\u00e1 '+d+' dias e est\u00e1 em atraso',acaoFn:function(){cobrarAluno(s.id);}};
+    var f=getMissedSessionsStreak(s.id);
+    if(f>=1&&s.status==='atrasado') found={student:s,motivo:s.nome.split(' ')[0]+' faltou '+f+(f===1?' aula agendada':' aulas agendadas')+' e est\u00e1 em atraso',acaoFn:function(){cobrarAluno(s.id);}};
   });
   if(found) return found;
-  // Prioridade 2: em risco
-  var risco=students.filter(function(s){ var d=getDaysAbsent(s.id); return d!==null&&d>=3&&s.status!=='atrasado'; })
-    .sort(function(a,b){return (getDaysAbsent(b.id)||0)-(getDaysAbsent(a.id)||0);});
-  if(risco.length){ var s=risco[0],d=getDaysAbsent(s.id); return {student:s,motivo:s.nome.split(' ')[0]+' n\u00e3o treina h\u00e1 '+d+' dias',acaoFn:function(){reengajarAluno(s.id);}}; }
+  // Prioridade 2: faltou sessões agendadas
+  var risco=getAlunosEmRisco();
+  if(risco.length){ var it=risco[0],s=it.student,f=it.dias; return {student:s,motivo:s.nome.split(' ')[0]+' faltou '+f+(f===1?' aula agendada':' aulas agendadas seguidas'),acaoFn:function(){reengajarAluno(s.id);}}; }
   // Prioridade 3: cobrança atrasada
   var cob=students.filter(function(s){ return s.status==='atrasado'; });
   if(cob.length){ var s=cob[0]; return {student:s,motivo:s.nome.split(' ')[0]+' est\u00e1 com pagamento em atraso',acaoFn:function(){cobrarAluno(s.id);}}; }
@@ -4936,8 +4952,8 @@ function getCobrancasHoje(){
 function getAlunosEmRisco(){
   return students
     .filter(function(s){ return s.status!=='atrasado'; })
-    .map(function(s){ return { student:s, dias:getDaysAbsent(s.id) }; })
-    .filter(function(it){ return it.dias!==null && it.dias>=3; })
+    .map(function(s){ return { student:s, dias:getMissedSessionsStreak(s.id) }; })
+    .filter(function(it){ return it.dias>=1; })
     .sort(function(a,b){ return b.dias-a.dias; });
 }
 
@@ -5029,14 +5045,15 @@ function renderDashboardDia(){
   var r4 = '';
   risco.slice(0,MAX).forEach(function(it){
     var s=it.student, dias=it.dias;
-    var bc = dias>=14?'badge-late':dias>=7?'badge-warn':'badge-solo';
-    var borderCol = dias>=14?'var(--danger)':dias>=7?'var(--warning)':'var(--accent)';
+    var bc = dias>=3?'badge-late':dias>=2?'badge-warn':'badge-solo';
+    var borderCol = dias>=3?'var(--danger)':dias>=2?'var(--warning)':'var(--accent)';
+    var label = dias===1?'1 falta seguida na agenda':dias+' faltas seguidas na agenda';
     r4 += '<div class="dash-row" style="background:var(--card);display:flex;align-items:center;gap:8px;border-left:3px solid '+borderCol+';margin-bottom:2px;">'
       +'<div onclick="openDetail(\''+s.id+'\')" style="cursor:pointer;flex:1;min-width:0;">'
       +'<div class="dash-row-name">'+s.nome+'</div>'
-      +'<div class="dash-row-sub">'+dias+' dias sem treinar</div></div>'
+      +'<div class="dash-row-sub">'+label+'</div></div>'
       +'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">'
-      +'<span class="badge '+bc+'">'+dias+'d</span>'
+      +'<span class="badge '+bc+'">'+dias+'F</span>'
       +'<button onclick="reengajarAluno(\''+s.id+'\')" style="background:none;border:1px solid rgba(37,211,102,0.3);color:#25D366;border-radius:4px;font-size:0.6rem;padding:4px 8px;cursor:pointer;font-family:inherit;">💬 Reengajar</button>'
       +'</div></div>';
   });
