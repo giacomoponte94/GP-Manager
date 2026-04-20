@@ -3289,7 +3289,7 @@ function renderConfiguracoes() {
   out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:12px;">Seus planos</div>';
 
   PLANOS.forEach(function(p, idx) {
-    var tipoLabel = p.tipo === 'pacote' ? '\uDCE6 Pacote' : ' Fixo';
+    var tipoLabel = p.tipo === 'pacote' ? '\uD83D\uDCE6 Pacote' : '\u{1F4C5} Fixo';
     var tipoColor = p.tipo === 'pacote' ? 'var(--warning)' : 'var(--accent-l)';
     out += '<div class="plano-card" data-idx="'+idx+'" style="background:var(--card);padding:14px 16px;margin-bottom:8px;border-left:3px solid '+(p.tipo==='pacote'?'var(--warning)':'var(--accent)')+';cursor:pointer;" onclick="editarPlano('+idx+')">';
     out += '<div style="display:flex;justify-content:space-between;align-items:center;">';
@@ -3297,7 +3297,7 @@ function renderConfiguracoes() {
     out += '<div style="font-weight:600;font-size:0.9rem;color:var(--white);">'+p.nome+'</div>';
     out += '<div style="font-size:0.72rem;margin-top:3px;color:'+tipoColor+';">'+tipoLabel;
     if(p.tipo==='fixo') out += ' \u00B7 '+p.diasSemana+'x/sem';
-    if(p.tipo==='pacote') out += ' \u00B7 '+p.aulasPacote+' aulas';
+    if(p.tipo==='pacote') out += ' \u00B7 '+p.aulasPacote+(p.aulasPacote===1?' aula':' aulas');
     out += '</div>';
     out += '<div style="font-size:0.72rem;color:var(--white-dim);margin-top:2px;">Individual: R$ '+p.precoInd;
     if(p.precoExt) out += ' &nbsp; '+(p.labelExt||'Duo')+': R$ '+p.precoExt;
