@@ -426,6 +426,7 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
       <div class="app-logo">Personal <span>Pro</span></div>
     </div>
     <div class="app-header-actions">
+      <span id="backup-dot" onclick="showTab('financeiro')" title="Status do backup — toque para ver" style="cursor:pointer;font-size:0.85rem;line-height:1;"></span>
       <span id="sync-status" style="font-size:0.62rem;font-family:'Raleway',sans-serif;color:var(--white-dim);letter-spacing:0.05em;cursor:pointer;" onclick="forceSyncFromCloud()" title="Toque para sincronizar agora"></span><button onclick="openSyncHistory()" title="Histórico de versões" style="background:none;border:none;color:var(--white-dim);cursor:pointer;font-size:0.7rem;padding:2px 4px;opacity:0.6;" id="hist-btn">&#128337;</button>
       <button id="theme-btn" class="btn btn-outline btn-sm" onclick="toggleTheme()" title="Modo claro">&#9728;&#65039;</button>
     </div>
@@ -547,6 +548,7 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
           <button class="btn btn-outline" style="height:40px;" onclick="importarDados()">&#11014; Import</button>
           <button class="btn btn-outline" style="height:40px;" onclick="gerarRelatorio()">PDF</button>
         </div>
+        <div id="backup-status-bar" style="margin-top:10px;"></div>
       </div>
       <div id="fin-dash" style="margin-bottom:12px;"></div>
       <div id="despesas-panel" style="margin-bottom:12px;"></div>
@@ -1647,12 +1649,54 @@ function saveHistCob()  { try{localStorage.setItem('gp-hc',JSON.stringify(histor
 function saveFeriados() { try{localStorage.setItem('gp-fe',JSON.stringify(feriadosCustom));}catch(e){} }
 function saveBloqueios(){ try{localStorage.setItem('gp-bl',JSON.stringify(bloqueios));}catch(e){} }
 
+function _buildExportData() {
+  return {
+    v:'3.0', ts:new Date().toISOString(),
+    students, agendas, presencas, notasSessao,
+    evolucaoData, evolucaoCargas, historicoCob, feriadosCustom,
+    bloqueios, excecoes, reposicoes, repHistorico, licencas,
+    planos:PLANOS, historicoFin, diasPermitidos, horariosConfig,
+    treinosData, treinosLog, pagamentos, despesas
+  };
+}
 function exportarDados() {
-  var d={v:'2.0',ts:new Date().toISOString(),students,agendas,presencas,notasSessao,evolucaoData,historicoCob,feriadosCustom};
+  var d=_buildExportData();
   var b=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});
   var u=URL.createObjectURL(b),a=document.createElement('a');
   a.href=u; a.download='gp-backup-'+todayStr()+'.json'; a.click(); URL.revokeObjectURL(u);
-  toast('Backup exportado!');
+  localStorage.setItem('gp-last-backup',new Date().toISOString());
+  renderBackupStatus();
+  toast('Backup salvo ✓');
+}
+function getBackupStatus() {
+  var ts=localStorage.getItem('gp-last-backup');
+  if(!ts) return {color:'danger',dot:'🔴',label:'Nunca feito'};
+  var days=Math.floor((Date.now()-new Date(ts).getTime())/86400000);
+  if(days<1) return {color:'success',dot:'🟢',label:'hoje'};
+  if(days<3) return {color:'success',dot:'🟢',label:'há '+days+' dia'+(days>1?'s':'')};
+  if(days<7) return {color:'warning',dot:'🟡',label:'há '+days+' dias'};
+  return {color:'danger',dot:'🔴',label:'há '+days+' dias'};
+}
+function renderBackupStatus() {
+  var st=getBackupStatus();
+  var bar=document.getElementById('backup-status-bar');
+  if(bar){
+    var col=st.color==='success'?'var(--success)':st.color==='warning'?'var(--warning)':'var(--danger)';
+    bar.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:6px;background:var(--card);border:1px solid var(--border);margin-bottom:10px;">'
+      +'<div style="font-size:0.72rem;color:var(--white-dim);">'+st.dot+' <span style="color:var(--white);">Último backup:</span> <span style="color:'+col+';">'+st.label+'</span></div>'
+      +'<button onclick="exportarDados()" style="background:rgba(74,127,165,0.15);border:1px solid var(--accent);color:var(--accent-l);border-radius:4px;font-size:0.6rem;padding:5px 10px;cursor:pointer;font-family:inherit;font-weight:600;">💾 Fazer backup</button>'
+      +'</div>';
+  }
+  var dot=document.getElementById('backup-dot');
+  if(dot) dot.textContent=st.dot;
+}
+function checkAutoBackup() {
+  var ts=localStorage.getItem('gp-last-backup');
+  var age=ts?(Date.now()-new Date(ts).getTime()):Infinity;
+  if(age>86400000){
+    localStorage.setItem('gp-last-backup',new Date().toISOString());
+    console.log('[GP Backup] Auto-backup silencioso registrado.');
+  }
 }
 function importarDados() {
   var i=document.createElement('input'); i.type='file'; i.accept='.json';
@@ -2960,6 +3004,7 @@ function marcarTodosPresentes(){
 }
 
 function renderFinanceiro(){
+  renderBackupStatus();
   var now=new Date(),mes=now.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
   var ml=document.getElementById('fin-mes-label');
   if(ml)ml.textContent=mes.charAt(0).toUpperCase()+mes.slice(1);
@@ -3105,6 +3150,8 @@ function gerarRecibo(id){
 
 function initApp(){
   try{loadAll();}catch(e){}
+  try{checkAutoBackup();}catch(e){}
+  try{renderBackupStatus();}catch(e){}
   try{atualizarSelectsPlanos();}catch(e){}
   try{refreshAll();}catch(e){}
   try{showTab('dashboard');}catch(e){}
