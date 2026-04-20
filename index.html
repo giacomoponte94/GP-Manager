@@ -1664,7 +1664,9 @@ function exportarDados() {
   var b=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});
   var u=URL.createObjectURL(b),a=document.createElement('a');
   a.href=u; a.download='gp-backup-'+todayStr()+'.json'; a.click(); URL.revokeObjectURL(u);
-  localStorage.setItem('gp-last-backup',new Date().toISOString());
+  var now=new Date().toISOString();
+  localStorage.setItem('gp-last-backup',now);
+  localStorage.setItem('gp-last-manual-backup',now);
   renderBackupStatus();
   toast('Backup salvo ✓');
 }
@@ -1677,25 +1679,43 @@ function getBackupStatus() {
   if(days<7) return {color:'warning',dot:'🟡',label:'há '+days+' dias'};
   return {color:'danger',dot:'🔴',label:'há '+days+' dias'};
 }
+function _getAutoBackups() {
+  try{return JSON.parse(localStorage.getItem('gp-auto-backups')||'[]');}catch(e){return [];}
+}
 function renderBackupStatus() {
   var st=getBackupStatus();
   var bar=document.getElementById('backup-status-bar');
   if(bar){
     var col=st.color==='success'?'var(--success)':st.color==='warning'?'var(--warning)':'var(--danger)';
-    var autoRow='';
-    try{
-      var ab=JSON.parse(localStorage.getItem('gp-auto-backup')||'null');
-      if(ab&&ab.createdAt){
-        var abDate=new Date(ab.createdAt).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-        autoRow='<div style="margin-top:6px;font-size:0.68rem;color:var(--white-dim);border-top:1px solid var(--border);padding-top:6px;">'
-          +'💽 <span style="color:var(--success);">Backup interno disponível</span> · '+abDate+'</div>';
-      }
-    }catch(e){}
+    // Aviso de backup manual atrasado
+    var warnRow='';
+    var mts=localStorage.getItem('gp-last-manual-backup');
+    if(!mts){
+      warnRow='<div style="margin-top:6px;padding:7px 10px;border-radius:4px;background:rgba(231,76,60,0.08);border:1px solid rgba(231,76,60,0.2);font-size:0.68rem;color:var(--danger);">⚠️ Nenhum backup manual feito ainda. Exporte seus dados agora.</div>';
+    } else {
+      var mDays=Math.floor((Date.now()-new Date(mts).getTime())/86400000);
+      if(mDays>=5) warnRow='<div style="margin-top:6px;padding:7px 10px;border-radius:4px;background:rgba(231,76,60,0.08);border:1px solid rgba(231,76,60,0.2);font-size:0.68rem;color:var(--danger);">⚠️ Sem backup manual há '+mDays+' dias. Recomendamos exportar agora.</div>';
+    }
+    // Lista de snapshots internos
+    var snaps=_getAutoBackups();
+    var snapRows='';
+    if(snaps.length){
+      snapRows='<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">'
+        +'<div style="font-size:0.6rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--white-dim);margin-bottom:6px;">💽 Backups internos ('+snaps.length+'/3)</div>';
+      snaps.forEach(function(s,i){
+        var dt=new Date(s.createdAt).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+        snapRows+='<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;'+(i<snaps.length-1?'border-bottom:1px solid rgba(74,127,165,0.08);':'')+'">'
+          +'<span style="font-size:0.68rem;color:var(--white-dim);">'+dt+(s.sizeKB?' · '+s.sizeKB+' KB':'')+'</span>'
+          +'<button onclick="restaurarAutoBackup('+i+')" style="background:none;border:1px solid rgba(231,76,60,0.35);color:var(--danger);border-radius:3px;font-size:0.58rem;padding:3px 8px;cursor:pointer;font-family:inherit;">↩ Restaurar</button>'
+          +'</div>';
+      });
+      snapRows+='</div>';
+    }
     bar.innerHTML='<div style="padding:10px 14px;border-radius:6px;background:var(--card);border:1px solid var(--border);margin-bottom:10px;">'
       +'<div style="display:flex;align-items:center;justify-content:space-between;">'
       +'<div style="font-size:0.72rem;color:var(--white-dim);">'+st.dot+' <span style="color:var(--white);">Último backup:</span> <span style="color:'+col+';">'+st.label+'</span></div>'
       +'<button onclick="exportarDados()" style="background:rgba(74,127,165,0.15);border:1px solid var(--accent);color:var(--accent-l);border-radius:4px;font-size:0.6rem;padding:5px 10px;cursor:pointer;font-family:inherit;font-weight:600;">💾 Fazer backup</button>'
-      +'</div>'+autoRow+'</div>';
+      +'</div>'+warnRow+snapRows+'</div>';
   }
   var dot=document.getElementById('backup-dot');
   if(dot) dot.textContent=st.dot;
@@ -1706,14 +1726,49 @@ function checkAutoBackup() {
   if(age>86400000) saveAutoBackup();
 }
 function saveAutoBackup() {
+  if(!students||!students.length){console.warn('[Backup] dados inválidos, snapshot cancelado');return;}
   var now=new Date().toISOString();
   try{
-    localStorage.setItem('gp-auto-backup',JSON.stringify({createdAt:now,data:_buildExportData()}));
+    var d=_buildExportData();
+    var json=JSON.stringify(d);
+    var sizeKB=Math.round(json.length/1024*10)/10;
+    var snap={createdAt:now,data:d,sizeKB:sizeKB};
+    var list=_getAutoBackups();
+    list.unshift(snap);
+    if(list.length>3) list=list.slice(0,3);
+    localStorage.setItem('gp-auto-backups',JSON.stringify(list));
+    localStorage.setItem('gp-auto-backup',JSON.stringify(snap)); // compat
     localStorage.setItem('gp-last-backup',now);
-    console.log('[Backup] snapshot automático salvo');
+    console.log('[Backup] snapshot salvo · '+sizeKB+' KB · slot '+list.length+'/3');
   }catch(e){
     console.warn('[Backup] falha ao salvar snapshot:',e);
   }
+}
+function restaurarAutoBackup(idx) {
+  var list=_getAutoBackups();
+  var snap=list[idx];
+  if(!snap||!snap.data||!Array.isArray(snap.data.students)){alert('Snapshot inválido.');return;}
+  var dt=new Date(snap.createdAt).toLocaleString('pt-BR');
+  if(!confirm('Restaurar backup de '+dt+'?\n\nIsso substituirá todos os dados atuais.')) return;
+  var src=snap.data;
+  students=src.students||[]; agendas=src.agendas||[]; presencas=src.presencas||{};
+  notasSessao=src.notasSessao||{}; evolucaoData=src.evolucaoData||{}; evolucaoCargas=src.evolucaoCargas||{};
+  historicoCob=src.historicoCob||{}; feriadosCustom=src.feriadosCustom||{}; bloqueios=src.bloqueios||{};
+  excecoes=src.excecoes||{}; reposicoes=src.reposicoes||{}; repHistorico=src.repHistorico||{};
+  licencas=src.licencas||{}; historicoFin=src.historicoFin||{};
+  diasPermitidos=src.diasPermitidos||[1,2,3,4,5,6]; horariosConfig=src.horariosConfig||{};
+  treinosData=src.treinosData||{}; treinosLog=src.treinosLog||{};
+  pagamentos=src.pagamentos||[]; despesas=src.despesas||[];
+  if(src.planos&&src.planos.length) PLANOS=src.planos;
+  save(); saveAgendas(); savePresencas(); saveNotas(); saveEvolucao(); saveHistCob();
+  saveFeriados(); saveBloqueios(); saveTreinos(); saveTreinosLog();
+  try{localStorage.setItem('gp-pagamentos',JSON.stringify(pagamentos));}catch(e){}
+  try{localStorage.setItem('gp-desp',JSON.stringify(despesas));}catch(e){}
+  try{localStorage.setItem('gp-hfin',JSON.stringify(historicoFin));}catch(e){}
+  try{localStorage.setItem('gp-hconf',JSON.stringify(horariosConfig));}catch(e){}
+  try{localStorage.setItem('gp-dias-perm',JSON.stringify(diasPermitidos));}catch(e){}
+  try{localStorage.setItem('gp-planos',JSON.stringify(PLANOS));}catch(e){}
+  refreshAll(); renderBackupStatus(); toast('Backup restaurado ✓');
 }
 function importarDados() {
   var i=document.createElement('input'); i.type='file'; i.accept='.json';
