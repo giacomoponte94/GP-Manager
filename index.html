@@ -847,7 +847,15 @@ function _pushCol(lsKey){
     try{
       await _colsRef.child(col).set(payload);
       delete _colPushing[col];
-      console.log('[GP Sync] Push '+col+' confirmado');
+      // Captura serverTs real atribuído pelo Firebase (complemento ao echo detection)
+      _colsRef.child(col).once('value').then(function(snap){
+        var v=snap.val();
+        if(v&&v.serverTs){
+          _colServerTs[col]=v.serverTs;
+          try{ localStorage.setItem('gp-cts-'+col,String(v.serverTs)); }catch(e){}
+          console.log('[GP Sync] Push '+col+' confirmado — serverTs='+v.serverTs);
+        }
+      }).catch(function(){});
       var anyBusy=Object.keys(_COL_MAP).some(function(k){ var c=_COL_MAP[k]; return _colTimers[c]||_colPushing[c]; });
       if(!anyBusy){ _setSyncStatus('ok'); try{ localStorage.removeItem('gp-dirty'); }catch(e){} }
       _saveHistory();
@@ -875,20 +883,23 @@ window.testFirebaseWrite = async function(){
 // force=true ignora proteção de timestamp (forceSyncFromCloud, restoreHistory)
 function _applyCol(col, lsKey, colData, force){
   if(!colData||colData.data===undefined||colData.data===null) return;
-  var lts=colData.localTs||0;
-  var localLts=_colLocalTs[col]||0;
-  if(!force && lts && lts<=localLts){
-    console.log('[GP Sync] APPLY ignorado (cloud antigo):', col, 'cloud.lts='+lts+' local.lts='+localLts);
+  var cloudSts=colData.serverTs||0; var localSts=_colServerTs[col]||0;
+  var cloudLts=colData.localTs||0;  var localLts=_colLocalTs[col]||0;
+  // 1º serverTs (Firebase) — mais confiável; 2º localTs como fallback
+  var cloudIsOld = (cloudSts&&localSts) ? (cloudSts<=localSts) : !!(cloudLts&&cloudLts<=localLts);
+  if(!force && cloudIsOld){
+    console.log('[GP Sync] APPLY ignorado (cloud antigo):', col,
+      'cloud.sts='+cloudSts+' local.sts='+localSts+' cloud.lts='+cloudLts+' local.lts='+localLts);
     return;
   }
-  console.log('[GP Sync] APPLY aceito (novo):', col, 'cloud.lts='+lts+' local.lts='+localLts);
+  console.log('[GP Sync] APPLY aceito (novo):', col,
+    'cloud.sts='+cloudSts+' local.sts='+localSts+' cloud.lts='+cloudLts+' local.lts='+localLts);
   _applyingCloud=true;
   try{ localStorage.setItem(lsKey,colData.data); }catch(e){}
   _applyingCloud=false;
-  var sts=colData.serverTs||0;
-  _colServerTs[col]=sts;
-  _colLocalTs[col]=lts||localLts; // nunca regride o timestamp local
-  try{ localStorage.setItem('gp-cts-'+col,String(sts)); }catch(e){}
+  _colServerTs[col]=cloudSts||localSts; // nunca regride
+  _colLocalTs[col] =cloudLts||localLts;
+  try{ localStorage.setItem('gp-cts-'+col,String(_colServerTs[col])); }catch(e){}
   try{ localStorage.setItem('gp-lts-'+col,String(_colLocalTs[col])); }catch(e){}
 }
 
@@ -906,8 +917,10 @@ function _listenCol(col, lsKey){
       return;
     }
     if(_colTimers[col]||_colPushing[col]){ console.log('[GP Sync] '+col+' push pendente — ignorando'); return; }
-    var cloudIsNewer=(sts&&sts>(_colServerTs[col]||0))||(lts&&lts>(_colLocalTs[col]||0));
-    if(!cloudIsNewer){ console.log('[GP Sync] '+col+' já atualizado'); return; }
+    var localSts=_colServerTs[col]||0; var localLts=_colLocalTs[col]||0;
+    // 1º serverTs; 2º localTs como fallback
+    var cloudIsNewer=(sts&&localSts) ? (sts>localSts) : !!(lts&&lts>localLts);
+    if(!cloudIsNewer){ console.log('[GP Sync] '+col+' já atualizado — sts='+sts+'/'+localSts+' lts='+lts+'/'+localLts); return; }
     _applyCol(col,lsKey,cd);
     try{ loadAll(); }catch(e){} try{ refreshAll(); }catch(e){}
     try{ renderCalendar(); }catch(e){} try{ renderFinanceiro(); }catch(e){}
@@ -951,7 +964,9 @@ function _startSync(){
     var anyCloudNewer=false;
     Object.keys(_COL_MAP).forEach(function(lsKey){
       var col=_COL_MAP[lsKey]; var cd=allCols[col]; if(!cd) return;
-      if((cd.serverTs&&cd.serverTs>(_colServerTs[col]||0))||(cd.localTs&&cd.localTs>(_colLocalTs[col]||0))) anyCloudNewer=true;
+      var cSts=cd.serverTs||0; var lSts=_colServerTs[col]||0;
+      var cLts=cd.localTs||0;  var lLts=_colLocalTs[col]||0;
+      if((cSts&&lSts) ? (cSts>lSts) : (cLts&&cLts>lLts)) anyCloudNewer=true;
     });
     console.log('[GP Sync] Startup: localHasData='+localHasData+' isDirty='+isDirty+' cloudHasData='+cloudHasData+' anyCloudNewer='+anyCloudNewer);
     if(cloudHasData&&!localHasData&&!isDirty){
@@ -962,10 +977,12 @@ function _startSync(){
       console.log('[GP Sync] dirty='+isDirty+' — enviando apenas coleções locais mais novas (protegendo dados do cloud)');
       Object.keys(_COL_MAP).forEach(function(lsKey){
         var col=_COL_MAP[lsKey]; var cd=allCols[col];
-        var cloudLts=cd?(cd.localTs||0):0;
-        var localLts=_colLocalTs[col]||0;
-        if(cloudLts>localLts){
-          console.log('[GP Sync] APPLY aceito (cloud mais novo no startup):', col, 'cloud.lts='+cloudLts+' local.lts='+localLts);
+        var cSts=cd?(cd.serverTs||0):0; var lSts=_colServerTs[col]||0;
+        var cLts=cd?(cd.localTs||0):0;  var lLts=_colLocalTs[col]||0;
+        var cloudIsNewer=(cSts&&lSts) ? (cSts>lSts) : (cLts>lLts);
+        if(cloudIsNewer){
+          console.log('[GP Sync] APPLY aceito (cloud mais novo no startup):', col,
+            'cloud.sts='+cSts+' local.sts='+lSts+' cloud.lts='+cLts+' local.lts='+lLts);
           _applyCol(col,lsKey,cd,true);
         } else {
           _pushCol(lsKey);
@@ -976,7 +993,9 @@ function _startSync(){
       console.log('[GP Sync] Aplicando coleções mais recentes');
       Object.keys(_COL_MAP).forEach(function(lsKey){
         var col=_COL_MAP[lsKey]; var cd=allCols[col]; if(!cd) return;
-        if((cd.serverTs&&cd.serverTs>(_colServerTs[col]||0))||(cd.localTs&&cd.localTs>(_colLocalTs[col]||0))) _applyCol(col,lsKey,cd);
+        var cSts=cd.serverTs||0; var lSts=_colServerTs[col]||0;
+        var cLts=cd.localTs||0;  var lLts=_colLocalTs[col]||0;
+        if((cSts&&lSts) ? (cSts>lSts) : (cLts&&cLts>lLts)) _applyCol(col,lsKey,cd);
       });
       try{ loadAll(); }catch(e){} try{ refreshAll(); }catch(e){} try{ renderCalendar(); }catch(e){} try{ renderFinanceiro(); }catch(e){}
     } else {
