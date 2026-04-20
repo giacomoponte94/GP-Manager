@@ -835,6 +835,11 @@ function _pushCol(lsKey){
     _colTimers[col]=null;
     var rawVal=localStorage.getItem(lsKey); if(rawVal===null){ delete _colPushing[col]; return; }
     var now=Date.now();
+    var lastLocalTs=_colLocalTs[col]||0;
+    if(now < lastLocalTs){
+      console.warn('[GP Sync] PUSH BLOQUEADO (dados antigos):', col, 'now='+now+' lastTs='+lastLocalTs);
+      return;
+    }
     _colLocalTs[col]=now; try{ localStorage.setItem('gp-lts-'+col,String(now)); }catch(e){}
     var payload={ data:rawVal, localTs:now, serverTs:firebase.database.ServerValue.TIMESTAMP, device:_getDeviceLabel() };
     _colPushing[col]=true;
@@ -867,16 +872,24 @@ window.testFirebaseWrite = async function(){
 };
 
 // Aplica dados de uma coleção do Firebase ao localStorage
-function _applyCol(col, lsKey, colData){
+// force=true ignora proteção de timestamp (forceSyncFromCloud, restoreHistory)
+function _applyCol(col, lsKey, colData, force){
   if(!colData||colData.data===undefined||colData.data===null) return;
+  var lts=colData.localTs||0;
+  var localLts=_colLocalTs[col]||0;
+  if(!force && lts && lts<=localLts){
+    console.log('[GP Sync] APPLY ignorado (cloud antigo):', col, 'cloud.lts='+lts+' local.lts='+localLts);
+    return;
+  }
+  console.log('[GP Sync] APPLY aceito (novo):', col, 'cloud.lts='+lts+' local.lts='+localLts);
   _applyingCloud=true;
   try{ localStorage.setItem(lsKey,colData.data); }catch(e){}
   _applyingCloud=false;
-  var sts=colData.serverTs||0; var lts=colData.localTs||0;
-  _colServerTs[col]=sts; _colLocalTs[col]=lts;
+  var sts=colData.serverTs||0;
+  _colServerTs[col]=sts;
+  _colLocalTs[col]=lts||localLts; // nunca regride o timestamp local
   try{ localStorage.setItem('gp-cts-'+col,String(sts)); }catch(e){}
-  try{ localStorage.setItem('gp-lts-'+col,String(lts));  }catch(e){}
-  console.log('[GP Sync] Recebido '+col+' serverTs='+sts+' localTs='+lts);
+  try{ localStorage.setItem('gp-lts-'+col,String(_colLocalTs[col])); }catch(e){}
 }
 
 // Listener realtime por coleção
@@ -946,8 +959,19 @@ function _startSync(){
       Object.keys(_COL_MAP).forEach(function(lsKey){ var col=_COL_MAP[lsKey]; if(allCols[col]) _applyCol(col,lsKey,allCols[col]); });
       try{ loadAll(); }catch(e){} try{ refreshAll(); }catch(e){} try{ renderCalendar(); }catch(e){} try{ renderFinanceiro(); }catch(e){}
     } else if(isDirty||(!cloudHasData&&localHasData)){
-      console.log('[GP Sync] Enviando dados locais (dirty='+isDirty+')');
-      _pushAllCols();
+      console.log('[GP Sync] dirty='+isDirty+' — enviando apenas coleções locais mais novas (protegendo dados do cloud)');
+      Object.keys(_COL_MAP).forEach(function(lsKey){
+        var col=_COL_MAP[lsKey]; var cd=allCols[col];
+        var cloudLts=cd?(cd.localTs||0):0;
+        var localLts=_colLocalTs[col]||0;
+        if(cloudLts>localLts){
+          console.log('[GP Sync] APPLY aceito (cloud mais novo no startup):', col, 'cloud.lts='+cloudLts+' local.lts='+localLts);
+          _applyCol(col,lsKey,cd,true);
+        } else {
+          _pushCol(lsKey);
+        }
+      });
+      try{ loadAll(); }catch(e){} try{ refreshAll(); }catch(e){} try{ renderCalendar(); }catch(e){} try{ renderFinanceiro(); }catch(e){}
     } else if(anyCloudNewer){
       console.log('[GP Sync] Aplicando coleções mais recentes');
       Object.keys(_COL_MAP).forEach(function(lsKey){
@@ -970,7 +994,7 @@ function forceSyncFromCloud(){
   _colsRef.once('value').then(function(snap){
     var allCols=snap.val()||{};
     if(!Object.keys(allCols).length){ _pushAllCols(); toast('Nuvem vazia \u2014 dados locais enviados.'); return; }
-    Object.keys(_COL_MAP).forEach(function(lsKey){ var col=_COL_MAP[lsKey]; if(allCols[col]) _applyCol(col,lsKey,allCols[col]); });
+    Object.keys(_COL_MAP).forEach(function(lsKey){ var col=_COL_MAP[lsKey]; if(allCols[col]) _applyCol(col,lsKey,allCols[col],true); });
     try{ loadAll(); }catch(e){} try{ refreshAll(); }catch(e){} try{ renderCalendar(); }catch(e){} try{ renderFinanceiro(); }catch(e){}
     _setSyncStatus('ok'); toast('Dados atualizados da nuvem!');
   }).catch(function(e){ _setSyncStatus('err',e); toast('Erro ao buscar dados.'); });
@@ -1035,6 +1059,11 @@ function _flushIfPending(){
     if(_colTimers[col]){ clearTimeout(_colTimers[col]); _colTimers[col]=null; }
     var rawVal=localStorage.getItem(lsKey); if(rawVal===null) return;
     var now=Date.now();
+    var lastLocalTs=_colLocalTs[col]||0;
+    if(now < lastLocalTs){
+      console.warn('[GP Sync] FLUSH BLOQUEADO (dados antigos):', col, 'now='+now+' lastTs='+lastLocalTs);
+      return;
+    }
     _colLocalTs[col]=now; try{ localStorage.setItem('gp-lts-'+col,String(now)); }catch(e){}
     _colPushing[col]=true;
     _colsRef.child(col).set({data:rawVal,localTs:now,serverTs:firebase.database.ServerValue.TIMESTAMP,device:_getDeviceLabel()})
