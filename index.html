@@ -578,7 +578,9 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
         <div><label class="form-label">Status</label><select id="f-status" class="form-sel"><option value="em dia">Ativo</option><option value="vencendo">Vencendo</option><option value="atrasado">Inativo</option></select></div>
         <div><label class="form-label">Obs. de sa&uacute;de</label><textarea id="f-obs" class="form-ta"></textarea></div>
         <div><label class="form-label">Objetivo</label><input type="text" id="f-obj" placeholder="Ex: Hipertrofia, Emagrecimento..." class="form-inp"></div>
-        <div><label class="form-label">Plano</label><select id="f-plano" onchange="autoFillValor()" class="form-sel"><option value="">&mdash;</option></select></div>
+        <div><label class="form-label">Plano</label><select id="f-plano" onchange="onStudentPlanoChange()" class="form-sel"><option value="">&mdash;</option></select></div>
+        <div id="f-categ-row"><label class="form-label">Categoria</label><select id="f-categ" onchange="onStudentPlanoChange()" class="form-sel"><option value="fixa">Agenda Fixa</option><option value="flexivel">Flex&iacute;vel</option></select></div>
+        <div id="f-qtd-row" style="display:none;"><label class="form-label">Qtd. de aulas</label><input type="number" id="f-qtd" min="1" placeholder="Ex: 10" class="form-inp" oninput="calcValorAvulsa()"></div>
         <div><label class="form-label">Modalidade</label><select id="f-modal" onchange="autoFillValor()" class="form-sel"><option value="">&mdash;</option><option value="Individual">Individual</option><option value="Duo">Duo</option></select></div>
         <div><label class="form-label">In&iacute;cio</label><input type="date" id="f-inicio" onchange="autoFillValor()" class="form-inp"></div>
         <div><label class="form-label">Vencimento</label><input type="date" id="f-venc" class="form-inp"></div>
@@ -627,9 +629,8 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
   <div class="modal" style="max-width:420px;"><div class="modal-header"><div class="modal-title" id="pf-title">Novo Plano</div><button class="modal-close" onclick="document.getElementById('modal-plano-form').style.display='none'">&#215;</button></div>
   <input type="hidden" id="pf-idx">
   <div style="margin-bottom:14px;"><label class="form-label">Nome *</label><input type="text" id="pf-nome" style="width:100%;background:var(--dark);border:1px solid var(--border);color:var(--white);padding:12px 14px;border-radius:4px;font-size:0.92rem;-webkit-appearance:none;outline:none;"></div>
-  <div style="margin-bottom:14px;"><label class="form-label">Categoria *</label><select id="pf-tipo" onchange="togglePlanoTipo()" style="width:100%;background:var(--dark);border:1px solid var(--border);color:var(--white);padding:12px 14px;border-radius:4px;-webkit-appearance:none;outline:none;"><option value="fixo">Agenda Fixa</option><option value="livre">Flex\u00edvel (sem agenda fixa)</option><option value="pacote">Pacote de aulas</option></select></div>
+  <div style="margin-bottom:14px;"><label class="form-label">Tipo *</label><select id="pf-tipo" onchange="togglePlanoTipo()" style="width:100%;background:var(--dark);border:1px solid var(--border);color:var(--white);padding:12px 14px;border-radius:4px;-webkit-appearance:none;outline:none;"><option value="fixo">Mensal</option><option value="pacote">Aula Avulsa</option></select></div>
   <div id="pf-dias-row" style="margin-bottom:14px;"><label class="form-label">Aulas por semana</label><select id="pf-dias" style="width:100%;background:var(--dark);border:1px solid var(--border);color:var(--white);padding:12px 14px;border-radius:4px;-webkit-appearance:none;outline:none;"><option value="1">1x/sem</option><option value="2">2x/sem</option><option value="3">3x/sem</option><option value="4">4x/sem</option><option value="5">5x/sem</option><option value="6">6x/sem</option></select></div>
-  <div id="pf-aulas-row" style="display:none;margin-bottom:14px;"><label class="form-label">Total de aulas *</label><input type="number" id="pf-aulas" placeholder="Ex: 10" min="1" style="width:100%;background:var(--dark);border:1px solid var(--border);color:var(--white);padding:12px 14px;border-radius:4px;-webkit-appearance:none;outline:none;"></div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
     <div><label class="form-label">Pre&ccedil;o Individual *</label><input type="number" id="pf-preco-ind" placeholder="880" style="width:100%;background:var(--dark);border:1px solid var(--border);color:var(--white);padding:12px 14px;border-radius:4px;-webkit-appearance:none;outline:none;"></div>
     <div><label class="form-label">Pre&ccedil;o extra</label><input type="number" id="pf-preco-ext" placeholder="Opcional" style="width:100%;background:var(--dark);border:1px solid var(--border);color:var(--white);padding:12px 14px;border-radius:4px;-webkit-appearance:none;outline:none;"></div>
@@ -1183,7 +1184,9 @@ function openCadastro(mode, id) {
     if(document.getElementById('f-status'))document.getElementById('f-status').value=s.status||'em dia';
     currentPhoto=s.foto||null;
     if(s.foto){var pp2=document.getElementById('f-photo-prev');if(pp2)pp2.innerHTML='<img src="'+s.foto+'" style="width:100%;height:100%;object-fit:cover;">';}
-    try{showAgendaSection();}catch(e){}
+    if(document.getElementById('f-categ')) document.getElementById('f-categ').value = s.categoria || 'fixa';
+    if(document.getElementById('f-qtd')) document.getElementById('f-qtd').value = s.qtdAulas || '';
+    try{ onStudentPlanoChange(); }catch(e){}
     var sAgs=agendas.filter(function(a){return a.alunoId===id;});
     if(sAgs.length){
       sAgs.forEach(function(ag){ag.days.forEach(function(d){var btn=document.querySelector('#f-days-picker .day-btn[data-day="'+d+'"]');if(btn)btn.classList.add('selected');});});
@@ -1510,7 +1513,8 @@ var PLANOS_DEFAULT = [
   { id:'Evolucao',      nome:'Evolução',       tipo:'fixo',   diasSemana:2, precoInd:650,  precoExt:550,  labelExt:'Duo' },
   { id:'Performance',   nome:'Performance',    tipo:'fixo',   diasSemana:3, precoInd:900,  precoExt:750,  labelExt:'Duo' },
   { id:'Transformacao', nome:'Transformação',  tipo:'fixo',   diasSemana:4, precoInd:1200, precoExt:1100, labelExt:'Duo' },
-  { id:'Elite',         nome:'Elite',          tipo:'fixo',   diasSemana:5, precoInd:1500, precoExt:1100, labelExt:'Duo' }
+  { id:'Elite',         nome:'Elite',          tipo:'fixo',   diasSemana:5, precoInd:1500, precoExt:1100, labelExt:'Duo' },
+  { id:'AulaAvulsa',    nome:'Aula Avulsa',    tipo:'pacote', aulasPacote:1, precoInd:95 }
 ];
 var PLANOS = [];
 
@@ -2153,8 +2157,9 @@ function cobrarInadimplentes(){
 
 function showAgendaSection(){
   var plano=document.getElementById('f-plano').value;
+  var categ=(document.getElementById('f-categ')&&document.getElementById('f-categ').value)||'fixa';
   var wrap=document.getElementById('f-agenda-wrap');
-  if(plano&&PLAN_DAYS[plano]){
+  if(plano&&PLAN_DAYS[plano]&&categ==='fixa'){
     wrap.style.display='';
     buildDaysPicker();
     updateDaysHint();
@@ -2290,6 +2295,8 @@ function saveStudent(){
     obs:document.getElementById('f-obs').value,
     plano,modalidade:modal,inicio,vencimento:venc,valor:String(valor),
     status:document.getElementById('f-status').value,foto:currentPhoto||null,
+    categoria:(document.getElementById('f-categ')&&document.getElementById('f-categ').value)||'fixa',
+    qtdAulas:parseInt(document.getElementById('f-qtd')&&document.getElementById('f-qtd').value)||null,
     criadoEm:editingId?(students.find(function(x){return x.id===editingId;})||{}).criadoEm:new Date().toISOString()
   };
   var days=Array.from(document.querySelectorAll('#f-days-picker .day-btn.selected')).map(function(b){return parseInt(b.dataset.day);});
@@ -2361,6 +2368,26 @@ function autoFillValor(){
     var d=new Date(document.getElementById('f-inicio').value+'T12:00:00');d.setMonth(d.getMonth()+1);
     document.getElementById('f-venc').value=d.toISOString().split('T')[0];
   }
+}
+
+function onStudentPlanoChange(){
+  var pId = document.getElementById('f-plano').value;
+  var planoS = getPlano(pId);
+  var isAvulsa = planoS && planoS.tipo === 'pacote';
+  var categRow = document.getElementById('f-categ-row');
+  var qtdRow = document.getElementById('f-qtd-row');
+  if(categRow) categRow.style.display = isAvulsa ? 'none' : '';
+  if(qtdRow) qtdRow.style.display = isAvulsa ? '' : 'none';
+  autoFillValor();
+  showAgendaSection();
+}
+function calcValorAvulsa(){
+  var pId = document.getElementById('f-plano').value;
+  var planoS = getPlano(pId);
+  if(!planoS || planoS.tipo !== 'pacote') return;
+  var qtd = parseInt(document.getElementById('f-qtd').value) || 0;
+  var preco = planoS.precoInd || 0;
+  if(qtd > 0 && preco > 0) document.getElementById('f-valor').value = qtd * preco;
 }
 
 function openDetail(id){
@@ -2917,7 +2944,7 @@ function renderSlotModal(){
         var repS=getReposicoes(s.id);
         var temQualquerRec=agendas.some(function(a){return a.alunoId===s.id;});
         var isPacote=planoS&&planoS.tipo==='pacote';
-        var isLivre =planoS&&planoS.tipo==='livre';
+        var isLivre =s.categoria==='flexivel';
         if(isPacote){
           var pk2=getAulasPacote(s.id);
           if(!pk2||pk2.restantes<=0) return null;
@@ -3290,16 +3317,15 @@ function renderConfiguracoes() {
   out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:12px;">Seus planos</div>';
 
   PLANOS.forEach(function(p, idx) {
-    var tipoLabel = p.tipo==='pacote' ? '\uD83D\uDCE6 Pacote' : p.tipo==='livre' ? '\uD83D\uDD13 Flex\u00edvel' : '\uD83D\uDCC5 Agenda Fixa';
-    var tipoColor = p.tipo==='pacote' ? 'var(--warning)' : p.tipo==='livre' ? 'var(--success)' : 'var(--accent-l)';
-    var borderCol = p.tipo==='pacote' ? 'var(--warning)' : p.tipo==='livre' ? 'var(--success)' : 'var(--accent)';
+    var tipoLabel = p.tipo==='pacote' ? '\uD83D\uDCE6 Aula Avulsa' : '\uD83D\uDCC5 Mensal';
+    var tipoColor = p.tipo==='pacote' ? 'var(--warning)' : 'var(--accent-l)';
+    var borderCol = p.tipo==='pacote' ? 'var(--warning)' : 'var(--accent)';
     out += '<div class="plano-card" data-idx="'+idx+'" style="background:var(--card);padding:14px 16px;margin-bottom:8px;border-left:3px solid '+borderCol+';cursor:pointer;" onclick="editarPlano('+idx+')">';
     out += '<div style="display:flex;justify-content:space-between;align-items:center;">';
     out += '<div>';
     out += '<div style="font-weight:600;font-size:0.9rem;color:var(--white);">'+p.nome+'</div>';
     out += '<div style="font-size:0.72rem;margin-top:3px;color:'+tipoColor+';">'+tipoLabel;
-    if(p.tipo==='fixo'||p.tipo==='livre') out += ' \u00B7 '+p.diasSemana+'x/sem';
-    if(p.tipo==='pacote') out += ' \u00B7 '+p.aulasPacote+(p.aulasPacote===1?' aula':' aulas');
+    if(p.tipo !== 'pacote') out += ' \u00B7 '+p.diasSemana+'x/sem';
     out += '</div>';
     out += '<div style="font-size:0.72rem;color:var(--white-dim);margin-top:2px;">Individual: R$ '+p.precoInd;
     if(p.precoExt) out += ' &nbsp; '+(p.labelExt||'Duo')+': R$ '+p.precoExt;
@@ -3482,15 +3508,15 @@ function editarPlano(idx) {
 }
 
 function openFormPlano(idx) {
-  var p = idx !== null ? PLANOS[idx] : { id:'', nome:'', tipo:'fixo', diasSemana:1, aulasPacote:10, precoInd:0, precoExt:0, labelExt:'Duo' };
+  var p = idx !== null ? PLANOS[idx] : { id:'', nome:'', tipo:'fixo', diasSemana:1, precoInd:0, precoExt:0, labelExt:'Duo' };
   var isNew = idx === null;
 
   var modal = document.getElementById('modal-plano-form');
   document.getElementById('pf-title').textContent = isNew ? 'Novo Plano' : 'Editar Plano';
   document.getElementById('pf-nome').value = p.nome || '';
-  document.getElementById('pf-tipo').value = p.tipo || 'fixo';
+  // Backward compat: 'livre' → show as 'fixo' in form
+  document.getElementById('pf-tipo').value = (p.tipo === 'livre') ? 'fixo' : (p.tipo || 'fixo');
   document.getElementById('pf-dias').value = p.diasSemana || 1;
-  document.getElementById('pf-aulas').value = p.aulasPacote || 10;
   document.getElementById('pf-preco-ind').value = p.precoInd || '';
   document.getElementById('pf-preco-ext').value = p.precoExt || '';
   document.getElementById('pf-label-ext').value = p.labelExt || 'Duo';
@@ -3501,15 +3527,13 @@ function openFormPlano(idx) {
 
 function togglePlanoTipo() {
   var tipo = document.getElementById('pf-tipo').value;
-  document.getElementById('pf-dias-row').style.display  = (tipo==='fixo'||tipo==='livre') ? '' : 'none';
-  document.getElementById('pf-aulas-row').style.display = tipo === 'pacote'  ? '' : 'none';
+  document.getElementById('pf-dias-row').style.display = tipo === 'fixo' ? '' : 'none';
 }
 
 function salvarPlanoForm() {
   var nome    = document.getElementById('pf-nome').value.trim();
   var tipo    = document.getElementById('pf-tipo').value;
   var dias    = parseInt(document.getElementById('pf-dias').value)  || 1;
-  var aulas   = parseInt(document.getElementById('pf-aulas').value) || 10;
   var precoI  = parseFloat(document.getElementById('pf-preco-ind').value) || 0;
   var precoE  = parseFloat(document.getElementById('pf-preco-ext').value) || 0;
   var labelE  = document.getElementById('pf-label-ext').value.trim() || 'Duo';
@@ -3519,7 +3543,7 @@ function salvarPlanoForm() {
   if (precoI <= 0) { alert('Informe o preco individual.'); return; }
 
   var id = nome.replace(/[^a-zA-Z0-9]/g, '');
-  var plano = { id:id, nome:nome, tipo:tipo, diasSemana:dias, aulasPacote:aulas, precoInd:precoI, precoExt:precoE||null, labelExt:labelE };
+  var plano = { id:id, nome:nome, tipo:tipo, diasSemana:dias, precoInd:precoI, precoExt:precoE||null, labelExt:labelE };
 
   if (idxStr !== '') {
     PLANOS[parseInt(idxStr)] = plano;
@@ -3561,7 +3585,7 @@ function atualizarSelectsPlanos() {
     PLANOS.forEach(function(p) {
       var opt = document.createElement('option');
       opt.value = p.id;
-      opt.textContent = p.nome + (p.tipo==='fixo' ? ' · '+p.diasSemana+'x/sem · Fixa' : p.tipo==='livre' ? ' · '+p.diasSemana+'x/sem · Flex\u00edvel' : ' · '+p.aulasPacote+(p.aulasPacote===1?' aula':' aulas'));
+      opt.textContent = p.nome + (p.tipo !== 'pacote' ? ' · '+p.diasSemana+'x/sem' : '');
       sel.appendChild(opt);
     });
     sel.value = current;
@@ -3573,7 +3597,7 @@ function getAulasPacote(studentId) {
   if (!s) return null;
   var p = getPlano(s.plano);
   if (!p || p.tipo !== 'pacote') return null;
-  var total = p.aulasPacote || 0;
+  var total = s.qtdAulas || p.aulasPacote || 0;
   var usadas = Object.keys(presencas).filter(function(k){
     return k.indexOf(s.id+'_')===0 && presencas[k]==='presente';
   }).length;
