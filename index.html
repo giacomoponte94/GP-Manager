@@ -748,7 +748,8 @@ var _lastPushedTs = null;
 var _pendingPush = false;
 var _initialized = false;
 var _isSyncing = false;    // true durante startCloudSync; adia push (não bloqueia gp-dirty)
-var _lastServerTs = 0;    // [1][6] último serverTs confirmado pelo Firebase (ms epoch)
+var _lastServerTs = 0;    // último serverTs confirmado pelo Firebase (ms epoch)
+var _lastLocalTs  = parseInt(localStorage.getItem('gp-last-local-ts')||'0',10)||0; // relógio local do último push
 var _lastHistoryTs = 0;
 var _startupComplete = false;
 
@@ -823,19 +824,19 @@ function _pushToCloud(){
   console.log('[GP Sync] Push agendado...');
   _syncTimer=setTimeout(async function(){
     _syncTimer=null;
-    var ts=new Date().toISOString();
+    var now=Date.now();
+    var ts=new Date(now).toISOString();
     var d=_getAllData();
-    d.ts=ts; d.device=_getDeviceLabel();
+    d.ts=ts; d.localTs=now; d.serverTs=firebase.database.ServerValue.TIMESTAMP; d.device=_getDeviceLabel();
     _lastPushedTs=ts;
     try{ localStorage.setItem('gp-last-push-ts', ts); }catch(e){}
-    console.log('[GP Sync] Enviando para Firebase — device='+d.device+' ts='+ts);
+    localStorage.setItem('gp-last-local-ts', String(now)); _lastLocalTs=now;
+    console.log('[GP Sync] PUSH DISPARADO');
     console.log('[GP Sync] payload enviado:', d);
-    console.log('[GP Sync] dbRef:', _dbRef);
+    console.log('[GP Sync] localTs enviado:', d.localTs);
     if(!_dbRef){ console.error('[GP Sync] ERRO: _dbRef undefined'); return; }
     try {
-      console.log('[GP Sync] enviando update...');
-      await _dbRef.update(d); // [4] update: preserva campos não enviados; não sobrescreve o doc inteiro
-      console.log('[GP Sync] update FINALIZADO');
+      await _dbRef.update(d);
       _pendingPush=false;
       _setSyncStatus('ok');
       _saveHistory(d);
@@ -889,12 +890,15 @@ function _applyCloud(data){
     console.log('[GP Sync] Push pendente — ignorando dado remoto de '+(data.device||'?'));
     return;
   }
-  // [5] rejeitar dado se serverTs for menor/igual ao último confirmado localmente
-  if(data.serverTs && _lastServerTs>0 && data.serverTs<=_lastServerTs){
-    console.log('[GP Sync] Dado antigo rejeitado (serverTs '+data.serverTs+' <= local '+_lastServerTs+')');
+  // rejeitar dado se for realmente antigo — ambos os timestamps devem ser stale
+  console.log('[GP Sync] Comparação:','cloud.serverTs=',data.serverTs,'local.serverTs=',_lastServerTs,'cloud.localTs=',data.localTs,'local.localTs=',_lastLocalTs);
+  var serverTsStale = data.serverTs && _lastServerTs>0 && data.serverTs<=_lastServerTs;
+  var localTsStale  = data.localTs  && _lastLocalTs>0  && data.localTs<=_lastLocalTs;
+  if(serverTsStale && (!data.localTs||localTsStale)){
+    console.log('[GP Sync] Dado antigo rejeitado (serverTs='+data.serverTs+'/localTs='+data.localTs+')');
     return;
   }
-  console.log('[GP Sync] Recebendo dados de '+(data.device||'?')+' (ts='+data.ts+' serverTs='+data.serverTs+')');
+  console.log('[GP Sync] Recebendo dados de '+(data.device||'?')+' (ts='+data.ts+' serverTs='+data.serverTs+' localTs='+data.localTs+')');
   if(data.ts) _lastPushedTs=data.ts;
   _applyingCloud=true;
   Object.keys(_SYNC_KEYS).forEach(function(field){
@@ -907,19 +911,24 @@ function _applyCloud(data){
   try{ renderFinanceiro(); }catch(e){}
   _applyingCloud=false;
   _setSyncStatus('ok');
-  // [6] salvar serverTs confirmado
   if(data.serverTs){ _lastServerTs=data.serverTs; try{localStorage.setItem('gp-last-server-ts',String(data.serverTs));}catch(e){} }
-  console.log('[GP Sync] ✓ Dados remotos aplicados ao localStorage (serverTs='+data.serverTs+')');
+  if(data.localTs){  _lastLocalTs=data.localTs;   try{localStorage.setItem('gp-last-local-ts', String(data.localTs));}catch(e){} }
+  console.log('[GP Sync] ✓ Dados remotos aplicados (serverTs='+data.serverTs+' localTs='+data.localTs+')');
 }
 
 function _registerRealtimeListener(){
   _dbRef.on('value',function(snapshot){
+    console.log('[GP Sync] Listener ativo');
     if(!_initialized) return;
     var data=snapshot.val();
     if(!data) return;
+    console.log('[GP Sync] Recebido do Firebase serverTs:', data.serverTs);
+    console.log('[GP Sync] Recebido do Firebase localTs:', data.localTs);
     if(data.ts && data.ts===_lastPushedTs){
-      // [6] capturar serverTs do eco do próprio push antes de descartar
-      if(data.serverTs){ _lastServerTs=data.serverTs; try{localStorage.setItem('gp-last-server-ts',String(data.serverTs));}catch(e){} console.log('[GP Sync] serverTs do push próprio capturado: '+data.serverTs); }
+      // capturar serverTs+localTs do eco do próprio push antes de descartar
+      if(data.serverTs){ _lastServerTs=data.serverTs; try{localStorage.setItem('gp-last-server-ts',String(data.serverTs));}catch(e){} }
+      if(data.localTs){  _lastLocalTs=data.localTs;  try{localStorage.setItem('gp-last-local-ts', String(data.localTs));}catch(e){} }
+      console.log('[GP Sync] Eco próprio capturado — serverTs='+data.serverTs+' localTs='+data.localTs);
       return;
     }
     if(_pendingPush||_syncTimer) return;
@@ -930,8 +939,8 @@ function _registerRealtimeListener(){
 
 function startCloudSync(){
   _isSyncing=true;
-  // [1] restaurar serverTs salvo localmente para comparações
   try{ _lastServerTs=parseInt(localStorage.getItem('gp-last-server-ts')||'0',10)||0; }catch(e){}
+  try{ _lastLocalTs=parseInt(localStorage.getItem('gp-last-local-ts')||'0',10)||0; }catch(e){}
   console.log('[GP Sync] Iniciando sincronização com Firebase...');
   _dbRef.once('value').then(function(snapshot){
     var cloudData=snapshot.val();
@@ -939,16 +948,14 @@ function startCloudSync(){
     try{ localTs=localStorage.getItem('gp-last-push-ts')||''; }catch(e){}
     var isDirty=false;
     try{ isDirty=localStorage.getItem('gp-dirty')==='1'; }catch(e){}
-    // [3] detectar localStorage vazio (ex: iOS limpou storage)
     var localHasData=false;
     try{ var _s=localStorage.getItem('gp-s'); localHasData=_s!==null&&_s!=='[]'&&_s!==''; }catch(e){}
     var cloudSts=(cloudData&&cloudData.serverTs)||0;
+    var cloudLts=(cloudData&&cloudData.localTs)||0;
 
-    console.log('[GP Sync] Startup: dirty='+isDirty+' | localTs='+localTs+' | cloudTs='+(cloudData&&cloudData.ts||'(vazio)')+' | localSts='+_lastServerTs+' | cloudSts='+cloudSts);
+    console.log('[GP Sync] Startup: dirty='+isDirty+' | localTs='+localTs+' | cloudTs='+(cloudData&&cloudData.ts||'(vazio)')+' | localSts='+_lastServerTs+' | cloudSts='+cloudSts+' | localLts='+_lastLocalTs+' | cloudLts='+cloudLts);
 
-    // [3] localStorage vazio e cloud tem dados: aplicar cloud sem comparar timestamps
-    if(cloudData&&cloudData.ts&&!localHasData&&!isDirty){
-      console.log('[GP Sync] localStorage vazio — aplicando cloud imediatamente');
+    function _applyCloudInline(){
       _lastPushedTs=cloudData.ts;
       _applyingCloud=true;
       Object.keys(_SYNC_KEYS).forEach(function(field){
@@ -962,6 +969,13 @@ function startCloudSync(){
       _applyingCloud=false;
       _setSyncStatus('ok');
       if(cloudSts){ _lastServerTs=cloudSts; try{localStorage.setItem('gp-last-server-ts',String(cloudSts));}catch(e){} }
+      if(cloudLts){ _lastLocalTs=cloudLts;  try{localStorage.setItem('gp-last-local-ts', String(cloudLts));}catch(e){} }
+    }
+
+    // localStorage vazio e cloud tem dados: aplicar cloud sem comparar timestamps
+    if(cloudData&&cloudData.ts&&!localHasData&&!isDirty){
+      console.log('[GP Sync] localStorage vazio — aplicando cloud imediatamente');
+      _applyCloudInline();
       _initialized=true; _isSyncing=false;
       _registerRealtimeListener();
       return;
@@ -971,34 +985,22 @@ function startCloudSync(){
       console.log('[GP Sync] Nuvem vazia — enviando dados locais');
       _initialized=true; _isSyncing=false;
       _pushToCloud();
-    } else if(cloudSts>0&&_lastServerTs>0&&cloudSts===_lastServerTs&&!isDirty){
-      // Já sincronizado: serverTs iguais e sem alterações locais — não fazer nada
-      console.log('[GP Sync] Já em sincronia (serverTs='+cloudSts+') — nenhuma ação');
+    } else if(cloudSts>0&&_lastServerTs>0&&cloudSts===_lastServerTs&&(!cloudLts||cloudLts<=_lastLocalTs)&&!isDirty){
+      // Já em sincronia: serverTs iguais e localTs não avançou
+      console.log('[GP Sync] Já em sincronia (serverTs='+cloudSts+' localTs='+cloudLts+') — nenhuma ação');
       _lastPushedTs=cloudData.ts;
       _setSyncStatus('ok');
       _initialized=true; _isSyncing=false;
     } else {
-      // [1] usar serverTs se ambos disponíveis; senão usar ts string como fallback
-      var localIsNewer=(cloudSts>0&&_lastServerTs>0) ? _lastServerTs>cloudSts : (localTs&&localTs>cloudData.ts);
-      if(isDirty||localIsNewer){
-        console.log('[GP Sync] Local mais recente ou não sincronizado — enviando local (dirty='+isDirty+' localSts='+_lastServerTs+' cloudSts='+cloudSts+')');
+      // cloud é mais novo se serverTs ou localTs avançou além do que temos
+      var cloudIsNewer = ((cloudSts&&cloudSts>_lastServerTs)||(cloudLts&&cloudLts>_lastLocalTs));
+      if(isDirty||!cloudIsNewer){
+        console.log('[GP Sync] Local mais recente ou não sincronizado — enviando local (dirty='+isDirty+' localSts='+_lastServerTs+'/'+cloudSts+' localLts='+_lastLocalTs+'/'+cloudLts+')');
         _initialized=true; _isSyncing=false;
         _pushToCloud();
       } else {
-        console.log('[GP Sync] Cloud mais recente — aplicando cloud (cloudSts='+cloudSts+' > localSts='+_lastServerTs+')');
-        _lastPushedTs=cloudData.ts;
-        _applyingCloud=true;
-        Object.keys(_SYNC_KEYS).forEach(function(field){
-          if(cloudData[field]!==undefined&&cloudData[field]!==null&&cloudData[field]!=='')
-            try{ localStorage.setItem(_SYNC_KEYS[field],cloudData[field]); }catch(e){}
-        });
-        try{ loadAll(); }catch(e){}
-        try{ refreshAll(); }catch(e){}
-        try{ renderCalendar(); }catch(e){}
-        try{ renderFinanceiro(); }catch(e){}
-        _applyingCloud=false;
-        _setSyncStatus('ok');
-        if(cloudSts){ _lastServerTs=cloudSts; try{localStorage.setItem('gp-last-server-ts',String(cloudSts));}catch(e){} }
+        console.log('[GP Sync] Cloud mais recente — aplicando cloud (cloudSts='+cloudSts+' cloudLts='+cloudLts+')');
+        _applyCloudInline();
         _initialized=true;
         _isSyncing=false;
         var postDirty=false;
@@ -1066,11 +1068,11 @@ function restoreHistory(key){
   var orig=localStorage.setItem.bind(localStorage);
   localStorage.setItem=function(key,val){
     orig(key,val);
-    var isDataKey=key.indexOf('gp-')===0&&key!=='gp-sess'&&key!=='gp-theme'&&key!=='gp-device-id'&&key!=='gp-last-push-ts'&&key!=='gp-last-server-ts'&&key!=='gp-dirty';
+    var isDataKey=key.indexOf('gp-')===0&&key!=='gp-sess'&&key!=='gp-theme'&&key!=='gp-device-id'&&key!=='gp-last-push-ts'&&key!=='gp-last-server-ts'&&key!=='gp-last-local-ts'&&key!=='gp-dirty';
     if(_startupComplete&&!_applyingCloud&&isDataKey){
-      console.log('[GP Sync] Edição local detectada: '+key);
-      try{ orig('gp-dirty','1'); }catch(e){}  // sempre marca dirty, independente de _isSyncing
-      if(_initialized&&!_isSyncing){ _pushToCloud(); }  // adia push durante sync inicial
+      console.log('[GP Sync] Alteração local detectada:', key);
+      try{ orig('gp-dirty','1'); }catch(e){}
+      if(_initialized){ _pushToCloud(); }
     }
   };
 })();
@@ -1080,11 +1082,14 @@ function _flushIfPending(){
   var hasPending=_pendingPush||_syncTimer||localStorage.getItem('gp-dirty')==='1';
   if(!hasPending) return;
   if(_syncTimer){ clearTimeout(_syncTimer); _syncTimer=null; }
-  var ts=new Date().toISOString();
-  var d=_getAllData(); d.ts=ts; d.device=_getDeviceLabel();
+  var now=Date.now();
+  var ts=new Date(now).toISOString();
+  var d=_getAllData(); d.ts=ts; d.localTs=now; d.serverTs=firebase.database.ServerValue.TIMESTAMP; d.device=_getDeviceLabel();
   _lastPushedTs=ts;
   try{ localStorage.setItem('gp-last-push-ts',ts); }catch(e){}
-  console.log('[GP Sync] Flush de emergência (pagehide/visibilitychange)'); // [11]
+  localStorage.setItem('gp-last-local-ts', String(now)); _lastLocalTs=now;
+  console.log('[GP Sync] PUSH DISPARADO (flush emergência)');
+  console.log('[GP Sync] localTs enviado:', now);
   try{
     _dbRef.update(d) // [4] update em vez de set
       .then(function(){ _pendingPush=false; try{ localStorage.removeItem('gp-dirty'); }catch(e){} console.log('[GP Sync] Flush confirmado'); })
@@ -1117,11 +1122,14 @@ function _onAppForeground(){
   _dbRef.once('value').then(function(snap){
     var cloud=snap.val(); if(!cloud) return;
     var cloudSts=cloud.serverTs||0;
-    if(cloudSts>_lastServerTs){
-      console.log('[GP Sync] Foreground: cloud mais recente (serverTs '+cloudSts+' > local '+_lastServerTs+') — aplicando');
+    var cloudLts=cloud.localTs||0;
+    var cloudIsNewer = (cloudSts&&cloudSts>_lastServerTs)||(cloudLts&&cloudLts>_lastLocalTs);
+    console.log('[GP Sync] Comparação:','cloud.serverTs=',cloudSts,'local.serverTs=',_lastServerTs,'cloud.localTs=',cloudLts,'local.localTs=',_lastLocalTs);
+    if(cloudIsNewer){
+      console.log('[GP Sync] Foreground: cloud mais recente — aplicando');
       _applyCloud(cloud);
     } else {
-      console.log('[GP Sync] Foreground: local atualizado (localSts '+_lastServerTs+' >= cloudSts '+cloudSts+')');
+      console.log('[GP Sync] Foreground: local atualizado (serverTs '+_lastServerTs+'>= '+cloudSts+' | localTs '+_lastLocalTs+'>= '+cloudLts+')');
     }
   }).catch(function(e){ console.warn('[GP Sync] Foreground revalidation erro:',e); });
 }
