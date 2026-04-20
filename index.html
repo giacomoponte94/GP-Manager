@@ -627,7 +627,7 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
   <div class="modal" style="max-width:420px;"><div class="modal-header"><div class="modal-title" id="pf-title">Novo Plano</div><button class="modal-close" onclick="document.getElementById('modal-plano-form').style.display='none'">&#215;</button></div>
   <input type="hidden" id="pf-idx">
   <div style="margin-bottom:14px;"><label class="form-label">Nome *</label><input type="text" id="pf-nome" style="width:100%;background:var(--dark);border:1px solid var(--border);color:var(--white);padding:12px 14px;border-radius:4px;font-size:0.92rem;-webkit-appearance:none;outline:none;"></div>
-  <div style="margin-bottom:14px;"><label class="form-label">Tipo *</label><select id="pf-tipo" onchange="togglePlanoTipo()" style="width:100%;background:var(--dark);border:1px solid var(--border);color:var(--white);padding:12px 14px;border-radius:4px;-webkit-appearance:none;outline:none;"><option value="fixo">Agenda fixa semanal</option><option value="livre">Mensal flex\u00edvel (por disponibilidade)</option><option value="pacote">Pacote de aulas</option></select></div>
+  <div style="margin-bottom:14px;"><label class="form-label">Categoria *</label><select id="pf-tipo" onchange="togglePlanoTipo()" style="width:100%;background:var(--dark);border:1px solid var(--border);color:var(--white);padding:12px 14px;border-radius:4px;-webkit-appearance:none;outline:none;"><option value="fixo">Agenda Fixa</option><option value="livre">Flex\u00edvel (sem agenda fixa)</option><option value="pacote">Pacote de aulas</option></select></div>
   <div id="pf-dias-row" style="margin-bottom:14px;"><label class="form-label">Aulas por semana</label><select id="pf-dias" style="width:100%;background:var(--dark);border:1px solid var(--border);color:var(--white);padding:12px 14px;border-radius:4px;-webkit-appearance:none;outline:none;"><option value="1">1x/sem</option><option value="2">2x/sem</option><option value="3">3x/sem</option><option value="4">4x/sem</option><option value="5">5x/sem</option><option value="6">6x/sem</option></select></div>
   <div id="pf-aulas-row" style="display:none;margin-bottom:14px;"><label class="form-label">Total de aulas *</label><input type="number" id="pf-aulas" placeholder="Ex: 10" min="1" style="width:100%;background:var(--dark);border:1px solid var(--border);color:var(--white);padding:12px 14px;border-radius:4px;-webkit-appearance:none;outline:none;"></div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
@@ -3290,7 +3290,7 @@ function renderConfiguracoes() {
   out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:12px;">Seus planos</div>';
 
   PLANOS.forEach(function(p, idx) {
-    var tipoLabel = p.tipo==='pacote' ? '\uD83D\uDCE6 Pacote' : p.tipo==='livre' ? '\uD83D\uDD13 Flex\u00edvel' : '\uD83D\uDCC5 Fixo';
+    var tipoLabel = p.tipo==='pacote' ? '\uD83D\uDCE6 Pacote' : p.tipo==='livre' ? '\uD83D\uDD13 Flex\u00edvel' : '\uD83D\uDCC5 Agenda Fixa';
     var tipoColor = p.tipo==='pacote' ? 'var(--warning)' : p.tipo==='livre' ? 'var(--success)' : 'var(--accent-l)';
     var borderCol = p.tipo==='pacote' ? 'var(--warning)' : p.tipo==='livre' ? 'var(--success)' : 'var(--accent)';
     out += '<div class="plano-card" data-idx="'+idx+'" style="background:var(--card);padding:14px 16px;margin-bottom:8px;border-left:3px solid '+borderCol+';cursor:pointer;" onclick="editarPlano('+idx+')">';
@@ -3298,8 +3298,7 @@ function renderConfiguracoes() {
     out += '<div>';
     out += '<div style="font-weight:600;font-size:0.9rem;color:var(--white);">'+p.nome+'</div>';
     out += '<div style="font-size:0.72rem;margin-top:3px;color:'+tipoColor+';">'+tipoLabel;
-    if(p.tipo==='fixo') out += ' \u00B7 '+p.diasSemana+'x/sem';
-    if(p.tipo==='livre') out += ' \u00B7 '+p.diasSemana+'x/sem';
+    if(p.tipo==='fixo'||p.tipo==='livre') out += ' \u00B7 '+p.diasSemana+'x/sem';
     if(p.tipo==='pacote') out += ' \u00B7 '+p.aulasPacote+(p.aulasPacote===1?' aula':' aulas');
     out += '</div>';
     out += '<div style="font-size:0.72rem;color:var(--white-dim);margin-top:2px;">Individual: R$ '+p.precoInd;
@@ -3562,7 +3561,7 @@ function atualizarSelectsPlanos() {
     PLANOS.forEach(function(p) {
       var opt = document.createElement('option');
       opt.value = p.id;
-      opt.textContent = p.nome + (p.tipo==='fixo' ? ' ('+p.diasSemana+'x/sem)' : p.tipo==='livre' ? ' ('+p.diasSemana+'x/sem flex)' : ' ('+p.aulasPacote+' aulas)');
+      opt.textContent = p.nome + (p.tipo==='fixo' ? ' · '+p.diasSemana+'x/sem · Fixa' : p.tipo==='livre' ? ' · '+p.diasSemana+'x/sem · Flex\u00edvel' : ' · '+p.aulasPacote+(p.aulasPacote===1?' aula':' aulas'));
       sel.appendChild(opt);
     });
     sel.value = current;
