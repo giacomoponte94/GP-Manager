@@ -1682,10 +1682,20 @@ function renderBackupStatus() {
   var bar=document.getElementById('backup-status-bar');
   if(bar){
     var col=st.color==='success'?'var(--success)':st.color==='warning'?'var(--warning)':'var(--danger)';
-    bar.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:6px;background:var(--card);border:1px solid var(--border);margin-bottom:10px;">'
+    var autoRow='';
+    try{
+      var ab=JSON.parse(localStorage.getItem('gp-auto-backup')||'null');
+      if(ab&&ab.createdAt){
+        var abDate=new Date(ab.createdAt).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+        autoRow='<div style="margin-top:6px;font-size:0.68rem;color:var(--white-dim);border-top:1px solid var(--border);padding-top:6px;">'
+          +'💽 <span style="color:var(--success);">Backup interno disponível</span> · '+abDate+'</div>';
+      }
+    }catch(e){}
+    bar.innerHTML='<div style="padding:10px 14px;border-radius:6px;background:var(--card);border:1px solid var(--border);margin-bottom:10px;">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;">'
       +'<div style="font-size:0.72rem;color:var(--white-dim);">'+st.dot+' <span style="color:var(--white);">Último backup:</span> <span style="color:'+col+';">'+st.label+'</span></div>'
       +'<button onclick="exportarDados()" style="background:rgba(74,127,165,0.15);border:1px solid var(--accent);color:var(--accent-l);border-radius:4px;font-size:0.6rem;padding:5px 10px;cursor:pointer;font-family:inherit;font-weight:600;">💾 Fazer backup</button>'
-      +'</div>';
+      +'</div>'+autoRow+'</div>';
   }
   var dot=document.getElementById('backup-dot');
   if(dot) dot.textContent=st.dot;
@@ -1693,9 +1703,16 @@ function renderBackupStatus() {
 function checkAutoBackup() {
   var ts=localStorage.getItem('gp-last-backup');
   var age=ts?(Date.now()-new Date(ts).getTime()):Infinity;
-  if(age>86400000){
-    localStorage.setItem('gp-last-backup',new Date().toISOString());
-    console.log('[GP Backup] Auto-backup silencioso registrado.');
+  if(age>86400000) saveAutoBackup();
+}
+function saveAutoBackup() {
+  var now=new Date().toISOString();
+  try{
+    localStorage.setItem('gp-auto-backup',JSON.stringify({createdAt:now,data:_buildExportData()}));
+    localStorage.setItem('gp-last-backup',now);
+    console.log('[Backup] snapshot automático salvo');
+  }catch(e){
+    console.warn('[Backup] falha ao salvar snapshot:',e);
   }
 }
 function importarDados() {
