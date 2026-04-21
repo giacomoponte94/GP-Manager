@@ -894,16 +894,25 @@ function _isDataMoreComplete(localData, cloudData){
   return localKeys >= cloudKeys;
 }
 
+// Extrai timestamp por item: prefere updatedAt (ms) > updatedAt (ISO) > ts (ms).
+function _getTs(i){
+  if(!i) return 0;
+  if(typeof i.updatedAt==='number') return i.updatedAt;
+  if(typeof i.updatedAt==='string'){ var t=Date.parse(i.updatedAt); if(!isNaN(t)) return t; }
+  if(typeof i.ts==='number') return i.ts;
+  return 0;
+}
+
 // Combina dois arrays por ID. Cloud vence quando mais novo; empate desempata por deviceId.
-// Itens exclusivos de local são preservados para não perder dados.
-function _mergeById(localArr, cloudArr, getId, getTs){
+// Tombstones (deleted=true) ficam no resultado — filtrar apenas na UI.
+function _mergeById(localArr, cloudArr, getId){
   var map={};
   (localArr||[]).forEach(function(item){ map[getId(item)]=item; });
   (cloudArr||[]).forEach(function(item){
     var id=getId(item); var existing=map[id];
     if(!existing){ map[id]=item; }
     else{
-      var lTs=getTs(existing)||0; var cTs=getTs(item)||0;
+      var lTs=_getTs(existing); var cTs=_getTs(item);
       if(cTs>lTs){
         map[id]=item;
       } else if(cTs===lTs){
@@ -911,8 +920,7 @@ function _mergeById(localArr, cloudArr, getId, getTs){
       }
     }
   });
-  // Remove tombstones: item.deleted=true propagou a deleção, não precisa persistir
-  return Object.values(map).filter(function(item){ return !item.deleted; });
+  return Object.values(map); // tombstones incluídos; filtrar via _visible() na UI
 }
 
 // Merge profundo de objetos: preserva chaves aninhadas de ambos os lados; cloud vence escalares.
@@ -933,15 +941,24 @@ function _deepMerge(local, cloud){
   return result;
 }
 
-// Coleções de array que usam merge por ID
+// Coleções de array que usam merge por ID (getTs centralizado em _getTs)
 var _MERGE_ARRAY_COLS={
-  'gp-s':          { getId:function(i){return i.id;}, getTs:function(i){return i.updatedAt||(i.criadoEm?new Date(i.criadoEm).getTime():0);} },
-  'gp-a':          { getId:function(i){return i.id;}, getTs:function(i){return i.updatedAt||0;} },
-  'gp-pagamentos': { getId:function(i){return i.id;}, getTs:function(i){return i.updatedAt||(i.data?new Date(i.data).getTime():0);} },
-  'gp-planos':     { getId:function(i){return i.id;}, getTs:function(i){return i.updatedAt||0;} }
+  'gp-s':          { getId:function(i){return i.id;} },
+  'gp-a':          { getId:function(i){return i.id;} },
+  'gp-pagamentos': { getId:function(i){return i.id;} },
+  'gp-planos':     { getId:function(i){return i.id;} }
 };
 // Coleções de objeto que usam merge de chaves (local-only keys preserved, cloud wins conflicts)
 var _MERGE_OBJECT_COLS=['gp-p','gp-n','gp-rep','gp-exc','gp-bl','gp-fe'];
+
+// Diff estrutural real: detecta IDs adicionados, removidos ou tombstonados.
+function _hasStructuralDiff(local, cloud){
+  if(!Array.isArray(local)||!Array.isArray(cloud)) return false;
+  if(local.length!==cloud.length) return true;
+  var cloudIds={}; cloud.forEach(function(i){ cloudIds[i.id]=true; });
+  for(var i=0;i<local.length;i++){ if(!cloudIds[local[i].id]) return true; }
+  return false;
+}
 
 // Aplica dados de uma coleção do Firebase ao localStorage
 // force=true ignora proteção de timestamp (forceSyncFromCloud, restoreHistory)
@@ -992,10 +1009,10 @@ function _applyCol(col, lsKey, colData, force){
         var _lp=JSON.parse(_mlRaw); var _cp=JSON.parse(colData.data);
         var _mc=_MERGE_ARRAY_COLS[lsKey];
         if(_mc && Array.isArray(_lp) && Array.isArray(_cp)){
-          var _mg=_mergeById(_lp,_cp,_mc.getId,_mc.getTs);
-          console.log('[GP Sync] merge array:',col,'local:'+_lp.length+' cloud:'+_cp.length+' merged:'+_mg.length);
+          var _mg=_mergeById(_lp,_cp,_mc.getId);
+          console.log('[GP Sync] merge:',col,'local:',_lp.length,'cloud:',_cp.length,'merged:',_mg.length);
           colData=Object.assign({},colData,{data:JSON.stringify(_mg)});
-          _didMerge=true; if(_mg.length!==_cp.length) _mergeHasExtra=true;
+          _didMerge=true; if(_hasStructuralDiff(_mg,_cp)) _mergeHasExtra=true;
         } else if(_MERGE_OBJECT_COLS.indexOf(lsKey)!==-1 && _lp&&typeof _lp==='object'&&!Array.isArray(_lp) && _cp&&typeof _cp==='object'&&!Array.isArray(_cp)){
           var _mo=_deepMerge(_lp,_cp); // merge profundo: chaves aninhadas preservadas; cloud vence escalares
           var _mk=Object.keys(_mo).length; var _ck=Object.keys(_cp).length;
@@ -1538,7 +1555,7 @@ function buildDaysPicker() {
 function loadExcecoes(){try{var e=localStorage.getItem('gp-exc');if(e)excecoes=JSON.parse(e);}catch(e){}}
 function saveExcecoes(){try{localStorage.setItem('gp-exc',JSON.stringify(excecoes));}catch(e){}}
 function getExcecao(ds){if(!excecoes[ds])excecoes[ds]={removidos:[],adicionados:[]};return excecoes[ds];}
-function getAgendasParaData(dateStr){var d=new Date(dateStr+'T12:00:00'),dow=d.getDay();var exc=excecoes[dateStr]||{removidos:[],adicionados:[]};var rem=exc.removidos||[],add=exc.adicionados||[];var rec=agendas.filter(function(a){return a.days.includes(dow)&&rem.indexOf(a.id)===-1;});var ext=(add).map(function(x,i){return{id:dateStr+'_extra_'+i,alunoId:x.alunoId,inicio:x.inicio,fim:x.fim,days:[dow],_extra:true,_extraIdx:i,tipo:x.tipo||'extra'};});return rec.concat(ext);}
+function getAgendasParaData(dateStr){var d=new Date(dateStr+'T12:00:00'),dow=d.getDay();var exc=excecoes[dateStr]||{removidos:[],adicionados:[]};var rem=exc.removidos||[],add=exc.adicionados||[];var rec=agendas.filter(function(a){return !a.deleted&&a.days.includes(dow)&&rem.indexOf(a.id)===-1;});var ext=(add).map(function(x,i){return{id:dateStr+'_extra_'+i,alunoId:x.alunoId,inicio:x.inicio,fim:x.fim,days:[dow],_extra:true,_extraIdx:i,tipo:x.tipo||'extra'};});return rec.concat(ext);}
 function removerDeData(agId,dateStr){var exc=getExcecao(dateStr);var m=/.*_extra_(\d+)$/.exec(agId);if(m){var idx2=parseInt(m[1]);if(exc.adicionados&&exc.adicionados[idx2])exc.adicionados.splice(idx2,1);}else{if(exc.removidos.indexOf(agId)===-1)exc.removidos.push(agId);}saveExcecoes();}
 function adicionarEmData(alunoId,inicio,dateStr,tipo){var h=parseInt(inicio.split(':')[0]);var fim=String((h+1)%24).padStart(2,'0')+':00';var exc=getExcecao(dateStr);if(!exc.adicionados)exc.adicionados=[];exc.adicionados.push({alunoId:alunoId,inicio:inicio,fim:fim,tipo:tipo||'extra'});saveExcecoes();}
 
@@ -1699,7 +1716,7 @@ function syncPlanLegacy() {
   PLAN_PRICES = {};
   PLAN_DAYS   = {};
   PLAN_NAMES  = [];
-  PLANOS.forEach(function(p) {
+  _visible(PLANOS).forEach(function(p) {
     PLAN_PRICES[p.id] = { Individual: p.precoInd, Duo: p.precoExt };
     PLAN_PRICES[p.id][p.labelExt || 'Duo'] = p.precoExt;
     if (p.tipo === 'fixo' || p.tipo === 'livre') PLAN_DAYS[p.id] = p.diasSemana || 1;
@@ -1749,6 +1766,9 @@ function isHoliday(date) {
   mv[k(e)]='Pascoa'; mv[k(add(e,60))]='Corpus Christi';
   return mv[mmdd]||null;
 }
+
+// Retorna apenas itens não deletados — usar em todas as renderizações
+function _visible(arr){ return (arr||[]).filter(function(i){ return !i.deleted; }); }
 
 function save() { try{localStorage.setItem('gp-s',JSON.stringify(students));}catch(e){} }
 function loadAll() {
@@ -2010,14 +2030,15 @@ function renderTable(){
   var fM=safeVal('filt-modal','');
   var dow=new Date().getDay();
   var hojeIds=filterHojeAtivo?agendas.filter(function(a){return a.days.includes(dow);}).map(function(a){return a.alunoId;}).filter(function(id,i,ar){return ar.indexOf(id)===i;}):null;
-  var f=students.filter(function(s){
+  var _vs=_visible(students);
+  var f=_vs.filter(function(s){
     var mQ=!q||s.nome.toLowerCase().includes(q)||(s.email||'').toLowerCase().includes(q);
     var mS=!fS||s.status===fS; var mP=!fP||s.plano===fP; var mM=!fM||s.modalidade===fM;
     var mH=!hojeIds||hojeIds.includes(s.id);
     return mQ&&mS&&mP&&mM&&mH;
   }).slice().sort(function(a,b){ return a.nome.localeCompare(b.nome,'pt-BR'); });
   var tbody=document.getElementById('st-tbody');
-  if(!f.length){tbody.innerHTML='<div class="empty-state"><p>'+(students.length?'Nenhum aluno encontrado.':'Nenhum aluno cadastrado.')+'</p></div>';return;}
+  if(!f.length){tbody.innerHTML='<div class="empty-state"><p>'+(_vs.length?'Nenhum aluno encontrado.':'Nenhum aluno cadastrado.')+'</p></div>';return;}
   tbody.innerHTML=f.map(function(s){
     var ini=s.nome.split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();
     var avInner=s.foto?'<img src="'+s.foto+'" alt="">':ini;
@@ -2050,9 +2071,10 @@ function renderTable(){
 }
 
 function renderStats(){
-  var tot=students.length, em=students.filter(function(s){return s.status==='em dia';}).length;
-  var ven=students.filter(function(s){return s.status==='vencendo';}).length;
-  var at=students.filter(function(s){return s.status==='atrasado';}).length;
+  var _vs=_visible(students);
+  var tot=_vs.length, em=_vs.filter(function(s){return s.status==='em dia';}).length;
+  var ven=_vs.filter(function(s){return s.status==='vencendo';}).length;
+  var at=_vs.filter(function(s){return s.status==='atrasado';}).length;
   var _stc=document.getElementById('st-count');if(_stc)_stc.textContent=tot+(tot===1?' aluno':' alunos')+' cadastrados';
   document.getElementById('stats-row').innerHTML=
     '<div class="stat-card"><div class="stat-num">'+tot+'</div><div class="stat-lbl">Total</div></div>'
@@ -2145,19 +2167,20 @@ function getAbsenceBadge(sid){
 
 function renderPaineis(){
   var hoje=new Date(),dow=hoje.getDay(),ds=todayStr();
-  var anivHoje=students.filter(function(s){
+  var _vs=_visible(students);
+  var anivHoje=_vs.filter(function(s){
     if(!s.nascimento)return false;
     var p=s.nascimento.split('-');
     return parseInt(p[1])===(hoje.getMonth()+1)&&parseInt(p[2])===hoje.getDate();
   });
-  var aRen=students.filter(function(s){
+  var aRen=_vs.filter(function(s){
     if(!s.vencimento)return false;
     var v=new Date(s.vencimento+'T12:00:00');v.setHours(0,0,0,0);
     var t=new Date();t.setHours(0,0,0,0);
     var d=Math.ceil((v-t)/86400000);
     return d>=0&&d<=7;
   }).sort(function(a,b){return new Date(a.vencimento)-new Date(b.vencimento);});
-  var ausentes=students.filter(function(s){
+  var ausentes=_vs.filter(function(s){
     var d=getDaysAbsent(s.id);return d!==null&&d>=7&&s.status!=='atrasado';
   }).sort(function(a,b){return (getDaysAbsent(b.id)||0)-(getDaysAbsent(a.id)||0);});
 
@@ -2243,24 +2266,24 @@ function waPhone(s){
 
 function renderNotifs(){
   var bar=document.getElementById('notif-bar'); if(!bar)return;
-  var notifs=[];
-  var ah=students.filter(function(s){
+  var notifs=[]; var _vs=_visible(students);
+  var ah=_vs.filter(function(s){
     if(!s.nascimento)return false;
     var p=s.nascimento.split('-'),h=new Date();
     return parseInt(p[1])===(h.getMonth()+1)&&parseInt(p[2])===h.getDate();
   });
   if(ah.length) notifs.push({p:0,icon:'',msg:'Aniversario: <strong>'+ah.map(function(s){return s.nome.split(' ')[0];}).join(', ')+'</strong>',tipo:'info',cta:null});
-  var inad=students.filter(function(s){return s.status==='atrasado';});
+  var inad=_vs.filter(function(s){return s.status==='atrasado';});
   if(inad.length){
     var vr=inad.reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
     notifs.push({p:0,icon:'',msg:'<strong>'+fmt(vr)+'</strong> em atraso \u2014 '+inad.length+' aluno'+(inad.length>1?'s':''),tipo:'danger',cta:{lbl:'Cobrar',fn:'cobrarInadimplentes()'}});
   }
-  var aus=students.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;});
+  var aus=_vs.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;});
   if(aus.length) notifs.push({p:1,icon:'!',msg:'<strong>'+aus.length+' aluno'+(aus.length>1?'s':'')+' faltando aulas agendadas</strong>',tipo:'warn',cta:null});
   var dow=new Date().getDay();
   var ds2=new Date().toISOString().split('T')[0];
   if(!isHoliday(new Date())){
-    var th=Array.from(new Set(getAgendasParaData(ds2).filter(function(a){return students.some(function(s){return s.id===a.alunoId;});}).map(function(a){return a.alunoId;})));
+    var th=Array.from(new Set(getAgendasParaData(ds2).filter(function(a){return _vs.some(function(s){return s.id===a.alunoId;});}).map(function(a){return a.alunoId;})));
     if(th.length) notifs.push({p:2,icon:'',msg:'<strong>'+th.length+' aluno'+(th.length>1?'s':'')+' agendado'+(th.length>1?'s':'')+' hoje</strong>',tipo:'info',cta:{lbl:'Ver lista',fn:'verListaHoje()'}});
   }
 
@@ -2483,8 +2506,15 @@ function saveStudent(){
   toast('Aluno salvo!');
 }
 function deleteStudent(id){
-  students=students.filter(function(x){return x.id!==id;});
-  agendas=agendas.filter(function(a){return a.alunoId!==id;});
+  var now=Date.now(); var dev=_getDeviceId();
+  students=students.map(function(x){
+    if(x.id!==id) return x;
+    return Object.assign({},x,{deleted:true,updatedAt:now,deviceId:dev});
+  });
+  agendas=agendas.map(function(a){
+    if(a.alunoId!==id) return a;
+    return Object.assign({},a,{deleted:true,updatedAt:now,deviceId:dev});
+  });
   save(); saveAgendas(); refreshAll();
 }
 function handlePhoto(e){
@@ -3450,7 +3480,7 @@ function renderConfiguracoes() {
 
   out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:12px;">Seus planos</div>';
 
-  PLANOS.forEach(function(p, idx) {
+  _visible(PLANOS).forEach(function(p, idx) {
     var tipoLabel = p.tipo==='pacote' ? '\uD83D\uDCE6 Aula Avulsa' : '\uD83D\uDCC5 Mensal';
     var tipoColor = p.tipo==='pacote' ? 'var(--warning)' : 'var(--accent-l)';
     var borderCol = p.tipo==='pacote' ? 'var(--warning)' : 'var(--accent)';
@@ -3700,7 +3730,8 @@ function excluirPlano(idx) {
     alert('Este plano esta em uso por alunos e nao pode ser excluido.');
     return;
   }
-  PLANOS.splice(idx, 1);
+  var now=Date.now(); var dev=_getDeviceId();
+  PLANOS[idx]=Object.assign({},PLANOS[idx],{deleted:true,updatedAt:now,deviceId:dev});
   savePlanos();
   syncPlanLegacy();
   atualizarSelectsPlanos();
@@ -3716,7 +3747,7 @@ function atualizarSelectsPlanos() {
     var current = sel.value;
     var isFilter = selId === 'filt-plano';
     sel.innerHTML = isFilter ? '<option value="">Todos os planos</option>' : '<option value="">\u2014</option>';
-    PLANOS.forEach(function(p) {
+    _visible(PLANOS).forEach(function(p) {
       var opt = document.createElement('option');
       opt.value = p.id;
       opt.textContent = p.nome + (p.tipo !== 'pacote' ? ' · '+p.diasSemana+'x/sem' : '');
