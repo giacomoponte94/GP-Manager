@@ -910,6 +910,24 @@ function _mergeById(localArr, cloudArr, getId, getTs){
   return Object.values(map);
 }
 
+// Merge profundo de objetos: preserva chaves aninhadas de ambos os lados; cloud vence escalares.
+function _deepMerge(local, cloud){
+  var result=Array.isArray(local)?[]:{};
+  var keys=new Set(Object.keys(local||{}).concat(Object.keys(cloud||{})));
+  keys.forEach(function(key){
+    var l=local?local[key]:undefined;
+    var c=cloud?cloud[key]:undefined;
+    if(l&&c&&typeof l==='object'&&typeof c==='object'){
+      result[key]=_deepMerge(l,c);
+    } else if(c!==undefined){
+      result[key]=c;
+    } else {
+      result[key]=l;
+    }
+  });
+  return result;
+}
+
 // Coleções de array que usam merge por ID
 var _MERGE_ARRAY_COLS={
   'gp-s':          { getId:function(i){return i.id;}, getTs:function(i){return i.criadoEm?new Date(i.criadoEm).getTime():0;} },
@@ -974,7 +992,7 @@ function _applyCol(col, lsKey, colData, force){
           colData=Object.assign({},colData,{data:JSON.stringify(_mg)});
           _didMerge=true; if(_mg.length>_cp.length) _mergeHasExtra=true;
         } else if(_MERGE_OBJECT_COLS.indexOf(lsKey)!==-1 && _lp&&typeof _lp==='object'&&!Array.isArray(_lp) && _cp&&typeof _cp==='object'&&!Array.isArray(_cp)){
-          var _mo=Object.assign({},_lp,_cp); // local-only keys preservados; cloud vence conflitos
+          var _mo=_deepMerge(_lp,_cp); // merge profundo: chaves aninhadas preservadas; cloud vence escalares
           var _mk=Object.keys(_mo).length; var _ck=Object.keys(_cp).length;
           console.log('[GP Sync] merge object:',col,'local:'+Object.keys(_lp).length+' cloud:'+_ck+' merged:'+_mk);
           colData=Object.assign({},colData,{data:JSON.stringify(_mo)});
