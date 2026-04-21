@@ -894,8 +894,8 @@ function _isDataMoreComplete(localData, cloudData){
   return localKeys >= cloudKeys;
 }
 
-// Combina dois arrays por ID. Cloud vence empates (>= ts) para preservar edições;
-// itens exclusivos de local são preservados para não perder dados.
+// Combina dois arrays por ID. Cloud vence quando mais novo; empate desempata por deviceId.
+// Itens exclusivos de local são preservados para não perder dados.
 function _mergeById(localArr, cloudArr, getId, getTs){
   var map={};
   (localArr||[]).forEach(function(item){ map[getId(item)]=item; });
@@ -904,7 +904,11 @@ function _mergeById(localArr, cloudArr, getId, getTs){
     if(!existing){ map[id]=item; }
     else{
       var lTs=getTs(existing)||0; var cTs=getTs(item)||0;
-      if(cTs>=lTs) map[id]=item; // cloud vence empate (sem updatedAt) e versões mais novas
+      if(cTs>lTs){
+        map[id]=item;
+      } else if(cTs===lTs){
+        if((item.deviceId||'')>(existing.deviceId||'')) map[id]=item;
+      }
     }
   });
   return Object.values(map);
