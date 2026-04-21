@@ -791,7 +791,11 @@ function _getDeviceLabel(){
   }catch(e){return 'Dispositivo';}
 }
 function _getDeviceId(){
-  try{ var id=localStorage.getItem('gp-device-id'); return id||_getDeviceLabel(); }catch(e){ return 'unknown'; }
+  try{
+    var id=localStorage.getItem('gp-device-id');
+    if(!id){ id='dev-'+Math.random().toString(36).slice(2)+Date.now(); localStorage.setItem('gp-device-id',id); }
+    return id;
+  }catch(e){ return 'unknown'; }
 }
 
 function _setSyncStatus(status, detail){
@@ -903,8 +907,15 @@ function _getTs(i){
   return 0;
 }
 
+// Mescla dois itens: preserva campos locais exclusivos, cloud vence em conflitos de chave.
+function _mergeItem(existing, item){
+  var result=Object.assign({},existing);
+  Object.keys(item).forEach(function(k){ result[k]=item[k]; });
+  return result;
+}
+
 // Combina dois arrays por ID. Cloud vence quando mais novo; empate desempata por deviceId.
-// Tombstones (deleted=true) ficam no resultado — filtrar apenas na UI.
+// Usa _mergeItem para nunca perder campos locais extras. Tombstones ficam no resultado.
 function _mergeById(localArr, cloudArr, getId){
   var map={};
   (localArr||[]).forEach(function(item){ map[getId(item)]=item; });
@@ -914,9 +925,9 @@ function _mergeById(localArr, cloudArr, getId){
     else{
       var lTs=_getTs(existing); var cTs=_getTs(item);
       if(cTs>lTs){
-        map[id]=item;
+        map[id]=_mergeItem(existing,item); // cloud vence, mas preserva campos locais extras
       } else if(cTs===lTs){
-        if((item.deviceId||'')>(existing.deviceId||'')) map[id]=item;
+        if((item.deviceId||'')>(existing.deviceId||'')) map[id]=_mergeItem(existing,item);
       }
     }
   });
@@ -951,13 +962,26 @@ var _MERGE_ARRAY_COLS={
 // Coleções de objeto que usam merge de chaves (local-only keys preserved, cloud wins conflicts)
 var _MERGE_OBJECT_COLS=['gp-p','gp-n','gp-rep','gp-exc','gp-bl','gp-fe'];
 
-// Diff estrutural real: detecta IDs adicionados, removidos ou tombstonados.
+// Diff estrutural real: detecta IDs adicionados/removidos E conteúdo diferente.
 function _hasStructuralDiff(local, cloud){
   if(!Array.isArray(local)||!Array.isArray(cloud)) return false;
   if(local.length!==cloud.length) return true;
-  var cloudIds={}; cloud.forEach(function(i){ cloudIds[i.id]=true; });
-  for(var i=0;i<local.length;i++){ if(!cloudIds[local[i].id]) return true; }
+  var map={}; cloud.forEach(function(i){ map[i.id]=JSON.stringify(i); });
+  for(var i=0;i<local.length;i++){
+    var l=local[i]; if(!map[l.id]) return true;
+    if(JSON.stringify(l)!==map[l.id]) return true; // campo local extra após _mergeItem
+  }
   return false;
+}
+
+// Remove tombstones mais velhos que maxAgeMs para evitar crescimento infinito de arrays.
+function _cleanupDeleted(arr, maxAgeMs){
+  var now=Date.now();
+  return (arr||[]).filter(function(i){
+    if(!i.deleted) return true;
+    var ts=_getTs(i); if(!ts) return false;
+    return (now-ts)<maxAgeMs;
+  });
 }
 
 // Aplica dados de uma coleção do Firebase ao localStorage
@@ -1700,7 +1724,7 @@ function loadPlanos() {
   try { localStorage.setItem('gp-planos', JSON.stringify(PLANOS)); } catch(e) {}
 }
 function savePlanos() {
-  localStorage.setItem('gp-planos', JSON.stringify(PLANOS));
+  localStorage.setItem('gp-planos', JSON.stringify(_cleanupDeleted(PLANOS,7*24*60*60*1000)));
 }
 function getPlano(id) {
   return PLANOS.find(function(p){ return p.id === id; }) || null;
@@ -1770,7 +1794,7 @@ function isHoliday(date) {
 // Retorna apenas itens não deletados — usar em todas as renderizações
 function _visible(arr){ return (arr||[]).filter(function(i){ return !i.deleted; }); }
 
-function save() { try{localStorage.setItem('gp-s',JSON.stringify(students));}catch(e){} }
+function save() { try{localStorage.setItem('gp-s',JSON.stringify(_cleanupDeleted(students,7*24*60*60*1000)));}catch(e){} }
 function loadAll() {
   loadPlanos(); syncPlanLegacy(); loadTreinos(); loadTreinosLog(); loadEvolucao(); loadHistoricoFin(); loadExcecoes(); loadDiasPermitidos(); loadHorariosConfig(); loadChavePix(); loadReposicoes(); loadPagamentos(); loadDespesas();
   try{var s=localStorage.getItem('gp-s');if(s)students=JSON.parse(s);}catch(e){}
@@ -1782,7 +1806,7 @@ function loadAll() {
   try{var f=localStorage.getItem('gp-fe');if(f)feriadosCustom=JSON.parse(f);}catch(e){}
   try{var b=localStorage.getItem('gp-bl');if(b)bloqueios=JSON.parse(b);}catch(e){}
 }
-function saveAgendas()  { try{localStorage.setItem('gp-a',JSON.stringify(agendas));}catch(e){} }
+function saveAgendas()  { try{localStorage.setItem('gp-a',JSON.stringify(_cleanupDeleted(agendas,7*24*60*60*1000)));}catch(e){} }
 function savePresencas(){ try{localStorage.setItem('gp-p',JSON.stringify(presencas));}catch(e){} }
 function saveNotas()    { try{localStorage.setItem('gp-n',JSON.stringify(notasSessao));}catch(e){} }
 function saveEvolucao() { try{localStorage.setItem('gp-ev',JSON.stringify(evolucaoData));}catch(e){} }
@@ -4851,7 +4875,7 @@ function loadPagamentos() {
   try { var p=localStorage.getItem('gp-pagamentos'); if(p) pagamentos=JSON.parse(p); } catch(e) {}
 }
 function savePagamentos() {
-  try { localStorage.setItem('gp-pagamentos', JSON.stringify(pagamentos)); } catch(e) {}
+  try { localStorage.setItem('gp-pagamentos', JSON.stringify(_cleanupDeleted(pagamentos,7*24*60*60*1000))); } catch(e) {}
 }
 
 /* ===== DESPESAS ===== */
