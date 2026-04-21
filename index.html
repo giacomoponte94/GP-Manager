@@ -881,6 +881,19 @@ window.testFirebaseWrite = async function(){
   }catch(e){ alert('Erro Firebase: '+e.message); console.error('TESTE DIRETO ERRO:',e); }
 };
 
+// Retorna true se localData é ao menos tão completo quanto cloudData (>= registros/chaves).
+// Usado para evitar que cloud com timestamp mais novo sobrescreva local com mais dados.
+function _isDataMoreComplete(localData, cloudData){
+  if(!localData) return false;
+  if(!cloudData) return true;
+  if(Array.isArray(localData) && Array.isArray(cloudData)){
+    return localData.length >= cloudData.length;
+  }
+  var localKeys=Object.keys(localData||{}).length;
+  var cloudKeys=Object.keys(cloudData||{}).length;
+  return localKeys >= cloudKeys;
+}
+
 // Aplica dados de uma coleção do Firebase ao localStorage
 // force=true ignora proteção de timestamp (forceSyncFromCloud, restoreHistory)
 function _applyCol(col, lsKey, colData, force){
@@ -920,6 +933,23 @@ function _applyCol(col, lsKey, colData, force){
       return;
     }
     console.log('[GP Sync] EMPATE → cloud vence (deviceId):', col, cloudId+' >= '+myId);
+  }
+  // Proteção por completude: cloud mais novo mas local tem mais registros → bloquear (perda de dados)
+  if(!force){
+    try{
+      var localRaw=localStorage.getItem(lsKey);
+      if(localRaw){
+        var localParsed=JSON.parse(localRaw);
+        var cloudParsed=JSON.parse(colData.data);
+        if(_isDataMoreComplete(localParsed,cloudParsed) && !_isDataMoreComplete(cloudParsed,localParsed)){
+          console.log('[GP Sync] APPLY BLOQUEADO (local mais completo):', col);
+          if(_initialized && Date.now()-(_lastReassertTs[col]||0) > 2000){
+            _lastReassertTs[col]=Date.now(); _pushCol(lsKey);
+          }
+          return;
+        }
+      }
+    }catch(e){}
   }
   console.log('[GP Sync] APPLY ACEITO:', col, 'cloud.lts='+cloudLts+' local.lts='+localLts);
   _applyingCloud=true;
