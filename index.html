@@ -836,11 +836,7 @@ function _pushCol(lsKey){
     _colTimers[col]=null;
     var rawVal=localStorage.getItem(lsKey); if(rawVal===null){ delete _colPushing[col]; return; }
     var now=Date.now();
-    var lastLocalTs=_colLocalTs[col]||0;
-    if(now < lastLocalTs){
-      console.warn('[GP Sync] PUSH BLOQUEADO (dados antigos):', col, 'now='+now+' lastTs='+lastLocalTs);
-      return;
-    }
+    // Não bloquear por relógio local — ServerValue.TIMESTAMP é a fonte de verdade
     _colLocalTs[col]=now; try{ localStorage.setItem('gp-lts-'+col,String(now)); }catch(e){}
     var payload={ data:rawVal, localTs:now, serverTs:firebase.database.ServerValue.TIMESTAMP, device:_getDeviceLabel() };
     _colPushing[col]=true;
@@ -848,6 +844,7 @@ function _pushCol(lsKey){
     try{
       await _colsRef.child(col).set(payload);
       delete _colPushing[col];
+      try{ localStorage.removeItem('gp-dirty-'+lsKey); }catch(e){}
       // Captura serverTs real atribuído pelo Firebase (complemento ao echo detection)
       _colsRef.child(col).once('value').then(function(snap){
         var v=snap.val();
@@ -975,9 +972,12 @@ function _startSync(){
       Object.keys(_COL_MAP).forEach(function(lsKey){ var col=_COL_MAP[lsKey]; if(allCols[col]) _applyCol(col,lsKey,allCols[col]); });
       try{ loadAll(); }catch(e){} try{ refreshAll(); }catch(e){} try{ renderCalendar(); }catch(e){} try{ renderFinanceiro(); }catch(e){}
     } else if(isDirty||(!cloudHasData&&localHasData)){
-      console.log('[GP Sync] dirty='+isDirty+' — enviando apenas coleções locais mais novas (protegendo dados do cloud)');
+      console.log('[GP Sync] dirty='+isDirty+' — verificando coleções por coleção');
       Object.keys(_COL_MAP).forEach(function(lsKey){
         var col=_COL_MAP[lsKey]; var cd=allCols[col];
+        // Se essa coleção tem flag dirty própria → sempre enviar (mudança local explícita)
+        var colDirty=false; try{ colDirty=localStorage.getItem('gp-dirty-'+lsKey)==='1'; }catch(e){}
+        if(colDirty){ console.log('[GP Sync] Push forçado (col dirty):', col); _pushCol(lsKey); return; }
         var cSts=cd?(cd.serverTs||0):0; var lSts=_colServerTs[col]||0;
         var cLts=cd?(cd.localTs||0):0;  var lLts=_colLocalTs[col]||0;
         var cloudIsNewer=(cSts&&lSts) ? (cSts>lSts) : (cLts>lLts);
@@ -1063,6 +1063,7 @@ function restoreHistory(key){
     if(_startupComplete&&!_applyingCloud&&_COL_MAP.hasOwnProperty(key)){
       console.log('[GP Sync] Alteração local detectada:', key);
       try{ orig('gp-dirty','1'); }catch(e){}
+      try{ orig('gp-dirty-'+key,'1'); }catch(e){}  // rastrea por coleção
       if(_initialized) _pushCol(key);
     }
   };
@@ -1079,15 +1080,12 @@ function _flushIfPending(){
     if(_colTimers[col]){ clearTimeout(_colTimers[col]); _colTimers[col]=null; }
     var rawVal=localStorage.getItem(lsKey); if(rawVal===null) return;
     var now=Date.now();
-    var lastLocalTs=_colLocalTs[col]||0;
-    if(now < lastLocalTs){
-      console.warn('[GP Sync] FLUSH BLOQUEADO (dados antigos):', col, 'now='+now+' lastTs='+lastLocalTs);
-      return;
-    }
+    // Sem guarda de relógio — ServerValue.TIMESTAMP é a fonte de verdade
     _colLocalTs[col]=now; try{ localStorage.setItem('gp-lts-'+col,String(now)); }catch(e){}
     _colPushing[col]=true;
     _colsRef.child(col).set({data:rawVal,localTs:now,serverTs:firebase.database.ServerValue.TIMESTAMP,device:_getDeviceLabel()})
-      .then(function(){ delete _colPushing[col]; }).catch(function(){ delete _colPushing[col]; });
+      .then(function(){ delete _colPushing[col]; try{ localStorage.removeItem('gp-dirty-'+lsKey); }catch(e){} })
+      .catch(function(){ delete _colPushing[col]; });
   });
   try{ localStorage.removeItem('gp-dirty'); }catch(e){}
 }
