@@ -790,6 +790,9 @@ function _getDeviceLabel(){
     localStorage.setItem('gp-device-id',label); return label;
   }catch(e){return 'Dispositivo';}
 }
+function _getDeviceId(){
+  try{ var id=localStorage.getItem('gp-device-id'); return id||_getDeviceLabel(); }catch(e){ return 'unknown'; }
+}
 
 function _setSyncStatus(status, detail){
   var el=document.getElementById('sync-status'); if(!el) return;
@@ -884,9 +887,9 @@ function _applyCol(col, lsKey, colData, force){
   if(!colData||colData.data===undefined||colData.data===null) return;
   var cloudLts=colData.localTs||0;
   var localLts=_colLocalTs[col]||0;
-  // Eco quase-idêntico: timestamps diferem < 5ms → mesma origem, ignorar
-  if(!force && cloudLts && localLts && Math.abs(cloudLts-localLts)<5){
-    console.log('[GP Sync] Eco ignorado (delta<5ms):', col);
+  // Eco próprio: delta < 5ms E mesmo device → ignorar (sem comparar com outros dispositivos)
+  if(!force && cloudLts && localLts && Math.abs(cloudLts-localLts)<5 && (colData.device||'')===_getDeviceId()){
+    console.log('[GP Sync] Eco ignorado (delta<5ms, mesmo device):', col);
     return;
   }
   // Local mais novo → bloquear apply e reassertar no Firebase (com debounce 2s)
@@ -905,6 +908,18 @@ function _applyCol(col, lsKey, colData, force){
       }
     }
     return;
+  }
+  // Empate de timestamp com dispositivo diferente → desempate por deviceId lexicográfico
+  if(!force && cloudLts && localLts && cloudLts===localLts){
+    var myId=_getDeviceId(); var cloudId=colData.device||'';
+    if(myId > cloudId){
+      console.log('[GP Sync] EMPATE → local vence (deviceId):', col, myId+' > '+cloudId);
+      if(_initialized && Date.now()-(_lastReassertTs[col]||0) > 2000){
+        _lastReassertTs[col]=Date.now(); _pushCol(lsKey);
+      }
+      return;
+    }
+    console.log('[GP Sync] EMPATE → cloud vence (deviceId):', col, cloudId+' >= '+myId);
   }
   console.log('[GP Sync] APPLY ACEITO:', col, 'cloud.lts='+cloudLts+' local.lts='+localLts);
   _applyingCloud=true;
