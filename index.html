@@ -894,6 +894,32 @@ function _isDataMoreComplete(localData, cloudData){
   return localKeys >= cloudKeys;
 }
 
+// Combina dois arrays por ID. Cloud vence empates (>= ts) para preservar edições;
+// itens exclusivos de local são preservados para não perder dados.
+function _mergeById(localArr, cloudArr, getId, getTs){
+  var map={};
+  (localArr||[]).forEach(function(item){ map[getId(item)]=item; });
+  (cloudArr||[]).forEach(function(item){
+    var id=getId(item); var existing=map[id];
+    if(!existing){ map[id]=item; }
+    else{
+      var lTs=getTs(existing)||0; var cTs=getTs(item)||0;
+      if(cTs>=lTs) map[id]=item; // cloud vence empate (sem updatedAt) e versões mais novas
+    }
+  });
+  return Object.values(map);
+}
+
+// Coleções de array que usam merge por ID
+var _MERGE_ARRAY_COLS={
+  'gp-s':          { getId:function(i){return i.id;}, getTs:function(i){return i.criadoEm?new Date(i.criadoEm).getTime():0;} },
+  'gp-a':          { getId:function(i){return i.id;}, getTs:function(i){return 0;} },
+  'gp-pagamentos': { getId:function(i){return i.id;}, getTs:function(i){return i.data?new Date(i.data).getTime():0;} },
+  'gp-planos':     { getId:function(i){return i.id;}, getTs:function(i){return 0;} }
+};
+// Coleções de objeto que usam merge de chaves (local-only keys preserved, cloud wins conflicts)
+var _MERGE_OBJECT_COLS=['gp-p','gp-n','gp-rep','gp-exc','gp-bl','gp-fe'];
+
 // Aplica dados de uma coleção do Firebase ao localStorage
 // force=true ignora proteção de timestamp (forceSyncFromCloud, restoreHistory)
 function _applyCol(col, lsKey, colData, force){
@@ -934,14 +960,36 @@ function _applyCol(col, lsKey, colData, force){
     }
     console.log('[GP Sync] EMPATE → cloud vence (deviceId):', col, cloudId+' >= '+myId);
   }
-  // Proteção por completude: cloud mais novo mas local tem mais registros → bloquear (perda de dados)
+  // Merge por ID (arrays) ou por chave (objects) — preserva dados de ambos os lados
+  var _didMerge=false; var _mergeHasExtra=false;
   if(!force){
     try{
-      var localRaw=localStorage.getItem(lsKey);
-      if(localRaw){
-        var localParsed=JSON.parse(localRaw);
-        var cloudParsed=JSON.parse(colData.data);
-        if(_isDataMoreComplete(localParsed,cloudParsed) && !_isDataMoreComplete(cloudParsed,localParsed)){
+      var _mlRaw=localStorage.getItem(lsKey);
+      if(_mlRaw){
+        var _lp=JSON.parse(_mlRaw); var _cp=JSON.parse(colData.data);
+        var _mc=_MERGE_ARRAY_COLS[lsKey];
+        if(_mc && Array.isArray(_lp) && Array.isArray(_cp)){
+          var _mg=_mergeById(_lp,_cp,_mc.getId,_mc.getTs);
+          console.log('[GP Sync] merge array:',col,'local:'+_lp.length+' cloud:'+_cp.length+' merged:'+_mg.length);
+          colData=Object.assign({},colData,{data:JSON.stringify(_mg)});
+          _didMerge=true; if(_mg.length>_cp.length) _mergeHasExtra=true;
+        } else if(_MERGE_OBJECT_COLS.indexOf(lsKey)!==-1 && _lp&&typeof _lp==='object'&&!Array.isArray(_lp) && _cp&&typeof _cp==='object'&&!Array.isArray(_cp)){
+          var _mo=Object.assign({},_lp,_cp); // local-only keys preservados; cloud vence conflitos
+          var _mk=Object.keys(_mo).length; var _ck=Object.keys(_cp).length;
+          console.log('[GP Sync] merge object:',col,'local:'+Object.keys(_lp).length+' cloud:'+_ck+' merged:'+_mk);
+          colData=Object.assign({},colData,{data:JSON.stringify(_mo)});
+          _didMerge=true; if(_mk>_ck) _mergeHasExtra=true;
+        }
+      }
+    }catch(e){ console.warn('[GP Sync] merge error:',col,e); }
+  }
+  // Proteção por completude: apenas para coleções não cobertas pelo merge
+  if(!force && !_didMerge){
+    try{
+      var _clRaw=localStorage.getItem(lsKey);
+      if(_clRaw){
+        var _clLp=JSON.parse(_clRaw); var _clCp=JSON.parse(colData.data);
+        if(_isDataMoreComplete(_clLp,_clCp) && !_isDataMoreComplete(_clCp,_clLp)){
           console.log('[GP Sync] APPLY BLOQUEADO (local mais completo):', col);
           if(_initialized && Date.now()-(_lastReassertTs[col]||0) > 2000){
             _lastReassertTs[col]=Date.now(); _pushCol(lsKey);
@@ -951,7 +999,7 @@ function _applyCol(col, lsKey, colData, force){
       }
     }catch(e){}
   }
-  console.log('[GP Sync] APPLY ACEITO:', col, 'cloud.lts='+cloudLts+' local.lts='+localLts);
+  console.log('[GP Sync] APPLY ACEITO:', col, 'cloud.lts='+cloudLts+' local.lts='+localLts, _didMerge?'(merged)':'');
   _applyingCloud=true;
   try{ localStorage.setItem(lsKey,colData.data); }catch(e){}
   _applyingCloud=false;
@@ -960,6 +1008,10 @@ function _applyCol(col, lsKey, colData, force){
   _colLocalTs[col]=cloudLts||localLts; // nunca regride
   try{ localStorage.setItem('gp-cts-'+col,String(_colServerTs[col])); }catch(e){}
   try{ localStorage.setItem('gp-lts-'+col,String(_colLocalTs[col])); }catch(e){}
+  // Merge gerou mais dados que o cloud original → reassertar no Firebase
+  if(_mergeHasExtra && _initialized && Date.now()-(_lastReassertTs[col]||0)>2000){
+    _lastReassertTs[col]=Date.now(); _pushCol(lsKey);
+  }
 }
 
 // Listener realtime por coleção
