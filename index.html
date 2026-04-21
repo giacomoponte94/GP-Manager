@@ -778,8 +778,9 @@ var _lastHistoryTs   = 0;
 // Estado por coleção
 var _colServerTs = {}; // { colName: último serverTs recebido }
 var _colLocalTs  = {}; // { colName: localTs do nosso último push }
-var _colTimers   = {}; // { colName: debounce timer }
-var _colPushing  = {}; // { colName: true } push em andamento
+var _colTimers       = {}; // { colName: debounce timer }
+var _colPushing      = {}; // { colName: true } push em andamento
+var _lastReassertTs  = {}; // { colName: Date.now() do último reassert }
 
 function _getDeviceLabel(){
   try{
@@ -883,11 +884,25 @@ function _applyCol(col, lsKey, colData, force){
   if(!colData||colData.data===undefined||colData.data===null) return;
   var cloudLts=colData.localTs||0;
   var localLts=_colLocalTs[col]||0;
-  // Se temos dado local mais novo → bloquear apply e reassertar no Firebase
+  // Eco quase-idêntico: timestamps diferem < 5ms → mesma origem, ignorar
+  if(!force && cloudLts && localLts && Math.abs(cloudLts-localLts)<5){
+    console.log('[GP Sync] Eco ignorado (delta<5ms):', col);
+    return;
+  }
+  // Local mais novo → bloquear apply e reassertar no Firebase (com debounce 2s)
   if(!force && localLts && cloudLts && localLts > cloudLts){
     console.log('[GP Sync] APPLY BLOQUEADO (local mais novo):', col,
-      'local.lts='+localLts+' cloud.lts='+cloudLts+' — reagendando push');
-    if(_initialized) _pushCol(lsKey); // reasserta nosso dado mais novo
+      'local.lts='+localLts+' cloud.lts='+cloudLts);
+    if(_initialized){
+      var now=Date.now();
+      if(now-(_lastReassertTs[col]||0) > 2000){
+        console.log('[GP Sync] Reassert local → cloud:', col);
+        _lastReassertTs[col]=now;
+        _pushCol(lsKey);
+      } else {
+        console.log('[GP Sync] Reassert ignorado (debounce):', col);
+      }
+    }
     return;
   }
   console.log('[GP Sync] APPLY ACEITO:', col, 'cloud.lts='+cloudLts+' local.lts='+localLts);
