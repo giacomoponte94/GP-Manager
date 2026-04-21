@@ -881,22 +881,22 @@ window.testFirebaseWrite = async function(){
 // force=true ignora proteção de timestamp (forceSyncFromCloud, restoreHistory)
 function _applyCol(col, lsKey, colData, force){
   if(!colData||colData.data===undefined||colData.data===null) return;
-  var cloudSts=colData.serverTs||0; var localSts=_colServerTs[col]||0;
-  var cloudLts=colData.localTs||0;  var localLts=_colLocalTs[col]||0;
-  // 1º serverTs (Firebase) — mais confiável; 2º localTs como fallback
-  var cloudIsOld = (cloudSts&&localSts) ? (cloudSts<=localSts) : !!(cloudLts&&cloudLts<=localLts);
-  if(!force && cloudIsOld){
-    console.log('[GP Sync] APPLY ignorado (cloud antigo):', col,
-      'cloud.sts='+cloudSts+' local.sts='+localSts+' cloud.lts='+cloudLts+' local.lts='+localLts);
+  var cloudLts=colData.localTs||0;
+  var localLts=_colLocalTs[col]||0;
+  // Se temos dado local mais novo → bloquear apply e reassertar no Firebase
+  if(!force && localLts && cloudLts && localLts > cloudLts){
+    console.log('[GP Sync] APPLY BLOQUEADO (local mais novo):', col,
+      'local.lts='+localLts+' cloud.lts='+cloudLts+' — reagendando push');
+    if(_initialized) _pushCol(lsKey); // reasserta nosso dado mais novo
     return;
   }
-  console.log('[GP Sync] APPLY aceito (novo):', col,
-    'cloud.sts='+cloudSts+' local.sts='+localSts+' cloud.lts='+cloudLts+' local.lts='+localLts);
+  console.log('[GP Sync] APPLY ACEITO:', col, 'cloud.lts='+cloudLts+' local.lts='+localLts);
   _applyingCloud=true;
   try{ localStorage.setItem(lsKey,colData.data); }catch(e){}
   _applyingCloud=false;
-  _colServerTs[col]=cloudSts||localSts; // nunca regride
-  _colLocalTs[col] =cloudLts||localLts;
+  var cloudSts=colData.serverTs||0;
+  _colServerTs[col]=cloudSts||(_colServerTs[col]||0);
+  _colLocalTs[col]=cloudLts||localLts; // nunca regride
   try{ localStorage.setItem('gp-cts-'+col,String(_colServerTs[col])); }catch(e){}
   try{ localStorage.setItem('gp-lts-'+col,String(_colLocalTs[col])); }catch(e){}
 }
