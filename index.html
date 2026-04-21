@@ -890,17 +890,18 @@ function _applyCol(col, lsKey, colData, force){
     return;
   }
   // Local mais novo → bloquear apply e reassertar no Firebase (com debounce 2s)
-  if(!force && localLts && cloudLts && localLts > cloudLts){
+  if(!force && localLts > cloudLts){
     console.log('[GP Sync] APPLY BLOQUEADO (local mais novo):', col,
       'local.lts='+localLts+' cloud.lts='+cloudLts);
     if(_initialized){
       var now=Date.now();
-      if(now-(_lastReassertTs[col]||0) > 2000){
-        console.log('[GP Sync] Reassert local → cloud:', col);
+      var cloudStillStale=cloudLts < localLts; // cloud ainda não tem nosso dado mais novo
+      if(cloudStillStale && now-(_lastReassertTs[col]||0) > 2000){
+        console.log('[GP Sync] Reassert (cloud ainda atrasado):', col);
         _lastReassertTs[col]=now;
         _pushCol(lsKey);
       } else {
-        console.log('[GP Sync] Reassert ignorado (debounce):', col);
+        console.log('[GP Sync] Reassert ignorado:', col);
       }
     }
     return;
