@@ -396,6 +396,7 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
     <label class="form-label">Senha</label>
     <input type="password" id="lin-p" autocomplete="current-password" style="width:100%;background:var(--dark);border:1px solid var(--border);color:var(--white);padding:12px 14px;border-radius:4px;font-size:0.92rem;margin-bottom:14px;-webkit-appearance:none;outline:none;">
     <div class="login-err" id="lin-err">Usu&aacute;rio ou senha incorretos.</div>
+    <div id="login-help" style="font-size:0.78rem;color:var(--white-dim);margin-bottom:14px;line-height:1.5;">No primeiro acesso neste dispositivo, o usu&aacute;rio e a senha informados ser&atilde;o salvos como credenciais locais.</div>
     <button class="btn btn-primary" style="width:100%;height:48px;" onclick="doLogin()">Entrar</button>
   </div>
 </div>
@@ -1407,6 +1408,146 @@ function safeVal(id, def) {
   return el ? (el.value || def || '') : (def || '');
 }
 
+function fixMojibake(str) {
+  if (typeof str !== 'string') return str;
+  if (!/[ÃƒÃ‚Ã¢Ã°]/.test(str)) return str;
+  try {
+    return decodeURIComponent(escape(str));
+  } catch (e) {
+    return str;
+  }
+}
+
+function cleanText(str, maxLen) {
+  var value = fixMojibake(String(str == null ? '' : str))
+    .replace(/[\u0000-\u001F\u007F]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (maxLen && value.length > maxLen) value = value.slice(0, maxLen);
+  return value;
+}
+
+function cleanMultilineText(str, maxLen) {
+  var value = fixMojibake(String(str == null ? '' : str))
+    .replace(/\r\n/g, '\n')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+    .trim();
+  if (maxLen && value.length > maxLen) value = value.slice(0, maxLen);
+  return value;
+}
+
+function cleanEmail(str) {
+  return cleanText(str, 180).toLowerCase();
+}
+
+function cleanPhone(str) {
+  return cleanText(str, 40).replace(/[^\d+()\-\s]/g, '').trim();
+}
+
+function cleanDateValue(str) {
+  var value = cleanText(str, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '';
+}
+
+function cleanMoneyValue(str) {
+  var value = String(str == null ? '' : str).replace(',', '.').replace(/[^\d.\-]/g, '').trim();
+  if (!value) return '';
+  var num = parseFloat(value);
+  return Number.isFinite(num) ? String(num) : '';
+}
+
+function escapeHtml(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function safeImageSrc(url) {
+  var value = String(url == null ? '' : url).replace(/[\u0000-\u001F\u007F]/g, '').trim();
+  if (!value) return '';
+  if (/^data:image\//i.test(value)) return value;
+  if (/^https?:\/\//i.test(value)) return value;
+  if (/^blob:/i.test(value)) return value;
+  return '';
+}
+
+function normalizeTextMap(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return {};
+  var out = {};
+  Object.keys(obj).forEach(function(key) {
+    var safeKey = cleanText(key, 120);
+    if (!safeKey) return;
+    var value = obj[key];
+    out[safeKey] = typeof value === 'string' ? cleanMultilineText(value, 4000) : value;
+  });
+  return out;
+}
+
+function normalizeStudentRecord(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  var id = cleanText(raw.id || (Date.now().toString() + Math.random().toString(36).slice(2)), 80);
+  if (!id) return null;
+  var isDeleted = !!raw.deleted;
+  var nome = cleanText(raw.nome, 120);
+  if (!nome && !isDeleted) return null;
+  var status = cleanText(raw.status, 20);
+  if (['em dia', 'vencendo', 'atrasado'].indexOf(status) === -1) status = 'em dia';
+  var statusManual = cleanText(raw.statusManual, 20);
+  if (['em dia', 'vencendo', 'atrasado'].indexOf(statusManual) === -1) statusManual = null;
+  var modalidade = cleanText(raw.modalidade, 20);
+  if (modalidade !== 'Duo') modalidade = 'Individual';
+  return {
+    id: id,
+    nome: nome || '',
+    telefone: cleanPhone(raw.telefone),
+    email: cleanEmail(raw.email),
+    cpf: cleanText(raw.cpf, 24),
+    nascimento: cleanDateValue(raw.nascimento),
+    objetivo: cleanMultilineText(raw.objetivo, 600),
+    obs: cleanMultilineText(raw.obs, 1200),
+    plano: cleanText(raw.plano, 40),
+    modalidade: modalidade,
+    inicio: cleanDateValue(raw.inicio),
+    vencimento: cleanDateValue(raw.vencimento),
+    valor: cleanMoneyValue(raw.valor),
+    status: status,
+    statusManual: statusManual,
+    foto: safeImageSrc(raw.foto),
+    categoria: cleanText(raw.categoria, 20) || 'fixa',
+    qtdAulas: raw.qtdAulas == null ? null : (parseInt(raw.qtdAulas, 10) || null),
+    criadoEm: raw.criadoEm || new Date().toISOString(),
+    deleted: isDeleted,
+    updatedAt: raw.updatedAt || null,
+    deviceId: cleanText(raw.deviceId, 120) || null
+  };
+}
+
+function normalizeStudentCollection(list) {
+  if (!Array.isArray(list)) return [];
+  return list.map(normalizeStudentRecord).filter(Boolean);
+}
+
+function repairDocumentEncoding(root) {
+  var scope = root || document.body;
+  if (!scope || !document.createTreeWalker) return;
+  try { document.title = fixMojibake(document.title); } catch (e) {}
+  document.querySelectorAll('meta[content]').forEach(function(meta) {
+    var current = meta.getAttribute('content');
+    var fixed = fixMojibake(current);
+    if (fixed !== current) meta.setAttribute('content', fixed);
+  });
+  var walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT, null);
+  var node;
+  while ((node = walker.nextNode())) {
+    var current = node.nodeValue;
+    var fixed = fixMojibake(current);
+    if (fixed !== current) node.nodeValue = fixed;
+  }
+}
+
 var reposicoes = {};
 var repHistorico = {};
 var licencas = {};
@@ -1674,13 +1815,49 @@ function confirmarSlotPicker() {
 
 
 
-const CREDENTIALS = { user: 'Giacomo', pass: '1234' };
+const AUTH_STORAGE_KEY = 'gp-auth-v2';
 let students = [], agendas = [], presencas = {}, notasSessao = {}, evolucaoData = {};
 let historicoCob = {}, feriadosCustom = {}, bloqueios = {}, editingId = null, currentPhoto = null;
 let agSlotDateStr = null;
 let excecoes = {};
 let editingAgId = null, agSlotDay = null, agSlotHour = 6, filterHojeAtivo = false;
 let calView = 'semana', currentDay = new Date(), currentWeekStart = getMonday(new Date());
+
+function getStoredAuth() {
+  try {
+    var raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) return null;
+    var parsed = JSON.parse(raw);
+    if (!parsed || !parsed.user || !parsed.passHash) return null;
+    return parsed;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function hashCredential(value) {
+  var normalized = cleanText(value, 200);
+  if (!normalized || !window.crypto || !window.crypto.subtle || !window.TextEncoder) return normalized;
+  var data = new TextEncoder().encode(normalized);
+  var hash = await window.crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash)).map(function(b) {
+    return b.toString(16).padStart(2, '0');
+  }).join('');
+}
+
+function updateLoginHelp() {
+  var help = document.getElementById('login-help');
+  if (!help) return;
+  help.textContent = getStoredAuth()
+    ? 'Use as credenciais locais deste dispositivo para acessar o app.'
+    : 'No primeiro acesso neste dispositivo, o usuario e a senha informados serao salvos como credenciais locais.';
+}
+
+async function verifyPasswordInput(pass) {
+  var auth = getStoredAuth();
+  if (!auth) return false;
+  return (await hashCredential(pass || '')) === auth.passHash;
+}
 
 
 var PLANOS_DEFAULT = [
@@ -1794,24 +1971,29 @@ function isHoliday(date) {
 // Retorna apenas itens não deletados — usar em todas as renderizações
 function _visible(arr){ return (arr||[]).filter(function(i){ return !i.deleted; }); }
 
-function save() { try{localStorage.setItem('gp-s',JSON.stringify(_cleanupDeleted(students,7*24*60*60*1000)));}catch(e){} }
+function save() {
+  try{
+    students = normalizeStudentCollection(_cleanupDeleted(students,7*24*60*60*1000));
+    localStorage.setItem('gp-s',JSON.stringify(students));
+  }catch(e){}
+}
 function loadAll() {
   loadPlanos(); syncPlanLegacy(); loadTreinos(); loadTreinosLog(); loadEvolucao(); loadHistoricoFin(); loadExcecoes(); loadDiasPermitidos(); loadHorariosConfig(); loadChavePix(); loadReposicoes(); loadPagamentos(); loadDespesas();
-  try{var s=localStorage.getItem('gp-s');if(s)students=JSON.parse(s);}catch(e){}
+  try{var s=localStorage.getItem('gp-s');if(s)students=normalizeStudentCollection(JSON.parse(s));}catch(e){}
   try{var a=localStorage.getItem('gp-a');if(a)agendas=JSON.parse(a);}catch(e){}
   try{var p=localStorage.getItem('gp-p');if(p)presencas=JSON.parse(p);}catch(e){}
-  try{var n=localStorage.getItem('gp-n');if(n)notasSessao=JSON.parse(n);}catch(e){}
+  try{var n=localStorage.getItem('gp-n');if(n)notasSessao=normalizeTextMap(JSON.parse(n));}catch(e){}
   try{var e=localStorage.getItem('gp-ev');if(e)evolucaoData=JSON.parse(e);}catch(e){}
-  try{var h=localStorage.getItem('gp-hc');if(h)historicoCob=JSON.parse(h);}catch(e){}
-  try{var f=localStorage.getItem('gp-fe');if(f)feriadosCustom=JSON.parse(f);}catch(e){}
+  try{var h=localStorage.getItem('gp-hc');if(h)historicoCob=normalizeTextMap(JSON.parse(h));}catch(e){}
+  try{var f=localStorage.getItem('gp-fe');if(f)feriadosCustom=normalizeTextMap(JSON.parse(f));}catch(e){}
   try{var b=localStorage.getItem('gp-bl');if(b)bloqueios=JSON.parse(b);}catch(e){}
 }
 function saveAgendas()  { try{localStorage.setItem('gp-a',JSON.stringify(_cleanupDeleted(agendas,7*24*60*60*1000)));}catch(e){} }
 function savePresencas(){ try{localStorage.setItem('gp-p',JSON.stringify(presencas));}catch(e){} }
-function saveNotas()    { try{localStorage.setItem('gp-n',JSON.stringify(notasSessao));}catch(e){} }
+function saveNotas()    { try{notasSessao=normalizeTextMap(notasSessao);localStorage.setItem('gp-n',JSON.stringify(notasSessao));}catch(e){} }
 function saveEvolucao() { try{localStorage.setItem('gp-ev',JSON.stringify(evolucaoData));}catch(e){} }
-function saveHistCob()  { try{localStorage.setItem('gp-hc',JSON.stringify(historicoCob));}catch(e){} }
-function saveFeriados() { try{localStorage.setItem('gp-fe',JSON.stringify(feriadosCustom));}catch(e){} }
+function saveHistCob()  { try{historicoCob=normalizeTextMap(historicoCob);localStorage.setItem('gp-hc',JSON.stringify(historicoCob));}catch(e){} }
+function saveFeriados() { try{feriadosCustom=normalizeTextMap(feriadosCustom);localStorage.setItem('gp-fe',JSON.stringify(feriadosCustom));}catch(e){} }
 function saveBloqueios(){ try{localStorage.setItem('gp-bl',JSON.stringify(bloqueios));}catch(e){} }
 
 function _buildExportData() {
@@ -1916,9 +2098,9 @@ function restaurarAutoBackup(idx) {
   var dt=new Date(snap.createdAt).toLocaleString('pt-BR');
   if(!confirm('Restaurar backup de '+dt+'?\n\nIsso substituirá todos os dados atuais.')) return;
   var src=snap.data;
-  students=src.students||[]; agendas=src.agendas||[]; presencas=src.presencas||{};
-  notasSessao=src.notasSessao||{}; evolucaoData=src.evolucaoData||{}; evolucaoCargas=src.evolucaoCargas||{};
-  historicoCob=src.historicoCob||{}; feriadosCustom=src.feriadosCustom||{}; bloqueios=src.bloqueios||{};
+  students=normalizeStudentCollection(src.students||[]); agendas=src.agendas||[]; presencas=src.presencas||{};
+  notasSessao=normalizeTextMap(src.notasSessao||{}); evolucaoData=src.evolucaoData||{}; evolucaoCargas=src.evolucaoCargas||{};
+  historicoCob=normalizeTextMap(src.historicoCob||{}); feriadosCustom=normalizeTextMap(src.feriadosCustom||{}); bloqueios=src.bloqueios||{};
   excecoes=src.excecoes||{}; reposicoes=src.reposicoes||{}; repHistorico=src.repHistorico||{};
   licencas=src.licencas||{}; historicoFin=src.historicoFin||{};
   diasPermitidos=src.diasPermitidos||[1,2,3,4,5,6]; horariosConfig=src.horariosConfig||{};
@@ -1943,8 +2125,8 @@ function importarDados() {
       try{
         var d=JSON.parse(ev.target.result);
         if(!d.students||!Array.isArray(d.students))throw new Error('invalid');
-        students=d.students||[]; agendas=d.agendas||[]; presencas=d.presencas||{};
-        notasSessao=d.notasSessao||{}; evolucaoData=d.evolucaoData||{}; historicoCob=d.historicoCob||{};
+        students=normalizeStudentCollection(d.students||[]); agendas=d.agendas||[]; presencas=d.presencas||{};
+        notasSessao=normalizeTextMap(d.notasSessao||{}); evolucaoData=d.evolucaoData||{}; historicoCob=normalizeTextMap(d.historicoCob||{});
         save(); saveAgendas(); savePresencas(); saveNotas(); saveEvolucao(); saveHistCob();
         refreshAll(); toast('Dados importados: '+students.length+' alunos');
       }catch(e){alert('Arquivo invalido.');}
@@ -1954,16 +2136,42 @@ function importarDados() {
   i.click();
 }
 
-function doLogin() {
-  var u=(document.getElementById('lin-u').value||'').trim();
-  var p=(document.getElementById('lin-p').value||'');
-  if(u===CREDENTIALS.user && p===CREDENTIALS.pass){
-    try{localStorage.setItem('gp-sess',JSON.stringify({exp:new Date(Date.now()+7*86400000).toISOString()}));}catch(e){}
+async function doLogin() {
+  var errEl = document.getElementById('lin-err');
+  var u=cleanText(document.getElementById('lin-u').value, 80);
+  var p=document.getElementById('lin-p').value||'';
+  if(errEl) errEl.style.display='none';
+  if(!u || !p){
+    if(errEl){ errEl.textContent='Informe usuario e senha.'; errEl.style.display='block'; }
+    return;
+  }
+  var auth = getStoredAuth();
+  if(!auth){
+    if(p.length < 6){
+      if(errEl){ errEl.textContent='Defina uma senha com pelo menos 6 caracteres.'; errEl.style.display='block'; }
+      return;
+    }
+    try {
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({
+        user: u,
+        passHash: await hashCredential(p),
+        createdAt: new Date().toISOString()
+      }));
+      updateLoginHelp();
+    } catch (e) {
+      if(errEl){ errEl.textContent='Nao foi possivel salvar as credenciais locais.'; errEl.style.display='block'; }
+      return;
+    }
+    auth = getStoredAuth();
+  }
+  if(auth && u===auth.user && await hashCredential(p)===auth.passHash){
+    try{localStorage.setItem('gp-sess',JSON.stringify({exp:new Date(Date.now()+7*86400000).toISOString(), user:u}));}catch(e){}
     document.getElementById('login-screen').style.display='none';
     document.getElementById('app').style.display='flex';
     setTimeout(function(){try{initApp();}catch(e){}},50);
-  } else {
-    document.getElementById('lin-err').style.display='block';
+  } else if(errEl) {
+    errEl.textContent='Usuario ou senha incorretos.';
+    errEl.style.display='block';
   }
 }
 function doLogout() {
@@ -1972,6 +2180,7 @@ function doLogout() {
   document.getElementById('login-screen').style.display='flex';
   document.getElementById('lin-u').value='';
   document.getElementById('lin-p').value='';
+  updateLoginHelp();
 }
 function tryAutoLogin() {
   try{
@@ -2064,8 +2273,10 @@ function renderTable(){
   var tbody=document.getElementById('st-tbody');
   if(!f.length){tbody.innerHTML='<div class="empty-state"><p>'+(_vs.length?'Nenhum aluno encontrado.':'Nenhum aluno cadastrado.')+'</p></div>';return;}
   tbody.innerHTML=f.map(function(s){
-    var ini=s.nome.split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();
-    var avInner=s.foto?'<img src="'+s.foto+'" alt="">':ini;
+    var nomeSafe=escapeHtml(s.nome);
+    var ini=escapeHtml(s.nome.split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase());
+    var fotoSafe=safeImageSrc(s.foto);
+    var avInner=fotoSafe?'<img src="'+fotoSafe+'" alt="">':ini;
     var stClass=s.status==='em dia'?'st-ok':s.status==='atrasado'?'st-late':'st-warn';
     var sb=s.status==='em dia'?'<span class="badge badge-ok">&#10003; Em dia</span>':s.status==='atrasado'?'<span class="badge badge-late">&#8226; Inativo</span>':'<span class="badge badge-warn">&#9888; Vencendo</span>';
     var aulas=getAulasDoMes(s.id); var atag=aulas.direito>0?'<span style="font-size:0.62rem;color:var(--white-dim);margin-left:4px;">'+aulas.feitas+'/'+aulas.direito+'</span>':'';
@@ -2079,11 +2290,12 @@ function renderTable(){
     var modTag=s.modalidade==='Duo'?'<span class="badge badge-duo" style="font-size:0.6rem;padding:1px 5px;">Duo</span>':'';
     var subParts=[getPlanNome(s.plano)||'',s.modalidade||'',s.valor?'R$ '+Math.round(parseFloat(s.valor)).toLocaleString('pt-BR'):'',s.vencimento?'Vence '+fmtDate(s.vencimento):''];
     var sub=subParts.filter(Boolean).join(' · ');
-    var sid=s.id;
+    sub=escapeHtml(fixMojibake(sub));
+    var sid=escapeHtml(s.id);
     return '<div class="st-card st-row '+stClass+'" data-id="'+sid+'">'
       +'<div class="st-card-av">'+avInner+'</div>'
       +'<div class="st-card-body">'
-        +'<div class="st-card-name">'+s.nome+modTag+vtag+bdtag+ab+'</div>'
+        +'<div class="st-card-name">'+nomeSafe+modTag+vtag+bdtag+ab+'</div>'
         +'<div class="st-card-sub">'+sub+atag+'</div>'
       +'</div>'
       +'<div class="st-card-right">'
@@ -2451,7 +2663,7 @@ function openModal(mode,id){
   var _ms=document.getElementById('modal-student'); if(_ms){_ms.style.display='flex';}
 }
 function saveStudent(){
-  var nome=document.getElementById('f-nome').value.trim();
+  var nome=cleanText(document.getElementById('f-nome').value, 120);
   if(!nome){alert('Informe o nome.');return;}
   var plano=document.getElementById('f-plano').value;
   var modal=document.getElementById('f-modal').value;
@@ -2466,7 +2678,7 @@ function saveStudent(){
     var d=new Date(inicio+'T12:00:00'); d.setMonth(d.getMonth()+1);
     return d.toISOString().split('T')[0];
   })();
-  var obj={
+  var obj=normalizeStudentRecord({
     id:editingId||(Date.now().toString()+Math.random().toString(36).slice(2)),
     nome,telefone:document.getElementById('f-tel').value,
     email:document.getElementById('f-email').value,
@@ -2479,7 +2691,7 @@ function saveStudent(){
     categoria:(document.getElementById('f-categ')&&document.getElementById('f-categ').value)||'fixa',
     qtdAulas:parseInt(document.getElementById('f-qtd')&&document.getElementById('f-qtd').value)||null,
     criadoEm:editingId?(students.find(function(x){return x.id===editingId;})||{}).criadoEm:new Date().toISOString()
-  };
+  });
   var days=Array.from(document.querySelectorAll('#f-days-picker .day-btn.selected')).map(function(b){return parseInt(b.dataset.day);});
   if(days.length){
     var rows=document.querySelectorAll('#f-day-times .day-time-row');
@@ -2580,8 +2792,9 @@ function calcValorAvulsa(){
 
 function openDetail(id){
   var s=students.find(function(x){return x.id===id;}); if(!s)return;
-  var ini=s.nome.split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();
-  var av=s.foto?'<img src="'+s.foto+'" alt="">':ini;
+  var ini=escapeHtml(s.nome.split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase());
+  var fotoSafe=safeImageSrc(s.foto);
+  var av=fotoSafe?'<img src="'+fotoSafe+'" alt="">':ini;
   var sb=s.status==='em dia'?'<span class="badge badge-ok">Em dia</span>':s.status==='atrasado'?'<span class="badge badge-late">Inativo</span>':'<span class="badge badge-warn">Vencendo</span>';
   var aulas=getAulasDoMes(s.id);
   var pacote=getAulasPacote(s.id);
@@ -2617,10 +2830,10 @@ function openDetail(id){
       +'<div style="font-family:Raleway,sans-serif;font-size:0.58rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Ultimas notas</div>'
       +notasHist.map(function(e){return '<div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid rgba(74,127,165,0.1);">'
         +'<div style="font-size:0.68rem;color:var(--white-dim);">'+fmtDate(e.date)+'</div>'
-        +'<div style="font-size:0.82rem;color:var(--white);margin-top:2px;">'+e.nota+'</div></div>';}).join('')
+        +'<div style="font-size:0.82rem;color:var(--white);margin-top:2px;">'+escapeHtml(e.nota)+'</div></div>';}).join('')
       +'</div>';
   }
-  var ph=waPhone(s); var nome1=s.nome.split(' ')[0];
+  var ph=waPhone(s); var nome1=cleanText(s.nome.split(' ')[0], 40);
   var waHtml='';
   if(ph){
     var msgL=encodeURIComponent('Ola '+nome1+'! So lembrando do seu treino hoje. Ate logo!');
@@ -2636,6 +2849,7 @@ function openDetail(id){
       var diasTextoC=diasRestC===null?'em breve':diasRestC===1?'*amanhã*':'em *'+diasRestC+' dias*';
       msgCStr='Oi, '+nome1+'! 👋\n\nPassando aqui para te avisar que seu plano *'+getPlanNome(s.plano)+'* vence '+diasTextoC+(dataFmtC?', no dia *'+dataFmtC+'*':'')+'. \n\nJá vamos adiantando a renovação? Garanta seu horário e continue sem interrupção nos treinos. 🗓️💪\n\nMe confirma e te mando tudo certinho!';
     }
+    msgCStr=fixMojibake(msgCStr);
     var msgC=encodeURIComponent(msgCStr);
     var msgR=encodeURIComponent('Ola '+nome1+'! Percebi que faz um tempo que voce nao aparece. Tudo bem?');
     waHtml='<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">'
@@ -2649,16 +2863,16 @@ function openDetail(id){
   document.getElementById('modal-detail').style.display='flex';
   document.getElementById('det-av').innerHTML=av;
   document.getElementById('det-nome').textContent=s.nome;
-  document.getElementById('det-meta').innerHTML=(getPlanNome(s.plano)||'')+(s.modalidade?' \u00B7 '+s.modalidade:'')+' &nbsp; '+sb;
+  document.getElementById('det-meta').innerHTML=escapeHtml(fixMojibake((getPlanNome(s.plano)||'')+(s.modalidade?' \u00B7 '+s.modalidade:'')))+' &nbsp; '+sb;
   document.getElementById('det-body').innerHTML=aulasBar
     +'<div class="detail-grid" style="margin-top:12px;">'
-    +'<div class="detail-item"><div class="detail-item-label">Objetivo</div><div class="detail-item-value">'+(s.objetivo||'\u2014')+'</div></div>'
+    +'<div class="detail-item"><div class="detail-item-label">Objetivo</div><div class="detail-item-value">'+escapeHtml(s.objetivo||'\u2014')+'</div></div>'
     +'<div class="detail-item"><div class="detail-item-label">Nascimento</div><div class="detail-item-value">'+fmtDate(s.nascimento)+'</div></div>'
     +'<div class="detail-item"><div class="detail-item-label">Inicio</div><div class="detail-item-value">'+fmtDate(s.inicio)+'</div></div>'
     +'<div class="detail-item"><div class="detail-item-label">Vencimento</div><div class="detail-item-value">'+fmtDate(s.vencimento)+'</div></div>'
     +'<div class="detail-item"><div class="detail-item-label">Valor</div><div class="detail-item-value">'+(s.valor?'R$ '+parseFloat(s.valor).toLocaleString('pt-BR',{minimumFractionDigits:0}):'\u2014')+'</div></div>'
-    +'<div class="detail-item"><div class="detail-item-label">Telefone</div><div class="detail-item-value">'+(s.telefone||'\u2014')+'</div></div>'
-    +(s.obs?'<div class="detail-item" style="grid-column:1/-1"><div class="detail-item-label">Obs saude</div><div class="detail-item-value">'+s.obs+'</div></div>':'')
+    +'<div class="detail-item"><div class="detail-item-label">Telefone</div><div class="detail-item-value">'+escapeHtml(s.telefone||'\u2014')+'</div></div>'
+    +(s.obs?'<div class="detail-item" style="grid-column:1/-1"><div class="detail-item-label">Obs saude</div><div class="detail-item-value">'+escapeHtml(s.obs)+'</div></div>':'')
     +'</div>'
     +notasHtml+waHtml
     +'<div id="det-actions" style="display:flex;gap:10px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);"></div>';
@@ -2739,22 +2953,22 @@ function openDetail(id){
       repPanel.querySelector('.rep-admin-btn').style.opacity=isOpen?'0.45':'1';
       if(!isOpen) repPanel.querySelector('.rep-admin-pass').focus();
     };
-    function checkPass(){
-      return repPanel.querySelector('.rep-admin-pass').value===CREDENTIALS.pass;
+    async function checkPass(){
+      return verifyPasswordInput(repPanel.querySelector('.rep-admin-pass').value);
     }
-    repPanel.querySelector('.rep-minus').onclick=function(){
-      if(!checkPass()){toast('Senha incorreta.');return;}
+    repPanel.querySelector('.rep-minus').onclick=async function(){
+      if(!(await checkPass())){toast('Senha incorreta.');return;}
       if(getReposicoes(s.id)<=0)return;
       useReposicao(s.id,'manual');
       renderRepPanel();
     };
-    repPanel.querySelector('.rep-plus').onclick=function(){
-      if(!checkPass()){toast('Senha incorreta.');return;}
+    repPanel.querySelector('.rep-plus').onclick=async function(){
+      if(!(await checkPass())){toast('Senha incorreta.');return;}
       if(!addReposicao(s.id,'manual'))return;
       renderRepPanel();
     };
-    repPanel.querySelector('.rep-zerar').onclick=function(){
-      if(!checkPass()){toast('Senha incorreta.');return;}
+    repPanel.querySelector('.rep-zerar').onclick=async function(){
+      if(!(await checkPass())){toast('Senha incorreta.');return;}
       if(!confirm('Zerar saldo e histórico de reposições de '+s.nome+'?')) return;
       reposicoes[s.id]=0; saveReposicoes();
       repHistorico[s.id]=[]; saveRepHistorico();
@@ -2813,9 +3027,9 @@ function openDetail(id){
         licPanel.querySelector('.lic-fim').value=tf.toISOString().split('T')[0];
       }
     };
-    licPanel.querySelector('.lic-salvar-btn').onclick=function(){
+    licPanel.querySelector('.lic-salvar-btn').onclick=async function(){
       var pass=licPanel.querySelector('.lic-pass').value;
-      if(pass!==CREDENTIALS.pass){toast('Senha incorreta.');return;}
+      if(!(await verifyPasswordInput(pass))){toast('Senha incorreta.');return;}
       var ini=licPanel.querySelector('.lic-ini').value;
       var fim=licPanel.querySelector('.lic-fim').value;
       if(!ini||!fim){toast('Preencha as datas.');return;}
@@ -3373,22 +3587,25 @@ function renderFinanceiro(){
       var mod=s.modalidade==='Duo'?'<span class="badge badge-duo">Duo</span>':'<span class="badge badge-solo" style="background:rgba(74,127,165,0.15);color:var(--accent-l);padding:3px 6px;border-radius:3px;font-family:Raleway,sans-serif;font-size:0.55rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">Ind</span>';
       var ns=s.status==='atrasado'?'em dia':s.status==='vencendo'?'em dia':'atrasado';
       var bl=s.status==='em dia'?'Marcar inativo':'Marcar pago';
-      var ren=(s.status==='atrasado'||s.status==='vencendo')?'<button class="btn btn-primary btn-sm" onclick="renovarAluno(this.dataset.sid)" data-sid="'+s.id+'">Renovar</button>':'';
+      var sid=escapeHtml(s.id);
+      var nomeSafe=escapeHtml(s.nome);
+      var planoSafe=escapeHtml(getPlanNome(s.plano)||'\u2014');
+      var ren=(s.status==='atrasado'||s.status==='vencendo')?'<button class="btn btn-primary btn-sm" onclick="renovarAluno(this.dataset.sid)" data-sid="'+sid+'">Renovar</button>':'';
       return '<div style="background:var(--card);border-radius:6px;padding:12px 14px;margin-bottom:6px;">'
         +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px;">'
-          +'<span style="font-weight:700;font-size:0.9rem;color:var(--white);line-height:1.3;">'+s.nome+'</span>'
+          +'<span style="font-weight:700;font-size:0.9rem;color:var(--white);line-height:1.3;">'+nomeSafe+'</span>'
           +sb
         +'</div>'
         +'<div style="display:grid;grid-template-columns:115px 42px 74px 1fr;align-items:center;gap:0 8px;margin-bottom:8px;">'
-          +'<span style="font-size:0.78rem;color:var(--white-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(getPlanNome(s.plano)||'\u2014')+'</span>'
+          +'<span style="font-size:0.78rem;color:var(--white-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+planoSafe+'</span>'
           +mod
           +'<span style="font-size:0.82rem;font-weight:700;color:var(--white);">'+valor+'</span>'
           +'<span style="font-size:0.78rem;color:var(--white-dim);white-space:nowrap;">'+venc+'</span>'
         +'</div>'
         +'<div style="display:flex;gap:6px;flex-wrap:wrap;">'
-          +'<button class="btn btn-outline btn-sm" onclick="toggleStatus(this.dataset.sid,this.dataset.ns)" data-sid="'+s.id+'" data-ns="'+ns+'">'+bl+'</button>'
+          +'<button class="btn btn-outline btn-sm" onclick="toggleStatus(this.dataset.sid,this.dataset.ns)" data-sid="'+sid+'" data-ns="'+ns+'">'+bl+'</button>'
           +ren
-          +'<button class="btn btn-outline btn-sm" onclick="gerarRecibo(this.dataset.sid)" data-sid="'+s.id+'">\uD83E\uDDFE Recibo</button>'
+          +'<button class="btn btn-outline btn-sm" onclick="gerarRecibo(this.dataset.sid)" data-sid="'+sid+'">\uD83E\uDDFE Recibo</button>'
         +'</div>'
       +'</div>';
     }).join('');
@@ -3454,6 +3671,7 @@ function initApp(){
     try{renderLockIn();}catch(e){}
     try{renderPaineis();}catch(e){}
     try{renderAutomacao();}catch(e){}
+    try{repairDocumentEncoding();}catch(e){}
     // Apenas apos todos os renders iniciais marcar como pronto para rastrear
     // alteracoes do usuario — evita que renders de startup ativem gp-dirty
     _startupComplete=true;
@@ -3461,6 +3679,8 @@ function initApp(){
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+  try { updateLoginHelp(); } catch(e) {}
+  try { repairDocumentEncoding(); } catch(e) {}
   try { initTheme(); } catch(e) {}
   try { tryAutoLogin(); } catch(e) { console.error('tryAutoLogin err',e); }
   try {
