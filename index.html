@@ -994,12 +994,13 @@ var _MERGE_OBJECT_COLS=['gp-p','gp-n','gp-rep','gp-exc','gp-bl','gp-fe'];
 
 // Diff estrutural real: detecta IDs adicionados/removidos E conteúdo diferente.
 function _hasStructuralDiff(local, cloud){
-  if(!Array.isArray(local)||!Array.isArray(cloud)) return false;
-  if(local.length!==cloud.length) return true;
-  var map={}; cloud.forEach(function(i){ map[i.id]=JSON.stringify(i); });
-  for(var i=0;i<local.length;i++){
-    var l=local[i]; if(!map[l.id]) return true;
-    if(JSON.stringify(l)!==map[l.id]) return true; // campo local extra após _mergeItem
+  if(!local||!cloud) return true;
+  var localKeys=Object.keys(local); var cloudKeys=Object.keys(cloud);
+  if(localKeys.length!==cloudKeys.length) return true;
+  for(var i=0;i<localKeys.length;i++){
+    var key=localKeys[i]; var l=local[key]; var c=cloud[key];
+    if(!c) return true;
+    if(JSON.stringify(l)!==JSON.stringify(c)) return true;
   }
   return false;
 }
@@ -1052,14 +1053,13 @@ function _applyCol(col, lsKey, colData, force){
   if(cloudLts>(_colLocalTs[col]||0)) _colLocalTs[col]=cloudLts;
   try{ localStorage.setItem('gp-cts-'+col,String(_colServerTs[col]||0)); }catch(e){}
   try{ localStorage.setItem('gp-lts-'+col,String(_colLocalTs[col]||0)); }catch(e){}
-  // REASSERT if merged has more than what cloud sent
+  // REASSERT if merged differs structurally from what cloud sent
   if(!force && _initialized){
     var needsReassert=false;
     var mc2=_MERGE_ARRAY_COLS[lsKey];
-    if(mc2 && Array.isArray(merged) && Array.isArray(cloudParsed)){
+    var isObjCol=_MERGE_OBJECT_COLS.indexOf(lsKey)!==-1;
+    if(mc2||isObjCol){
       needsReassert=_hasStructuralDiff(merged,cloudParsed);
-    } else if(_MERGE_OBJECT_COLS.indexOf(lsKey)!==-1){
-      needsReassert=mergedStr!==cloudDataStr;
     }
     if(needsReassert){
       var now=Date.now();
