@@ -2075,7 +2075,7 @@ function checkAutoBackup() {
   if(age>86400000) saveAutoBackup();
 }
 function saveAutoBackup() {
-  if(!students||!students.length){console.warn('[Backup] dados inválidos, snapshot cancelado');return;}
+  if(!students||!_visible(students).length){console.warn('[Backup] dados inválidos, snapshot cancelado');return;}
   var now=new Date().toISOString();
   try{
     var d=_buildExportData();
@@ -2130,7 +2130,7 @@ function importarDados() {
         students=normalizeStudentCollection(d.students||[]); agendas=d.agendas||[]; presencas=d.presencas||{};
         notasSessao=normalizeTextMap(d.notasSessao||{}); evolucaoData=d.evolucaoData||{}; historicoCob=normalizeTextMap(d.historicoCob||{});
         save(); saveAgendas(); savePresencas(); saveNotas(); saveEvolucao(); saveHistCob();
-        refreshAll(); toast('Dados importados: '+students.length+' alunos');
+        refreshAll(); toast('Dados importados: '+_visible(students).length+' alunos');
       }catch(e){alert('Arquivo invalido.');}
     };
     r.readAsText(e.target.files[0]);
@@ -2537,7 +2537,7 @@ function renderNotifs(){
   }).join('');
 }
 function cobrarInadimplentes(){
-  var inad=students.filter(function(s){return s.status==='atrasado'&&s.telefone;});
+  var inad=_visible(students).filter(function(s){return s.status==='atrasado'&&s.telefone;});
   if(!inad.length){alert('Nenhum inadimplente com telefone.');return;}
   inad.forEach(function(s){
     var ph=waPhone(s); if(!ph)return;
@@ -3342,7 +3342,7 @@ function renderSlotModal(){
       var booked=ags.map(function(a){return a.alunoId;});
       var slotDateChk=getSlotDateStr();
       var agsNoDia=slotDateChk?getAgendasParaData(slotDateChk):[];
-      var availComInfo=students.filter(function(s){
+      var availComInfo=_visible(students).filter(function(s){
         return !booked.includes(s.id) && s.status!=='atrasado';
       }).map(function(s){
         // Já está neste slot exato?
@@ -3581,7 +3581,7 @@ function renderFinanceiro(){
   out+='</div>';
   dash.innerHTML=out;
 
-  var sorted=students.slice().sort(function(a,b){return a.nome.localeCompare(b.nome,'pt-BR');});
+  var sorted=_visible(students).slice().sort(function(a,b){return a.nome.localeCompare(b.nome,'pt-BR');});
   try{renderDespesasPanel();}catch(e){}
   try{renderSimulacao();}catch(e){}
   try{renderComparativo();}catch(e){}
@@ -3979,7 +3979,7 @@ function salvarPlanoForm() {
 
 function excluirPlano(idx) {
   var p = PLANOS[idx];
-  var emUso = students.some(function(s){ return s.plano === p.id; });
+  var emUso = _visible(students).some(function(s){ return s.plano === p.id; });
   if (emUso) {
     alert('Este plano esta em uso por alunos e nao pode ser excluido.');
     return;
@@ -4082,7 +4082,7 @@ function renderTabTreino() {
   var q = (document.getElementById('treino-search')||{}).value || '';
   q = q.toLowerCase();
 
-  var filtered = students.filter(function(s){
+  var filtered = _visible(students).filter(function(s){
     if(q && !s.nome.toLowerCase().includes(q)) return false;
     var temTreino = !!(treinosData[s.id] && treinosData[s.id].divisoes && treinosData[s.id].divisoes.length);
     if(treinoFiltro === 'com') return temTreino;
@@ -4092,8 +4092,8 @@ function renderTabTreino() {
 
   var countEl = document.getElementById('treino-count');
   if(countEl){
-    var comT = students.filter(function(s){ return treinosData[s.id]&&treinosData[s.id].divisoes&&treinosData[s.id].divisoes.length; }).length;
-    countEl.textContent = comT + ' de ' + students.length + ' alunos com treino';
+    var comT = _visible(students).filter(function(s){ return treinosData[s.id]&&treinosData[s.id].divisoes&&treinosData[s.id].divisoes.length; }).length;
+    countEl.textContent = comT + ' de ' + _visible(students).length + ' alunos com treino';
   }
 
   if(!filtered.length){
@@ -4359,12 +4359,12 @@ function renderMiniChart(sid,exKey) {
 }
 
 function calcSimulacao() {
-  var ativos=students.filter(function(s){return s.status!=='atrasado';});
-  var inad  =students.filter(function(s){return s.status==='atrasado';});
-  var ausentes=students.filter(function(s){var d=getDaysAbsent(s.id);return d!==null&&d>=7&&s.status!=='atrasado';});
+  var ativos=_visible(students).filter(function(s){return s.status!=='atrasado';});
+  var inad  =_visible(students).filter(function(s){return s.status==='atrasado';});
+  var ausentes=_visible(students).filter(function(s){var d=getDaysAbsent(s.id);return d!==null&&d>=7&&s.status!=='atrasado';});
 
   var recAtual  =ativos.reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
-  var recGarant =students.filter(function(s){return s.status==='em dia';}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
+  var recGarant =_visible(students).filter(function(s){return s.status==='em dia';}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
   var recInad   =inad.reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
   var recRisco  =ausentes.reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
 
@@ -4407,7 +4407,7 @@ function calcFreqQueda() {
 }
 
 function getMaisFaltosos() {
-  return students.map(function(s){
+  return _visible(students).map(function(s){
     var now=new Date(),y=now.getFullYear(),m=now.getMonth();
     var faltas=Object.keys(presencas).filter(function(k){
       if(k.indexOf(s.id+'_')!==0)return false;
@@ -4476,7 +4476,7 @@ function renderSimulacao() {
 function getPrioridadeAcao() {
   var acoes=[];
 
-  students.filter(function(s){return s.status==='atrasado';})
+  _visible(students).filter(function(s){return s.status==='atrasado';})
     .sort(function(a,b){return (parseFloat(b.valor)||0)-(parseFloat(a.valor)||0);})
     .forEach(function(s){
       var ph=waPhone(s);
@@ -4490,7 +4490,7 @@ function getPrioridadeAcao() {
       });
     });
 
-  students.filter(function(s){
+  _visible(students).filter(function(s){
     var d=getDaysAbsent(s.id);
     return d!==null&&d>=7&&s.status!=='atrasado';
   }).map(function(s){
@@ -4511,7 +4511,7 @@ function getPrioridadeAcao() {
     });
 
   var hoje=new Date();hoje.setHours(0,0,0,0);
-  students.filter(function(s){
+  _visible(students).filter(function(s){
     if(!s.vencimento)return false;
     var v=new Date(s.vencimento+'T12:00:00');v.setHours(0,0,0,0);
     var d=Math.ceil((v-hoje)/86400000);
@@ -4598,9 +4598,9 @@ function saveHistoricoFin() {
 }
 function registrarMesAtual() {
   var key=new Date().toISOString().substring(0,7); 
-  var rec=students.filter(function(s){return s.status==='em dia';}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
-  var tot=students.reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
-  historicoFin[key]={rec,tot,alunos:students.length};
+  var rec=_visible(students).filter(function(s){return s.status==='em dia';}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
+  var tot=_visible(students).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
+  historicoFin[key]={rec,tot,alunos:_visible(students).length};
   saveHistoricoFin();
 }
 function getComparativo() {
@@ -4620,7 +4620,7 @@ function calcValorApp() {
 
 function renderLockIn() {
   var panel=document.getElementById('lockin-panel'); if(!panel)return;
-  if(!students.length){panel.innerHTML='';return;}
+  if(!_visible(students).length){panel.innerHTML='';return;}
   var v=calcValorApp();
   var sim=calcSimulacao();
   var out='<div style="background:linear-gradient(135deg,rgba(74,127,165,0.15),rgba(39,174,96,0.08));border:1px solid rgba(74,127,165,0.3);padding:14px 16px;margin-bottom:12px;">'
@@ -4770,11 +4770,11 @@ function gerarRelatorio() {
   var mes = now.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
   var mesLabel = mes.charAt(0).toUpperCase() + mes.slice(1);
 
-  var total    = students.reduce(function(a,s){ return a+(parseFloat(s.valor)||0); },0);
-  var recebido = students.filter(function(s){ return s.status==='em dia'; }).reduce(function(a,s){ return a+(parseFloat(s.valor)||0); },0);
-  var atrasado = students.filter(function(s){ return s.status==='atrasado'; }).reduce(function(a,s){ return a+(parseFloat(s.valor)||0); },0);
-  var ativos   = students.filter(function(s){ return s.status!=='atrasado'; }).length;
-  var inat     = students.filter(function(s){ return s.status==='atrasado'; }).length;
+  var total    = _visible(students).reduce(function(a,s){ return a+(parseFloat(s.valor)||0); },0);
+  var recebido = _visible(students).filter(function(s){ return s.status==='em dia'; }).reduce(function(a,s){ return a+(parseFloat(s.valor)||0); },0);
+  var atrasado = _visible(students).filter(function(s){ return s.status==='atrasado'; }).reduce(function(a,s){ return a+(parseFloat(s.valor)||0); },0);
+  var ativos   = _visible(students).filter(function(s){ return s.status!=='atrasado'; }).length;
+  var inat     = _visible(students).filter(function(s){ return s.status==='atrasado'; }).length;
   var meta     = getMeta();
   var freq     = calcFreqMedia();
   var sim      = calcSimulacao();
@@ -4782,7 +4782,7 @@ function gerarRelatorio() {
   function fmtR(v){ return 'R$ '+Math.round(v).toLocaleString('pt-BR'); }
   function pct(v,t){ return t>0?Math.round(v/t*100)+'%':'\u2014'; }
 
-  var sorted = students.slice().sort(function(a,b){
+  var sorted = _visible(students).slice().sort(function(a,b){
     var o={atrasado:0,vencendo:1,'em dia':2}; return (o[a.status]||9)-(o[b.status]||9);
   });
 
@@ -4887,7 +4887,7 @@ function exportarListaPDF() {
   var now = new Date();
   var mesLabel = now.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
   mesLabel = mesLabel.charAt(0).toUpperCase()+mesLabel.slice(1);
-  var sorted = students.slice().sort(function(a,b){ return a.nome.localeCompare(b.nome); });
+  var sorted = _visible(students).slice().sort(function(a,b){ return a.nome.localeCompare(b.nome); });
   function fmtR(v){ return 'R$ '+Math.round(v).toLocaleString('pt-BR'); }
   var rows = sorted.map(function(s,i){
     var cor = s.status==='em dia'?'#1e8449':s.status==='atrasado'?'#c0392b':'#d68910';
@@ -4906,9 +4906,9 @@ function exportarListaPDF() {
       +'<td style="padding:9px 8px;"><span style="color:'+cor+';font-weight:600;">'+lb+'</span></td>'
       +'</tr>';
   }).join('');
-  var em=students.filter(function(s){return s.status==='em dia';}).length;
-  var ven=students.filter(function(s){return s.status==='vencendo';}).length;
-  var at=students.filter(function(s){return s.status==='atrasado';}).length;
+  var em=_visible(students).filter(function(s){return s.status==='em dia';}).length;
+  var ven=_visible(students).filter(function(s){return s.status==='vencendo';}).length;
+  var at=_visible(students).filter(function(s){return s.status==='atrasado';}).length;
   var html='<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Alunos '+mesLabel+'</title>'
     +'<style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;color:#1a1a2e;padding:28px;font-size:12px;}'
     +'h1{font-size:18px;color:#0f2035;}h2{font-size:11px;color:#4A7FA5;font-weight:400;margin-bottom:20px;}'
@@ -4929,7 +4929,7 @@ function exportarListaPDF() {
     +'<span class="pill ok">'+em+' Em dia</span>'
     +'<span class="pill warn">'+ven+' Vencendo</span>'
     +'<span class="pill bad">'+at+' Inativos</span>'
-    +'<span class="pill" style="background:#eef2f7;color:#4A7FA5;">'+students.length+' Total</span>'
+    +'<span class="pill" style="background:#eef2f7;color:#4A7FA5;">'+_visible(students).length+' Total</span>'
     +'</div>'
     +'<table><thead><tr><th>Nome</th><th>Plano</th><th>Modalidade</th><th>Valor</th><th>Vencimento</th><th>Telefone</th><th>Status</th></tr></thead>'
     +'<tbody>'+rows+'</tbody></table>'
@@ -5185,7 +5185,7 @@ function renderDespesasPanel() {
   var now=new Date(), ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   var lista=getDespesasMes(ym).sort(function(a,b){return b.data.localeCompare(a.data);});
   var totalDesp=getTotalDespesasMes(ym);
-  var recBruta=students.filter(function(s){return s.status==='em dia';}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
+  var recBruta=_visible(students).filter(function(s){return s.status==='em dia';}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
   var recLiq=recBruta-totalDesp;
   var aulasTotal=getTotalAulasMes();
   var custoPorAula=aulasTotal>0?totalDesp/aulasTotal:0;
@@ -5313,7 +5313,7 @@ function getAcaoDoDia(){
   var risco=getAlunosEmRisco();
   if(risco.length){ var it=risco[0],s=it.student,f=it.dias; return {student:s,motivo:s.nome.split(' ')[0]+' faltou '+f+(f===1?' aula agendada':' aulas agendadas seguidas'),acaoFn:function(){reengajarAluno(s.id);}}; }
   // Prioridade 3: cobrança atrasada
-  var cob=students.filter(function(s){ return s.status==='atrasado'; });
+  var cob=_visible(students).filter(function(s){ return s.status==='atrasado'; });
   if(cob.length){ var s=cob[0]; return {student:s,motivo:s.nome.split(' ')[0]+' est\u00e1 com pagamento em atraso',acaoFn:function(){cobrarAluno(s.id);}}; }
   // Prioridade 4: faltou ontem
   var ontem=getFaltaramOntem();
@@ -5518,9 +5518,9 @@ function renderDashboard() {
   if(dataEl) dataEl.textContent = diasSem[now.getDay()]+', '+now.getDate()+' de '+mesNomes[now.getMonth()];
 
   // KPIs
-  var total = students.length;
-  var emDia = students.filter(function(s){ return s.status==='em dia'; }).length;
-  var inad  = students.filter(function(s){ return s.status==='atrasado'; }).length;
+  var total = _visible(students).length;
+  var emDia = _visible(students).filter(function(s){ return s.status==='em dia'; }).length;
+  var inad  = _visible(students).filter(function(s){ return s.status==='atrasado'; }).length;
 
   var kpisEl = document.getElementById('dash-kpis');
   if(kpisEl) kpisEl.innerHTML =
@@ -5546,7 +5546,7 @@ function renderDashboard() {
         +'<div style="font-size:0.8rem;color:var(--white-dim);padding:10px 0;">&#127956; Feriado: '+ferHoje+' \u2014 agenda fechada.</div>';
     } else {
       var agsHoje = getAgendasParaData(ds);
-      var idHoje = agsHoje.filter(function(a){ return students.some(function(s){ return s.id===a.alunoId; }); }).map(function(a){ return a.alunoId; }).filter(function(id,i,ar){ return ar.indexOf(id)===i; });
+      var idHoje = agsHoje.filter(function(a){ return _visible(students).some(function(s){ return s.id===a.alunoId; }); }).map(function(a){ return a.alunoId; }).filter(function(id,i,ar){ return ar.indexOf(id)===i; });
       // Ordenar por horário de início
       idHoje.sort(function(a,b){
         var hA=(agsHoje.find(function(x){return x.alunoId===a;})||{}).inicio||'';
@@ -5573,7 +5573,7 @@ function renderDashboard() {
 
   // Vencimentos próximos (3 dias) — notificação de vencimento
   var hoje2 = new Date(); hoje2.setHours(0,0,0,0);
-  var vencProx = students.filter(function(s){
+  var vencProx = _visible(students).filter(function(s){
     if(!s.vencimento) return false;
     var v = new Date(s.vencimento+'T12:00:00'); v.setHours(0,0,0,0);
     var diff = Math.ceil((v-hoje2)/86400000);
@@ -5640,9 +5640,9 @@ function renderDashboard() {
 
 function openDashGrupo(tipo){
   var title='', lista=[];
-  if(tipo==='total'){ title='Todos os alunos ('+students.length+')'; lista=students.slice(); }
-  else if(tipo==='ativos'){ lista=students.filter(function(s){ return s.status==='em dia'; }); title='Alunos ativos ('+lista.length+')'; }
-  else if(tipo==='inadimplentes'){ lista=students.filter(function(s){ return s.status==='atrasado'; }); title='Inadimplentes ('+lista.length+')'; }
+  if(tipo==='total'){ title='Todos os alunos ('+_visible(students).length+')'; lista=_visible(students).slice(); }
+  else if(tipo==='ativos'){ lista=_visible(students).filter(function(s){ return s.status==='em dia'; }); title='Alunos ativos ('+lista.length+')'; }
+  else if(tipo==='inadimplentes'){ lista=_visible(students).filter(function(s){ return s.status==='atrasado'; }); title='Inadimplentes ('+lista.length+')'; }
   lista=lista.slice().sort(function(a,b){ return a.nome.localeCompare(b.nome,'pt-BR'); });
   document.getElementById('dash-grupo-title').textContent=title;
   var body=document.getElementById('dash-grupo-body');
@@ -5702,7 +5702,7 @@ function renderRelatorioMensal() {
     .filter(function(id, i, ar) { return ar.indexOf(id) === i; });
 
   // Inadimplentes (status atrasado)
-  var inadList = students.filter(function(s) { return s.status === 'atrasado'; });
+  var inadList = _visible(students).filter(function(s) { return s.status === 'atrasado'; });
 
   var out = '';
   out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Relatório — ' + mesLabel + '</div>';
