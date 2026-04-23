@@ -970,9 +970,14 @@ function _mergeObjectByKey(local, cloud){
     var localItem=local ? local[key] : undefined;
     var cloudItem=cloud[key];
     if(localItem===undefined){ result[key]=cloudItem; return; }
-    var localTs=localItem&&localItem.updatedAt ? new Date(localItem.updatedAt).getTime() : 0;
-    var cloudTs=cloudItem&&cloudItem.updatedAt ? new Date(cloudItem.updatedAt).getTime() : 0;
-    if(cloudTs>=localTs) result[key]=cloudItem;
+    var localTs=(localItem&&typeof localItem==='object'&&localItem.updatedAt)
+      ? new Date(localItem.updatedAt).getTime() : null;
+    var cloudTs=(cloudItem&&typeof cloudItem==='object'&&cloudItem.updatedAt)
+      ? new Date(cloudItem.updatedAt).getTime() : null;
+    // Cloud wins only when we can compare timestamps and cloud is newer or equal
+    if(cloudTs!==null && localTs!==null && cloudTs>=localTs){ result[key]=cloudItem; return; }
+    if(cloudTs!==null && localTs===null){ result[key]=cloudItem; return; }
+    // Local wins: cloudTs is null, or localTs > cloudTs
   });
   return result;
 }
@@ -1918,6 +1923,21 @@ function fmtDate(s){ return s ? new Date(s+'T12:00:00').toLocaleDateString('pt-B
 function getMonday(d) { var c=new Date(d); c.setHours(0,0,0,0); var day=c.getDay(); c.setDate(c.getDate()-day); return c; }
 function todayStr() { return new Date().toISOString().split('T')[0]; }
 function presKey(id,ds){ return id+'_'+ds; }
+function _presStatus(entry){
+  if(!entry) return null;
+  if(typeof entry==='string') return entry; // backward compat with old string format
+  if(entry.deleted) return null;
+  return entry.status||null;
+}
+function _presEntry(status){ return {status:status,updatedAt:Date.now(),deviceId:_getDeviceId()}; }
+function _presDelete(){ return {deleted:true,updatedAt:Date.now(),deviceId:_getDeviceId()}; }
+function _cleanupPresencas(){
+  var maxAge=7*24*60*60*1000; var now=Date.now();
+  Object.keys(presencas).forEach(function(k){
+    var e=presencas[k];
+    if(e&&typeof e==='object'&&e.deleted&&e.updatedAt&&(now-e.updatedAt)>maxAge) delete presencas[k];
+  });
+}
 function toast(msg) {
   var t=document.getElementById('toast-msg'); if(!t)return;
   t.textContent=msg; t.style.display='block';
@@ -1963,6 +1983,7 @@ function loadAll() {
   try{var s=localStorage.getItem('gp-s');if(s)students=normalizeStudentCollection(JSON.parse(s));}catch(e){}
   try{var a=localStorage.getItem('gp-a');if(a)agendas=JSON.parse(a);}catch(e){}
   try{var p=localStorage.getItem('gp-p');if(p)presencas=JSON.parse(p);}catch(e){}
+  _cleanupPresencas();
   try{var n=localStorage.getItem('gp-n');if(n)notasSessao=normalizeTextMap(JSON.parse(n));}catch(e){}
   try{var e=localStorage.getItem('gp-ev');if(e)evolucaoData=JSON.parse(e);}catch(e){}
   try{var h=localStorage.getItem('gp-hc');if(h)historicoCob=normalizeTextMap(JSON.parse(h));}catch(e){}
@@ -2343,7 +2364,8 @@ function getAulasDoMes(sid){
   Object.keys(presencas).forEach(function(k){
     if(k.indexOf(sid+'_')!==0)return;
     var ds=k.replace(sid+'_',''),d=new Date(ds+'T12:00:00');
-    if(d.getFullYear()===y&&d.getMonth()===m){if(presencas[k]==='presente')f++;else fa++;}
+    var _psf=_presStatus(presencas[k]);
+    if(d.getFullYear()===y&&d.getMonth()===m){if(_psf==='presente')f++;else if(_psf==='faltou')fa++;}
   });
   return{feitas:f,direito:dir,faltas:fa};
 }
@@ -2351,7 +2373,7 @@ function getAulasDoMes(sid){
 function getLastPresenca(sid){
   var dates=[];
   Object.keys(presencas).forEach(function(k){
-    if(k.indexOf(sid+'_')!==0||presencas[k]!=='presente')return;
+    if(k.indexOf(sid+'_')!==0||_presStatus(presencas[k])!=='presente')return;
     dates.push(new Date(k.replace(sid+'_','')+'T12:00:00'));
   });
   if(!dates.length)return null;
@@ -2368,8 +2390,8 @@ function getMissedSessionsStreak(sid){
     var dStr=d.toISOString().split('T')[0];
     var ags=getAgendasParaData(dStr);
     if(!ags.some(function(a){return a.alunoId===sid;})) continue; // dia sem sessão — pula
-    var p=presencas[sid+'_'+dStr];
-    if(p==='falta'){ streak++; }
+    var p=_presStatus(presencas[sid+'_'+dStr]);
+    if(p==='faltou'){ streak++; }
     else { break; } // presente ou não marcado — interrompe contagem
   }
   return streak;
@@ -2735,7 +2757,9 @@ function deleteStudent(id){
     _registerDelete(t); return t;
   });
   var prefix=id+'_';
-  Object.keys(presencas).forEach(function(k){ if(k.indexOf(prefix)===0) delete presencas[k]; });
+  Object.keys(presencas).forEach(function(k){
+    if(k.indexOf(prefix)===0) presencas[k]=_presDelete();
+  });
   save(); saveAgendas(); savePresencas(); refreshAll();
 }
 function handlePhoto(e){
@@ -3172,8 +3196,8 @@ function renderWeek(){
       if(!isFer){
         var ev=getAgendasParaData(dStr).filter(function(a){return parseInt(a.inicio.split(':')[0])===h;});
         ev.forEach(function(ag){
-          var s=students.find(function(x){return x.id===ag.alunoId;});if(!s)return;
-          var pk=presKey(s.id,dStr);var ps=presencas[pk];
+          var s=students.find(function(x){return x.id===ag.alunoId&&!x.deleted;});if(!s)return;
+          var pk=presKey(s.id,dStr);var ps=_presStatus(presencas[pk]);
           var cls=ps==='presente'?'status-ok':ps==='faltou'?'status-late':'status-neutral';
           var ev2=document.createElement('div');ev2.className='cal-event '+cls;
           ev2.textContent=s.nome.split(' ')[0]+(ag.tipo==='reposicao'?' ↩':'')+(isEmLicenca(s.id,dStr)?' 🏖':'');
@@ -3205,8 +3229,8 @@ function renderDay(){
     if(!feriadoNome){ var hCopy=h; var dStrCopyDay=dStr; content.onclick=function(){openSlotModal(dow,hCopy,dStrCopyDay);}; }
     var ev=feriadoNome?[]:getAgendasParaData(dStr).filter(function(a){return parseInt(a.inicio.split(':')[0])===h;});
     ev.forEach(function(ag){
-      var s=students.find(function(x){return x.id===ag.alunoId;});if(!s)return;
-      var pk=presKey(s.id,dStr);var ps=presencas[pk];
+      var s=students.find(function(x){return x.id===ag.alunoId&&!x.deleted;});if(!s)return;
+      var pk=presKey(s.id,dStr);var ps=_presStatus(presencas[pk]);
       var cls=ps==='presente'?'status-ok':ps==='faltou'?'status-late':'status-neutral';
       var evDiv=document.createElement('div');evDiv.className='day-event '+cls;
       evDiv.textContent=s.nome+(ag.tipo==='reposicao'?' (reposição)':'');
@@ -3274,9 +3298,9 @@ function renderSlotModal(){
   } else {
     if(ags.length===0){out+='<p style="color:var(--white-dim);font-size:0.85rem;margin-bottom:16px;">Nenhum aluno neste hor\u00e1rio.</p>';}
     ags.forEach(function(ag){
-      var s=students.find(function(x){return x.id===ag.alunoId;}); if(!s)return;
+      var s=students.find(function(x){return x.id===ag.alunoId&&!x.deleted;}); if(!s)return;
       var pk=presKey(s.id,slotDate);
-      var ps=presencas[pk]||null;
+      var ps=_presStatus(presencas[pk])||null;
       var bc=ps==='presente'?'var(--success)':ps==='faltou'?'var(--danger)':'var(--accent)';
       var nota=notasSessao[pk]||'';
       var presLabel=ps==='presente'?'\u2705 Presente':ps==='faltou'?'\u274c Faltou':'';
@@ -3386,7 +3410,7 @@ function renderSlotModal(){
     btn.onclick=function(){
       var sid=btn.getAttribute('data-sid'),dt=btn.getAttribute('data-date'),st=btn.getAttribute('data-st');
       var k=presKey(sid,dt);
-      if(presencas[k]===st)delete presencas[k]; else presencas[k]=st;
+      if(_presStatus(presencas[k])===st) delete presencas[k]; else presencas[k]=_presEntry(st);
       savePresencas();renderSlotModal();renderCalendar();renderStats();
     };
   });
@@ -3414,7 +3438,7 @@ function renderSlotModal(){
 
       // Remover presença
       var k=presKey(sid,dt);
-      delete presencas[k];
+      presencas[k]=_presDelete();
 
       // Remover do dia via exceção (não mexe na agenda recorrente)
       removerDeData(agId, dt);
@@ -3485,7 +3509,7 @@ function marcarTodosPresentes(){
   var dow=new Date().getDay(),ds=todayStr();
   var ids=Array.from(new Set(getAgendasParaData(ds).map(function(a){return a.alunoId;})));
   if(!ids.length){alert('Nenhum aluno hoje.');return;}
-  ids.forEach(function(id){presencas[presKey(id,ds)]='presente';});
+  ids.forEach(function(id){presencas[presKey(id,ds)]=_presEntry('presente');});
   savePresencas();renderStats();renderCalendar();
   toast('\u2705 '+ids.length+' aluno'+(ids.length>1?'s':'')+' marcado'+(ids.length>1?'s':'')+' como presente!');
 }
@@ -3496,17 +3520,18 @@ function renderFinanceiro(){
   var ml=document.getElementById('fin-mes-label');
   if(ml)ml.textContent=mes.charAt(0).toUpperCase()+mes.slice(1);
 
-  var total=students.reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
-  var rec=students.filter(function(s){return s.status==='em dia';}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
-  var at=students.filter(function(s){return s.status==='atrasado';}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
-  var ven=students.filter(function(s){return s.status==='vencendo';}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
+  var _vsf=_visible(students);
+  var total=_vsf.reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
+  var rec=_vsf.filter(function(s){return s.status==='em dia';}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
+  var at=_vsf.filter(function(s){return s.status==='atrasado';}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
+  var ven=_vsf.filter(function(s){return s.status==='vencendo';}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
   var pct=total>0?Math.round(rec/total*100):0;
-  var ativos=students.filter(function(s){return s.status!=='atrasado';}).length;
-  var inat=students.filter(function(s){return s.status==='atrasado';}).length;
+  var ativos=_vsf.filter(function(s){return s.status!=='atrasado';}).length;
+  var inat=_vsf.filter(function(s){return s.status==='atrasado';}).length;
   var freq=calcFreqMedia();
-  var risco=students.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;}).length;
-  var recRisco=students.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
-  var proj=students.filter(function(s){return s.status==='em dia'||s.status==='vencendo';}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
+  var risco=_vsf.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;}).length;
+  var recRisco=_vsf.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
+  var proj=_vsf.filter(function(s){return s.status==='em dia'||s.status==='vencendo';}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
 
   var dash=document.getElementById('fin-dash'); if(!dash)return;
   var out='';
@@ -3994,7 +4019,7 @@ function getAulasPacote(studentId) {
   if (!p || p.tipo !== 'pacote') return null;
   var total = s.qtdAulas || p.aulasPacote || 0;
   var usadas = Object.keys(presencas).filter(function(k){
-    return k.indexOf(s.id+'_')===0 && presencas[k]==='presente';
+    return k.indexOf(s.id+'_')===0 && _presStatus(presencas[k])==='presente';
   }).length;
   return { total: total, usadas: usadas, restantes: Math.max(0, total - usadas) };
 }
@@ -4355,7 +4380,7 @@ function calcSimulacao() {
       if(k.indexOf(s.id+'_')!==0)return;
       var ds=k.replace(s.id+'_','');
       var d=new Date(ds+'T12:00:00');
-      if(d.getFullYear()===y&&d.getMonth()===m&&presencas[k]==='faltou') perdaFaltas+=vps;
+      if(d.getFullYear()===y&&d.getMonth()===m&&_presStatus(presencas[k])==='faltou') perdaFaltas+=vps;
     });
   });
 
@@ -4373,7 +4398,7 @@ function calcFreqQueda() {
     return Object.keys(presencas).filter(function(k){
       var ds=k.replace(/^[^_]+_/,'');
       var d=new Date(ds+'T12:00:00');
-      return d.getFullYear()===yr&&d.getMonth()===mo&&presencas[k]==='presente';
+      return d.getFullYear()===yr&&d.getMonth()===mo&&_presStatus(presencas[k])==='presente';
     }).length;
   }
   var atual=countPres(y,m), anterior=countPres(ly,lm);
@@ -4387,7 +4412,7 @@ function getMaisFaltosos() {
     var faltas=Object.keys(presencas).filter(function(k){
       if(k.indexOf(s.id+'_')!==0)return false;
       var d=new Date(k.replace(s.id+'_','')+'T12:00:00');
-      return d.getFullYear()===y&&d.getMonth()===m&&presencas[k]==='faltou';
+      return d.getFullYear()===y&&d.getMonth()===m&&_presStatus(presencas[k])==='faltou';
     }).length;
     return {s,faltas};
   }).filter(function(x){return x.faltas>0;})
@@ -5101,7 +5126,7 @@ function getTotalDespesasMes(ym) {
 function getTotalAulasMes() {
   var now=new Date(), y=now.getFullYear(), m=now.getMonth(), total=0;
   Object.keys(presencas).forEach(function(k){
-    if(presencas[k]!=='presente') return;
+    if(_presStatus(presencas[k])!=='presente') return;
     var parts=k.split('_'); if(parts.length<2) return;
     var ds=parts[parts.length-1]; var d=new Date(ds+'T12:00:00');
     if(d.getFullYear()===y && d.getMonth()===m) total++;
@@ -5308,7 +5333,7 @@ function renderModoRapido(){
   var out='<div style="font-size:0.72rem;color:var(--white-dim);margin-bottom:14px;">'+new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'})+'</div>';
   hoje.forEach(function(it){
     var s=it.student,slot=it.slot;
-    var ps=presencas[presKey(s.id,ds)]||null;
+    var ps=_presStatus(presencas[presKey(s.id,ds)])||null;
     out+='<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">'
       +'<div style="flex:1;min-width:0;cursor:pointer;" onclick="document.getElementById(\'modal-modo-rapido\').style.display=\'none\';openDetail(\''+s.id+'\')">'
       +'<div style="font-weight:600;font-size:0.88rem;color:var(--white);">'+s.nome+'</div>'
@@ -5322,7 +5347,7 @@ function renderModoRapido(){
     btn.onclick=function(){
       var sid=btn.getAttribute('data-sid'),st=btn.getAttribute('data-st');
       var k=presKey(sid,ds);
-      if(presencas[k]===st) delete presencas[k]; else presencas[k]=st;
+      if(_presStatus(presencas[k])===st) delete presencas[k]; else presencas[k]=_presEntry(st);
       savePresencas(); renderModoRapido(); renderCalendar(); renderStats();
     };
   });
@@ -5337,7 +5362,7 @@ function getAlunosHoje(){
     var s = students.find(function(x){ return x.id===slot.alunoId && !x.deleted; });
     if(!s) return;
     seen[slot.alunoId] = true;
-    result.push({ student:s, slot:slot, status: presencas[presKey(s.id, ds)]||'sem registro' });
+    result.push({ student:s, slot:slot, status: _presStatus(presencas[presKey(s.id,ds)])||'sem registro' });
   });
   return result.sort(function(a,b){ return a.slot.inicio.localeCompare(b.slot.inicio); });
 }
@@ -5352,7 +5377,7 @@ function getFaltaramOntem(){
     var s = students.find(function(x){ return x.id===slot.alunoId && !x.deleted; });
     if(!s) return;
     seen[slot.alunoId] = true;
-    if(presencas[presKey(s.id, ys)]==='presente') return;
+    if(_presStatus(presencas[presKey(s.id,ys)])==='presente') return;
     result.push({ student:s, slot:slot });
   });
   return result.sort(function(a,b){ return a.slot.inicio.localeCompare(b.slot.inicio); });
@@ -5665,8 +5690,9 @@ function renderRelatorioMensal() {
     var ds = parts[parts.length - 1];
     var d = new Date(ds + 'T12:00:00');
     if (d.getFullYear() !== y || d.getMonth() !== m) return;
-    if (presencas[k] === 'presente') aulasMes++;
-    else if (presencas[k] === 'faltou') faltasMes++;
+    var _psk=_presStatus(presencas[k]);
+    if (_psk === 'presente') aulasMes++;
+    else if (_psk === 'faltou') faltasMes++;
   });
   var totalAulas = aulasMes + faltasMes;
   var freqMes = totalAulas > 0 ? Math.round(aulasMes / totalAulas * 100) : 0;
