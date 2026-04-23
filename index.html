@@ -915,24 +915,38 @@ function _mergeItem(existing, item){
   return result;
 }
 
+// Registro persistente de IDs deletados — impede ressurreição por merge de dado antigo.
+function _getDeletedMap(){ try{ return JSON.parse(localStorage.getItem('gp-deleted-map')||'{}'); }catch(e){ return {}; } }
+function _saveDeletedMap(map){ try{ localStorage.setItem('gp-deleted-map',JSON.stringify(map)); }catch(e){} }
+function _registerDelete(item){
+  if(!item||!item.id) return;
+  var map=_getDeletedMap(); map[item.id]=Date.now(); _saveDeletedMap(map);
+}
+
 // Combina dois arrays por ID. Cloud vence quando mais novo; empate desempata por deviceId.
 // Usa _mergeItem para nunca perder campos locais extras. Tombstones ficam no resultado.
 function _mergeById(localArr, cloudArr, getId){
-  var map={};
+  var map={}; var deletedMap=_getDeletedMap();
   (localArr||[]).forEach(function(item){ map[getId(item)]=item; });
   (cloudArr||[]).forEach(function(item){
-    var id=getId(item); var existing=map[id];
+    var id=getId(item);
+    // Proteção anti-ressurreição: rejeita item cloud mais antigo que o delete local
+    if(deletedMap[id] && _getTs(item)<=deletedMap[id]){
+      console.log('[GP Sync] Ressurreição bloqueada:', id);
+      return;
+    }
+    var existing=map[id];
     if(!existing){ map[id]=item; }
     else{
       var lTs=_getTs(existing); var cTs=_getTs(item);
       if(cTs>lTs){
-        map[id]=_mergeItem(existing,item); // cloud vence, mas preserva campos locais extras
+        map[id]=_mergeItem(existing,item);
       } else if(cTs===lTs){
         if((item.deviceId||'')>(existing.deviceId||'')) map[id]=_mergeItem(existing,item);
       }
     }
   });
-  return Object.values(map); // tombstones incluídos; filtrar via _visible() na UI
+  return Object.values(map);
 }
 
 // Merge profundo de objetos: preserva chaves aninhadas de ambos os lados; cloud vence escalares.
@@ -975,13 +989,14 @@ function _hasStructuralDiff(local, cloud){
   return false;
 }
 
-// Remove tombstones mais velhos que maxAgeMs para evitar crescimento infinito de arrays.
+// Remove tombstones mais velhos que maxAgeMs, mas só se registrados no deletedMap.
+// Tombstones sem registro ou recentes permanecem para propagação segura.
 function _cleanupDeleted(arr, maxAgeMs){
-  var now=Date.now();
+  var now=Date.now(); var map=_getDeletedMap();
   return (arr||[]).filter(function(i){
     if(!i.deleted) return true;
     var ts=_getTs(i); if(!ts) return false;
-    return (now-ts)<maxAgeMs;
+    return !((now-ts)>maxAgeMs && map[i.id]); // remove só quando velho E registrado
   });
 }
 
@@ -2745,11 +2760,13 @@ function deleteStudent(id){
   var now=Date.now(); var dev=_getDeviceId();
   students=students.map(function(x){
     if(x.id!==id) return x;
-    return Object.assign({},x,{deleted:true,updatedAt:now,deviceId:dev});
+    var t=Object.assign({},x,{deleted:true,updatedAt:now,deviceId:dev});
+    _registerDelete(t); return t;
   });
   agendas=agendas.map(function(a){
     if(a.alunoId!==id) return a;
-    return Object.assign({},a,{deleted:true,updatedAt:now,deviceId:dev});
+    var t=Object.assign({},a,{deleted:true,updatedAt:now,deviceId:dev});
+    _registerDelete(t); return t;
   });
   save(); saveAgendas(); refreshAll();
 }
@@ -3976,6 +3993,7 @@ function excluirPlano(idx) {
   }
   var now=Date.now(); var dev=_getDeviceId();
   PLANOS[idx]=Object.assign({},PLANOS[idx],{deleted:true,updatedAt:now,deviceId:dev});
+  _registerDelete(PLANOS[idx]);
   savePlanos();
   syncPlanLegacy();
   atualizarSelectsPlanos();
