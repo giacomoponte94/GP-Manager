@@ -964,6 +964,19 @@ function _deepMerge(local, cloud){
   return result;
 }
 
+function _mergeObjectByKey(local, cloud){
+  var result=Object.assign({},local);
+  Object.keys(cloud||{}).forEach(function(key){
+    var localItem=local ? local[key] : undefined;
+    var cloudItem=cloud[key];
+    if(localItem===undefined){ result[key]=cloudItem; return; }
+    var localTs=localItem&&localItem.updatedAt ? new Date(localItem.updatedAt).getTime() : 0;
+    var cloudTs=cloudItem&&cloudItem.updatedAt ? new Date(cloudItem.updatedAt).getTime() : 0;
+    if(cloudTs>=localTs) result[key]=cloudItem;
+  });
+  return result;
+}
+
 // Coleções de array que usam merge por ID (getTs centralizado em _getTs)
 var _MERGE_ARRAY_COLS={
   'gp-s':          { getId:function(i){return i.id;} },
@@ -1016,7 +1029,7 @@ function _applyCol(col, lsKey, colData, force){
       console.log('[SYNC] MERGED', col, 'local:'+localArr.length+' cloud:'+cloudParsed.length+' merged:'+merged.length);
     } else if(_MERGE_OBJECT_COLS.indexOf(lsKey)!==-1 && typeof cloudParsed==='object' && !Array.isArray(cloudParsed)){
       var localObj=(typeof localParsed==='object'&&!Array.isArray(localParsed))?localParsed:{};
-      merged=_deepMerge(localObj, cloudParsed);
+      merged=_mergeObjectByKey(localObj, cloudParsed);
       console.log('[SYNC] MERGED', col, '(object)');
     }
   }
@@ -2721,7 +2734,9 @@ function deleteStudent(id){
     var t=Object.assign({},a,{deleted:true,updatedAt:now,deviceId:dev});
     _registerDelete(t); return t;
   });
-  save(); saveAgendas(); refreshAll();
+  var prefix=id+'_';
+  Object.keys(presencas).forEach(function(k){ if(k.indexOf(prefix)===0) delete presencas[k]; });
+  save(); saveAgendas(); savePresencas(); refreshAll();
 }
 function handlePhoto(e){
   var f=e.target.files[0]; if(!f)return;
@@ -5319,7 +5334,7 @@ function getAlunosHoje(){
   var seen = {}, result = [];
   slots.forEach(function(slot){
     if(seen[slot.alunoId]) return;
-    var s = students.find(function(x){ return x.id===slot.alunoId; });
+    var s = students.find(function(x){ return x.id===slot.alunoId && !x.deleted; });
     if(!s) return;
     seen[slot.alunoId] = true;
     result.push({ student:s, slot:slot, status: presencas[presKey(s.id, ds)]||'sem registro' });
@@ -5334,7 +5349,7 @@ function getFaltaramOntem(){
   var seen = {}, result = [];
   slots.forEach(function(slot){
     if(seen[slot.alunoId]) return;
-    var s = students.find(function(x){ return x.id===slot.alunoId; });
+    var s = students.find(function(x){ return x.id===slot.alunoId && !x.deleted; });
     if(!s) return;
     seen[slot.alunoId] = true;
     if(presencas[presKey(s.id, ys)]==='presente') return;
@@ -5345,7 +5360,7 @@ function getFaltaramOntem(){
 
 function getCobrancasHoje(){
   var hoje = new Date(); hoje.setHours(0,0,0,0);
-  return students
+  return _visible(students)
     .filter(function(s){ return s.status==='atrasado'||s.status==='vencendo'; })
     .map(function(s){
       var vd = s.vencimento ? new Date(s.vencimento+'T12:00:00') : null;
@@ -5356,7 +5371,7 @@ function getCobrancasHoje(){
 }
 
 function getAlunosEmRisco(){
-  return students
+  return _visible(students)
     .filter(function(s){ return s.status!=='atrasado'; })
     .map(function(s){ return { student:s, dias:getMissedSessionsStreak(s.id) }; })
     .filter(function(it){ return it.dias>=1; })
