@@ -1053,15 +1053,11 @@ function _applyCol(col, lsKey, colData, force){
   if(cloudLts>(_colLocalTs[col]||0)) _colLocalTs[col]=cloudLts;
   try{ localStorage.setItem('gp-cts-'+col,String(_colServerTs[col]||0)); }catch(e){}
   try{ localStorage.setItem('gp-lts-'+col,String(_colLocalTs[col]||0)); }catch(e){}
-  // REASSERT if merged differs structurally from what cloud sent
+  // REASSERT if merged differs from what local had before merge
   if(!force && _initialized){
-    var needsReassert=false;
     var mc2=_MERGE_ARRAY_COLS[lsKey];
     var isObjCol=_MERGE_OBJECT_COLS.indexOf(lsKey)!==-1;
-    if(mc2||isObjCol){
-      needsReassert=_hasStructuralDiff(merged,cloudParsed);
-    }
-    if(needsReassert){
+    if((mc2||isObjCol) && mergedStr!==(localRaw||'null')){
       var now=Date.now();
       if(now-(_lastReassertTs[col]||0)>2000){
         console.log('[SYNC] REASSERT', col);
