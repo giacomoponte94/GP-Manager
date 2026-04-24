@@ -471,7 +471,6 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
           <button class="btn btn-outline" style="height:40px;padding:0 14px;" onclick="exportarListaPDF()" title="Exportar lista em PDF">&#128438;</button>
         </div>
       </div>
-      <div id="lockin-panel" style="margin-bottom:12px;"></div>
       <div class="stats-row" id="stats-row"></div>
       <div id="paineis"></div>
       <div id="auto-panel" style="margin-bottom:16px;"></div>
@@ -2312,7 +2311,6 @@ function renderStats(){
   renderPaineis();
   renderNotifs();
   try{renderAutomacao();}catch(e){}
-  try{renderLockIn();}catch(e){}
 }
 
 function toggleFilterHoje(){
