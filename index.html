@@ -1531,13 +1531,13 @@ function loadReposicoes() {
   try { var l=localStorage.getItem('gp-lic'); if(l) licencas=JSON.parse(l); } catch(e) {}
 }
 function saveReposicoes() {
-  try { localStorage.setItem('gp-rep',JSON.stringify(reposicoes)); } catch(e) {}
+  localStorage.setItem('gp-rep',JSON.stringify(reposicoes)); _pushCol('gp-rep');
 }
 function saveRepHistorico() {
-  try { localStorage.setItem('gp-rep-hist',JSON.stringify(repHistorico)); } catch(e) {}
+  localStorage.setItem('gp-rep-hist',JSON.stringify(repHistorico)); _pushCol('gp-rep-hist');
 }
 function saveLicencas() {
-  try { localStorage.setItem('gp-lic',JSON.stringify(licencas)); } catch(e) {}
+  localStorage.setItem('gp-lic',JSON.stringify(licencas)); _pushCol('gp-lic');
 }
 function getReposicoes(sid) {
   return reposicoes[sid] || 0;
@@ -1652,7 +1652,7 @@ function loadDiasPermitidos() {
   } catch(e) {}
 }
 function saveDiasPermitidos() {
-  try { localStorage.setItem('gp-dias-perm', JSON.stringify(diasPermitidos)); } catch(e) {}
+  localStorage.setItem('gp-dias-perm', JSON.stringify(diasPermitidos)); _pushCol('gp-dias-perm');
 }
 function loadHorariosConfig() {
   try {
@@ -1665,7 +1665,7 @@ function loadHorariosConfig() {
   try { localStorage.setItem('gp-hconf', JSON.stringify(horariosConfig)); } catch(e) {}
 }
 function saveHorariosConfig() {
-  try { localStorage.setItem('gp-hconf', JSON.stringify(horariosConfig)); } catch(e) {}
+  localStorage.setItem('gp-hconf', JSON.stringify(horariosConfig)); _pushCol('gp-hconf');
 }
 function isHoraPermitida(h, dow) {
   var cfg = horariosConfig[h];
@@ -1691,7 +1691,7 @@ function buildDaysPicker() {
 
 
 function loadExcecoes(){try{var e=localStorage.getItem('gp-exc');if(e)excecoes=JSON.parse(e);}catch(e){}}
-function saveExcecoes(){try{localStorage.setItem('gp-exc',JSON.stringify(excecoes));}catch(e){}}
+function saveExcecoes(){ localStorage.setItem('gp-exc',JSON.stringify(excecoes)); _pushCol('gp-exc'); }
 function getExcecao(ds){if(!excecoes[ds])excecoes[ds]={removidos:[],adicionados:[]};return excecoes[ds];}
 function getAgendasParaData(dateStr){var d=new Date(dateStr+'T12:00:00'),dow=d.getDay();var exc=excecoes[dateStr]||{removidos:[],adicionados:[]};var rem=exc.removidos||[],add=exc.adicionados||[];var rec=agendas.filter(function(a){return !a.deleted&&a.days.includes(dow)&&rem.indexOf(a.id)===-1;});var ext=(add).map(function(x,i){return{id:dateStr+'_extra_'+i,alunoId:x.alunoId,inicio:x.inicio,fim:x.fim,days:[dow],_extra:true,_extraIdx:i,tipo:x.tipo||'extra'};});return rec.concat(ext);}
 function removerDeData(agId,dateStr){var exc=getExcecao(dateStr);var m=/.*_extra_(\d+)$/.exec(agId);if(m){var idx2=parseInt(m[1]);if(exc.adicionados&&exc.adicionados[idx2])exc.adicionados.splice(idx2,1);}else{if(exc.removidos.indexOf(agId)===-1)exc.removidos.push(agId);}saveExcecoes();}
@@ -1874,7 +1874,7 @@ function loadPlanos() {
   try { localStorage.setItem('gp-planos', JSON.stringify(PLANOS)); } catch(e) {}
 }
 function savePlanos() {
-  localStorage.setItem('gp-planos', JSON.stringify(_cleanupDeleted(PLANOS,7*24*60*60*1000)));
+  localStorage.setItem('gp-planos', JSON.stringify(_cleanupDeleted(PLANOS,7*24*60*60*1000))); _pushCol('gp-planos');
 }
 function getPlano(id) {
   return PLANOS.find(function(p){ return p.id === id; }) || null;
@@ -1963,6 +1963,7 @@ function save() {
   try{
     students = normalizeStudentCollection(_cleanupDeleted(students,7*24*60*60*1000));
     localStorage.setItem('gp-s',JSON.stringify(students));
+    _pushCol('gp-s');
   }catch(e){}
 }
 function loadAll() {
@@ -1982,12 +1983,12 @@ function saveAgendas() {
   console.log('[SYNC] agendas SAVE');
   _pushCol('gp-a');
 }
-function savePresencas(){ try{localStorage.setItem('gp-p',JSON.stringify(presencas));}catch(e){} }
-function saveNotas()    { try{notasSessao=normalizeTextMap(notasSessao);localStorage.setItem('gp-n',JSON.stringify(notasSessao));}catch(e){} }
-function saveEvolucao() { try{localStorage.setItem('gp-ev',JSON.stringify(evolucaoData));}catch(e){} }
-function saveHistCob()  { try{historicoCob=normalizeTextMap(historicoCob);localStorage.setItem('gp-hc',JSON.stringify(historicoCob));}catch(e){} }
-function saveFeriados() { try{feriadosCustom=normalizeTextMap(feriadosCustom);localStorage.setItem('gp-fe',JSON.stringify(feriadosCustom));}catch(e){} }
-function saveBloqueios(){ try{localStorage.setItem('gp-bl',JSON.stringify(bloqueios));}catch(e){} }
+function savePresencas(){ localStorage.setItem('gp-p',JSON.stringify(presencas)); _pushCol('gp-p'); }
+function saveNotas()    { notasSessao=normalizeTextMap(notasSessao); localStorage.setItem('gp-n',JSON.stringify(notasSessao)); _pushCol('gp-n'); }
+function saveEvolucao() { localStorage.setItem('gp-ev',JSON.stringify(evolucaoData)); _pushCol('gp-ev'); }
+function saveHistCob()  { historicoCob=normalizeTextMap(historicoCob); localStorage.setItem('gp-hc',JSON.stringify(historicoCob)); _pushCol('gp-hc'); }
+function saveFeriados() { feriadosCustom=normalizeTextMap(feriadosCustom); localStorage.setItem('gp-fe',JSON.stringify(feriadosCustom)); _pushCol('gp-fe'); }
+function saveBloqueios(){ localStorage.setItem('gp-bl',JSON.stringify(bloqueios)); _pushCol('gp-bl'); }
 
 function _buildExportData() {
   return {
@@ -4045,10 +4046,11 @@ function loadTreinosLog() {
   if(t) try{treinosLog=JSON.parse(t);}catch(e){}
 }
 function saveTreinosLog() {
-  localStorage.setItem('gp-treinos-log',JSON.stringify(treinosLog));
+  localStorage.setItem('gp-treinos-log',JSON.stringify(treinosLog)); _pushCol('gp-treinos-log');
 }
 function saveTreinos() {
   localStorage.setItem('gp-treinos',JSON.stringify(treinosData));
+  _pushCol('gp-treinos');
   var el=document.getElementById('treino-save-status');
   if(el){ el.textContent='Salvo ✓'; el.style.color='var(--success)'; setTimeout(function(){ if(el) el.textContent=''; },2000); }
 }
@@ -4280,7 +4282,7 @@ function loadEvolucao() {
   if(t) try{evolucaoCargas=JSON.parse(t);}catch(e){}
 }
 function saveEvolucao() {
-  localStorage.setItem('gp-evolucao',JSON.stringify(evolucaoCargas));
+  localStorage.setItem('gp-evolucao',JSON.stringify(evolucaoCargas)); _pushCol('gp-evolucao');
 }
 function getEvoKey(exNome) {
   return exNome.trim().toLowerCase().replace(/\s+/g,'_');
@@ -4572,7 +4574,7 @@ function loadHistoricoFin() {
   if(h)try{historicoFin=JSON.parse(h);}catch(e){}
 }
 function saveHistoricoFin() {
-  localStorage.setItem('gp-hfin',JSON.stringify(historicoFin));
+  localStorage.setItem('gp-hfin',JSON.stringify(historicoFin)); _pushCol('gp-hfin');
 }
 function registrarMesAtual() {
   var key=new Date().toISOString().substring(0,7); 
@@ -5084,7 +5086,7 @@ function loadPagamentos() {
   try { var p=localStorage.getItem('gp-pagamentos'); if(p) pagamentos=JSON.parse(p); } catch(e) {}
 }
 function savePagamentos() {
-  try { localStorage.setItem('gp-pagamentos', JSON.stringify(_cleanupDeleted(pagamentos,7*24*60*60*1000))); } catch(e) {}
+  localStorage.setItem('gp-pagamentos', JSON.stringify(_cleanupDeleted(pagamentos,7*24*60*60*1000))); _pushCol('gp-pagamentos');
 }
 
 /* ===== DESPESAS ===== */
@@ -5093,7 +5095,7 @@ function loadDespesas() {
   try { var d=localStorage.getItem('gp-desp'); if(d) despesas=JSON.parse(d); } catch(e) {}
 }
 function saveDespesas() {
-  try { localStorage.setItem('gp-desp', JSON.stringify(despesas)); } catch(e) {}
+  localStorage.setItem('gp-desp', JSON.stringify(despesas)); _pushCol('gp-desp');
 }
 function getDespesasMes(ym) {
   return despesas.filter(function(d){ return d.data && d.data.substring(0,7)===ym; });
