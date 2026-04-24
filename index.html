@@ -1650,6 +1650,17 @@ var chavePix = '';
 function loadChavePix(){ try{ chavePix=localStorage.getItem('gp-pix')||''; }catch(e){} }
 function saveChavePix(){ try{ localStorage.setItem('gp-pix',chavePix); }catch(e){} }
 
+var reciboHeader = '';
+var reciboRodape = '';
+function loadReciboConfig(){
+  try{ reciboHeader=localStorage.getItem('gp-recibo-header'); if(reciboHeader===null)reciboHeader='GIACOMO PONTE - Personal Trainer'; }catch(e){}
+  try{ reciboRodape=localStorage.getItem('gp-recibo-rodape'); if(reciboRodape===null)reciboRodape='@giacomoponte'; }catch(e){}
+}
+function saveReciboConfig(){
+  try{ localStorage.setItem('gp-recibo-header',reciboHeader); }catch(e){}
+  try{ localStorage.setItem('gp-recibo-rodape',reciboRodape); }catch(e){}
+}
+
 function loadDiasPermitidos() {
   try {
     var d = localStorage.getItem('gp-dias-perm');
@@ -1974,7 +1985,7 @@ function save() {
   }catch(e){}
 }
 function loadAll() {
-  loadPlanos(); syncPlanLegacy(); loadTreinos(); loadTreinosLog(); loadEvolucao(); loadHistoricoFin(); loadExcecoes(); loadDiasPermitidos(); loadHorariosConfig(); loadChavePix(); loadReposicoes(); loadPagamentos(); loadDespesas();
+  loadPlanos(); syncPlanLegacy(); loadTreinos(); loadTreinosLog(); loadEvolucao(); loadHistoricoFin(); loadExcecoes(); loadDiasPermitidos(); loadHorariosConfig(); loadChavePix(); loadReciboConfig(); loadReposicoes(); loadPagamentos(); loadDespesas();
   try{var s=localStorage.getItem('gp-s');if(s)students=normalizeStudentCollection(JSON.parse(s));}catch(e){}
   try{var a=localStorage.getItem('gp-a');if(a)agendas=JSON.parse(a);}catch(e){}
   try{var p=localStorage.getItem('gp-p');if(p)presencas=JSON.parse(p);}catch(e){}
@@ -3637,19 +3648,19 @@ function abrirMeta(){
 function gerarRecibo(id){
   var s=students.find(function(x){return x.id===id&&!x.deleted;}); if(!s)return;
   var hoje=new Date().toLocaleDateString('pt-BR');
-  var lines2=[
-    'GIACOMO PONTE - Personal Trainer',
-    '----------------------------',
-    'COMPROVANTE DE PAGAMENTO',
-    '----------------------------',
+  var sep='----------------------------';
+  var lines2=[];
+  if(reciboHeader)lines2.push(reciboHeader);
+  lines2.push(sep,'COMPROVANTE DE PAGAMENTO',sep);
+  lines2.push(
     'Aluno: '+s.nome,
     'Plano: '+(getPlanNome(s.plano)||'--')+(s.modalidade?' ('+s.modalidade+')':''),
     'Valor: '+(s.valor?'R$ '+parseFloat(s.valor).toLocaleString('pt-BR',{minimumFractionDigits:2}):'--'),
     'Data: '+hoje,
-    'Vencimento: '+fmtDate(s.vencimento),
-    '----------------------------',
-    '@giacomoponte'
-  ];
+    'Vencimento: '+fmtDate(s.vencimento)
+  );
+  lines2.push(sep);
+  if(reciboRodape)lines2.push(reciboRodape);
   var txt=lines2.join('\n');
   var ph=waPhone(s);
   document.getElementById('recibo-txt').textContent=txt;
@@ -3834,6 +3845,18 @@ function renderConfiguracoes() {
   out += '</div>';
   out += '<button class="btn btn-outline" style="width:100%;height:38px;margin-top:8px;" onclick="adicionarFeriadoCfg()">+ Adicionar feriado</button>';
   out += '</div>';
+
+  // Recibo
+  out += '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">';
+  out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Comprovante de pagamento</div>';
+  out += '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:12px;">Personalize o cabe\u00E7alho e rodap\u00E9 do comprovante gerado para os alunos:</div>';
+  out += '<div style="display:flex;flex-direction:column;gap:8px;">';
+  out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">Cabe\u00E7alho (nome / apresenta\u00E7\u00E3o)</div>';
+  out += '<input type="text" id="cfg-recibo-header" placeholder="Ex: Jo\u00E3o Silva - Personal Trainer" value="'+escapeHTML(reciboHeader)+'" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;"></div>';
+  out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">Rodap\u00E9 (instagram / contato)</div>';
+  out += '<input type="text" id="cfg-recibo-rodape" placeholder="Ex: @seuperfil" value="'+escapeHTML(reciboRodape)+'" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;"></div>';
+  out += '<button class="btn btn-primary" style="height:42px;" onclick="salvarReciboConfig()">Salvar comprovante</button>';
+  out += '</div></div>';
 
   // Chave Pix
   out += '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">';
@@ -5757,6 +5780,13 @@ function salvarChavePix() {
   chavePix = v;
   saveChavePix();
   toast('Chave Pix salva!');
+}
+
+function salvarReciboConfig() {
+  reciboHeader = (document.getElementById('cfg-recibo-header').value||'').trim();
+  reciboRodape = (document.getElementById('cfg-recibo-rodape').value||'').trim();
+  saveReciboConfig();
+  toast('Comprovante salvo!');
 }
 
 function adicionarFeriadoCfg() {
