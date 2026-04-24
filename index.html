@@ -639,7 +639,7 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
   </div>
 </div>
 <div id="modal-treino" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,0.7);z-index:500;align-items:flex-end;justify-content:center;">
-  <div class="modal" style="max-width:520px;"><div class="modal-header"><div><div class="modal-title" id="treino-aluno-nome">Treino</div><span id="treino-save-status" style="font-size:0.65rem;color:var(--white-dim);"></span></div><button class="modal-close" onclick="document.getElementById('modal-treino').style.display='none'">&#215;</button></div><input type="hidden" id="treino-aluno-id"><div id="treino-editor-body"></div></div>
+  <div class="modal" style="max-width:520px;"><div class="modal-header"><span id="treino-save-status" style="font-size:0.65rem;color:var(--white-dim);"></span><button class="modal-close" onclick="document.getElementById('modal-treino').style.display='none'">&#215;</button></div><input type="hidden" id="treino-aluno-id"><div id="treino-container"></div></div>
 </div>
 <div id="modal-exercicio" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,0.7);z-index:500;align-items:flex-end;justify-content:center;">
   <div class="modal" style="max-width:400px;"><div class="modal-header"><div class="modal-title">+ Exerc&iacute;cio</div><button class="modal-close" onclick="document.getElementById('modal-exercicio').style.display='none'">&#215;</button></div>
@@ -1698,7 +1698,7 @@ function buildDaysPicker() {
 function loadExcecoes(){try{var e=localStorage.getItem('gp-exc');if(e)excecoes=JSON.parse(e);}catch(e){}}
 function saveExcecoes(){ localStorage.setItem('gp-exc',JSON.stringify(excecoes)); _pushCol('gp-exc'); }
 function getExcecao(ds){if(!excecoes[ds])excecoes[ds]={removidos:[],adicionados:[]};return excecoes[ds];}
-function getAgendasParaData(dateStr){var d=new Date(dateStr+'T12:00:00'),dow=d.getDay();var exc=excecoes[dateStr]||{removidos:[],adicionados:[]};var rem=exc.removidos||[],add=exc.adicionados||[];var rec=agendas.filter(function(a){return !a.deleted&&a.days.includes(dow)&&rem.indexOf(a.id)===-1;});var ext=(add).map(function(x,i){return{id:dateStr+'_extra_'+i,alunoId:x.alunoId,inicio:x.inicio,fim:x.fim,days:[dow],_extra:true,_extraIdx:i,tipo:x.tipo||'extra'};});return rec.concat(ext);}
+function getAgendasParaData(dateStr){if(isFeriado(dateStr))return[];var d=new Date(dateStr+'T12:00:00'),dow=d.getDay();var exc=excecoes[dateStr]||{removidos:[],adicionados:[]};var rem=exc.removidos||[],add=exc.adicionados||[];var rec=agendas.filter(function(a){return !a.deleted&&a.days.includes(dow)&&rem.indexOf(a.id)===-1;});var ext=(add).map(function(x,i){return{id:dateStr+'_extra_'+i,alunoId:x.alunoId,inicio:x.inicio,fim:x.fim,days:[dow],_extra:true,_extraIdx:i,tipo:x.tipo||'extra'};});return rec.concat(ext);}
 function removerDeData(agId,dateStr){var exc=getExcecao(dateStr);var m=/.*_extra_(\d+)$/.exec(agId);if(m){var idx2=parseInt(m[1]);if(exc.adicionados&&exc.adicionados[idx2])exc.adicionados.splice(idx2,1);}else{if(exc.removidos.indexOf(agId)===-1)exc.removidos.push(agId);}saveExcecoes();}
 function adicionarEmData(alunoId,inicio,dateStr,tipo){var h=parseInt(inicio.split(':')[0]);var fim=String((h+1)%24).padStart(2,'0')+':00';var exc=getExcecao(dateStr);if(!exc.adicionados)exc.adicionados=[];exc.adicionados.push({alunoId:alunoId,inicio:inicio,fim:fim,tipo:tipo||'extra'});saveExcecoes();}
 
@@ -1796,6 +1796,7 @@ function confirmarSlotPicker() {
 const AUTH_STORAGE_KEY = 'gp-auth-v2';
 let students = [], agendas = [], presencas = {}, notasSessao = {}, evolucaoData = {};
 let historicoCob = {}, feriadosCustom = {}, bloqueios = {}, editingId = null, currentPhoto = null;
+let _alunoTreinoAtual = null;
 let agSlotDateStr = null;
 let excecoes = {};
 let editingAgId = null, agSlotDay = null, agSlotHour = 6, filterHojeAtivo = false;
@@ -1960,6 +1961,7 @@ function isHoliday(date) {
   mv[k(e)]='Pascoa'; mv[k(add(e,60))]='Corpus Christi';
   return mv[mmdd]||null;
 }
+function isFeriado(dateStr){ return !!isHoliday(new Date(dateStr+'T12:00:00')); }
 
 // Retorna apenas itens não deletados — usar em todas as renderizações
 function _visible(arr){ return (arr||[]).filter(function(i){ return !i.deleted; }); }
@@ -2359,8 +2361,10 @@ function getAulasDoMes(sid){
   }
   Object.keys(presencas).forEach(function(k){
     if(k.indexOf(sid+'_')!==0)return;
-    var ds=k.replace(sid+'_',''),d=new Date(ds+'T12:00:00');
+    var ds=k.replace(sid+'_','');
+    if(isFeriado(ds))return;
     var _psf=_presStatus(presencas[k]);
+    var d=new Date(ds+'T12:00:00');
     if(d.getFullYear()===y&&d.getMonth()===m){if(_psf==='presente')f++;else if(_psf==='faltou')fa++;}
   });
   return{feitas:f,direito:dir,faltas:fa};
@@ -4126,18 +4130,48 @@ function renderTabTreino() {
   list.innerHTML = out;
 }
 
-function openTreinoAluno(sid) {
-  var s=students.find(function(x){return x.id===sid&&!x.deleted;}); if(!s)return;
-  var t=getTreino(sid);
-  document.getElementById('treino-aluno-nome').textContent=s.nome;
-  document.getElementById('treino-aluno-id').value=sid;
-  renderTreinoEditor(sid);
+function openTreinoAluno(alunoId) {
+  var aluno=students.find(function(a){return a.id===alunoId&&!a.deleted;}); if(!aluno)return;
+  _alunoTreinoAtual=alunoId;
+  document.getElementById('treino-aluno-id').value=alunoId;
+  renderTreinoAluno(aluno,getTreino(alunoId));
   document.getElementById('modal-treino').style.display='flex';
+}
+
+function renderTreinoAluno(aluno,treino){
+  var el=document.getElementById('treino-container'); if(!el)return;
+  var sid=aluno.id;
+  var temTreino=treino&&treino.divisoes&&treino.divisoes.length>0;
+  if(temTreino){
+    el.innerHTML='<div style="padding:14px 16px 4px;font-weight:700;font-size:1rem;color:var(--white);font-family:Raleway,sans-serif;">'+escapeHTML(aluno.nome)+'</div>'
+      +'<div id="treino-editor-body"></div>';
+    renderTreinoEditor(sid);
+  }else{
+    el.innerHTML='<div style="padding:14px 16px 4px;font-weight:700;font-size:1rem;color:var(--white);font-family:Raleway,sans-serif;">'+escapeHTML(aluno.nome)+'</div>'
+      +'<div style="text-align:center;padding:32px 20px;">'
+      +'<p style="color:var(--white-dim);font-size:0.85rem;margin-bottom:16px;">Sem treino cadastrado.</p>'
+      +'<button class="btn btn-primary" style="height:44px;padding:0 24px;" onclick="criarTreino(\''+sid+'\')">Criar treino</button>'
+      +'</div>';
+  }
+}
+
+function criarTreino(alunoId){
+  var nome=prompt('Nome da divisão (ex: Treino A, Full Body, Superior):','');
+  if(!nome||!nome.trim())return;
+  var t=getTreino(alunoId);
+  if(!t.divisoes)t.divisoes=[];
+  t.divisoes.push({nome:nome.trim(),exercicios:[]});
+  t.updatedAt=new Date().toISOString();
+  treinosData[alunoId]=t;
+  saveTreinos();
+  var aluno=students.find(function(a){return a.id===alunoId&&!a.deleted;});
+  if(aluno)renderTreinoAluno(aluno,t);
 }
 
 function renderTreinoEditor(sid) {
   var t=getTreino(sid);
   var body=document.getElementById('treino-editor-body');
+  if(!body){var _al=students.find(function(a){return a.id===sid&&!a.deleted;});if(_al)renderTreinoAluno(_al,t);return;}
   var out='';
 
   if(!t.divisoes.length) {
@@ -5640,6 +5674,7 @@ function renderRelatorioMensal() {
     var parts = k.split('_');
     if (parts.length < 2) return;
     var ds = parts[parts.length - 1];
+    if(isFeriado(ds)) return;
     var d = new Date(ds + 'T12:00:00');
     if (d.getFullYear() !== y || d.getMonth() !== m) return;
     var _psk=_presStatus(presencas[k]);
