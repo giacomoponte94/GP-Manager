@@ -1074,6 +1074,7 @@ function _listenCol(col, lsKey){
     }
     _applyCol(col, lsKey, cd);
     try{ loadAll(); }catch(e){} try{ refreshAll(); }catch(e){}
+    try{ renderDashboard(); }catch(e){}
     try{ renderCalendar(); }catch(e){} try{ renderFinanceiro(); }catch(e){}
     _setSyncStatus('ok');
   }, function(e){ console.error('[SYNC] listener error', col, e); _setSyncStatus('err', e); });
