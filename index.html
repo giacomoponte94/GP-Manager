@@ -4105,7 +4105,7 @@ function renderTabTreino() {
     var resumoColor = temTreino ? 'var(--white-dim)' : 'rgba(74,127,165,0.5)';
     var resumoStyle = temTreino ? '' : 'font-style:italic;';
 
-    out += '<div onclick="openTreinoAluno(\''+s.id+'\'')" style="background:var(--card);margin:0 16px 10px;padding:14px 16px;border-left:3px solid '+borderColor+';border-radius:0 4px 4px 0;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;">';
+    out += '<div onclick="openTreinoAluno(\''+s.id+'\'" style="background:var(--card);margin:0 16px 10px;padding:14px 16px;border-left:3px solid '+borderColor+';border-radius:0 4px 4px 0;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;">';
     out += '<div style="flex:1;min-width:0;">';
     out += '<div style="font-weight:600;font-size:0.9rem;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+s.nome+'</div>';
     out += '<div style="font-size:0.68rem;color:var(--accent-l);margin-top:2px;">'+(s.plano?getPlanNome(s.plano):'\u2014')+(diasLabel?' \u00B7 '+diasLabel:'')+'</div>';
