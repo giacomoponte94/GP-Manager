@@ -835,36 +835,25 @@ function _saveHistory(){
 
 // Push uma única coleção com debounce de 300ms
 function _pushCol(lsKey){
-  if(!_initialized) return;
-  var col=_COL_MAP[lsKey]; if(!col) return;
+  var col=_COL_MAP[lsKey]; if(!col){ console.warn('[SYNC] unknown lsKey:',lsKey); return; }
   if(_colTimers[col]) clearTimeout(_colTimers[col]);
   _setSyncStatus('up');
   _colTimers[col]=setTimeout(async function(){
     _colTimers[col]=null;
-    var rawVal=localStorage.getItem(lsKey); if(rawVal===null){ delete _colPushing[col]; return; }
+    var raw=localStorage.getItem(lsKey); if(raw===null) return;
     var now=Date.now();
     _colLocalTs[col]=now; try{ localStorage.setItem('gp-lts-'+col,String(now)); }catch(e){}
-    var payload={ data:rawVal, localTs:now, serverTs:firebase.database.ServerValue.TIMESTAMP, device:_getDeviceId() };
+    var payload={data:raw,localTs:now,serverTs:firebase.database.ServerValue.TIMESTAMP,device:_getDeviceId()};
     _colPushing[col]=true;
-    console.log('[SYNC] PUSH', col);
-    if(col==='agendas') console.log('[SYNC] PUSH agendas', rawVal);
+    console.log('[SYNC] PUSH',col);
     try{
       await _colsRef.child(col).set(payload);
       delete _colPushing[col];
-      try{ localStorage.removeItem('gp-dirty-'+lsKey); }catch(e){}
-      _colsRef.child(col).once('value').then(function(snap){
-        var v=snap.val();
-        if(v&&v.serverTs){
-          _colServerTs[col]=v.serverTs;
-          try{ localStorage.setItem('gp-cts-'+col,String(v.serverTs)); }catch(e){}
-        }
-      }).catch(function(){});
-      var anyBusy=Object.keys(_COL_MAP).some(function(k){ var c=_COL_MAP[k]; return _colTimers[c]||_colPushing[c]; });
-      if(!anyBusy){ _setSyncStatus('ok'); try{ localStorage.removeItem('gp-dirty'); }catch(e){} }
+      _setSyncStatus('ok');
       _saveHistory();
     }catch(e){
       delete _colPushing[col];
-      console.error('[SYNC] push error', col, e);
+      console.error('[SYNC] push error',col,e);
       _setSyncStatus('err',e);
       setTimeout(function(){ _pushCol(lsKey); },3000);
     }
@@ -1014,49 +1003,49 @@ function _cleanupDeleted(arr, maxAgeMs){
 // force=true ignora proteção de timestamp (forceSyncFromCloud, restoreHistory)
 function _applyCol(col, lsKey, colData, force){
   if(!colData||colData.data===undefined||colData.data===null) return;
-  var cloudDataStr=colData.data;
-  var cloudParsed; try{ cloudParsed=JSON.parse(cloudDataStr); }catch(e){ return; }
+  var cloudStr=colData.data;
+  var cloud; try{ cloud=JSON.parse(cloudStr); }catch(e){ return; }
   var localRaw=null; try{ localRaw=localStorage.getItem(lsKey); }catch(e){}
-  var localParsed=null;
-  if(localRaw){ try{ localParsed=JSON.parse(localRaw); }catch(e){} }
-  // MERGE — always, unless force=true skips merge and uses cloud as-is
-  var merged=cloudParsed;
-  if(!force && localParsed!==null){
-    var mc=_MERGE_ARRAY_COLS[lsKey];
-    if(mc && Array.isArray(cloudParsed)){
-      var localArr=Array.isArray(localParsed)?localParsed:[];
-      merged=_mergeById(localArr, cloudParsed, mc.getId);
-      console.log('[SYNC] MERGED', col, 'local:'+localArr.length+' cloud:'+cloudParsed.length+' merged:'+merged.length);
-    } else if(_MERGE_OBJECT_COLS.indexOf(lsKey)!==-1 && typeof cloudParsed==='object' && !Array.isArray(cloudParsed)){
-      var localObj=(typeof localParsed==='object'&&!Array.isArray(localParsed))?localParsed:{};
-      merged=_mergeObjectByKey(localObj, cloudParsed);
-      console.log('[SYNC] MERGED', col, '(object)');
+  var local=null; if(localRaw){ try{ local=JSON.parse(localRaw); }catch(e){} }
+
+  // MERGE by data type — arrays by id, objects by key, else cloud wins
+  var merged=cloud;
+  if(!force && local!==null){
+    if(Array.isArray(cloud)){
+      var localArr=Array.isArray(local)?local:[];
+      // Only merge by id when items are objects that carry an id field
+      if(cloud.length>0 && cloud[0] && typeof cloud[0]==='object' && cloud[0].id!==undefined){
+        merged=_mergeById(localArr,cloud,function(i){return i.id;});
+        console.log('[SYNC] MERGED array',col,'local:'+localArr.length+' cloud:'+cloud.length+' merged:'+merged.length);
+      }
+    } else if(cloud && typeof cloud==='object' && local && typeof local==='object'){
+      merged=_mergeObjectByKey(local,cloud);
+      console.log('[SYNC] MERGED object',col);
     }
   }
-  // APPLY if merged differs from local
+
+  // APPLY
   var mergedStr=JSON.stringify(merged);
   if(mergedStr!==localRaw){
-    console.log('[SYNC] APPLIED', col);
+    console.log('[SYNC] APPLIED',col);
     _applyingCloud=true;
     try{ localStorage.setItem(lsKey,mergedStr); }catch(e){}
     _applyingCloud=false;
   }
-  // UPDATE timestamps — never regress
-  var cloudLts=colData.localTs||0; var cloudSts=colData.serverTs||0;
-  if(cloudSts) _colServerTs[col]=cloudSts;
-  if(cloudLts>(_colLocalTs[col]||0)) _colLocalTs[col]=cloudLts;
+
+  // Timestamps
+  var cLts=colData.localTs||0; var cSts=colData.serverTs||0;
+  if(cSts) _colServerTs[col]=cSts;
+  if(cLts>(_colLocalTs[col]||0)) _colLocalTs[col]=cLts;
   try{ localStorage.setItem('gp-cts-'+col,String(_colServerTs[col]||0)); }catch(e){}
   try{ localStorage.setItem('gp-lts-'+col,String(_colLocalTs[col]||0)); }catch(e){}
-  // REASSERT if merged differs from what cloud sent (local has changes cloud doesn't have)
-  if(!force && _initialized){
-    var mc2=_MERGE_ARRAY_COLS[lsKey];
-    var isObjCol=_MERGE_OBJECT_COLS.indexOf(lsKey)!==-1;
-    if((mc2||isObjCol) && mergedStr!==cloudDataStr){
-      var now=Date.now();
-      if(now-(_lastReassertTs[col]||0)>2000){
-        console.log('[SYNC] REASSERT', col);
-        _lastReassertTs[col]=now; _pushCol(lsKey);
-      }
+
+  // REASSERT — local has data cloud doesn't; push back to unify
+  if(!force && _initialized && mergedStr!==cloudStr){
+    var now=Date.now();
+    if(now-(_lastReassertTs[col]||0)>2000){
+      console.log('[SYNC] REASSERT',col);
+      _lastReassertTs[col]=now; _pushCol(lsKey);
     }
   }
 }
@@ -1066,19 +1055,19 @@ function _listenCol(col, lsKey){
   _colsRef.child(col).on('value',function(snap){
     if(!_initialized) return;
     var cd=snap.val(); if(!cd||cd.data===undefined||cd.data===null) return;
-    console.log('[SYNC] RECEIVED', col);
-    var lts=cd.localTs||0; var sts=cd.serverTs||0;
-    // Echo: our own push echoing back — capture serverTs, skip apply
+    console.log('[SYNC] RECEIVED',col);
+    var lts=cd.localTs||0;
+    // Echo: our own push echoing back
     if(lts && lts===_colLocalTs[col] && (cd.device||'')===_getDeviceId()){
-      if(sts){ _colServerTs[col]=sts; try{ localStorage.setItem('gp-cts-'+col,String(sts)); }catch(e){} }
-      console.log('[SYNC] echo', col); return;
+      if(cd.serverTs){ _colServerTs[col]=cd.serverTs; try{ localStorage.setItem('gp-cts-'+col,String(cd.serverTs)); }catch(e){} }
+      console.log('[SYNC] echo',col); return;
     }
-    _applyCol(col, lsKey, cd);
+    _applyCol(col,lsKey,cd);
     try{ loadAll(); }catch(e){} try{ refreshAll(); }catch(e){}
     try{ renderDashboard(); }catch(e){}
     try{ renderCalendar(); }catch(e){} try{ renderFinanceiro(); }catch(e){}
     _setSyncStatus('ok');
-  }, function(e){ console.error('[SYNC] listener error', col, e); _setSyncStatus('err', e); });
+  },function(e){ console.error('[SYNC] listener error',col,e); _setSyncStatus('err',e); });
 }
 
 function _registerCollectionListeners(){
