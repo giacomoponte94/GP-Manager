@@ -965,19 +965,14 @@ function _deepMerge(local, cloud){
 }
 
 function _mergeObjectByKey(local, cloud){
-  var result=Object.assign({},local);
+  var result=Object.assign({},local||{});
   Object.keys(cloud||{}).forEach(function(key){
-    var localItem=local ? local[key] : undefined;
-    var cloudItem=cloud[key];
-    if(localItem===undefined){ result[key]=cloudItem; return; }
-    var localTs=(localItem&&typeof localItem==='object'&&localItem.updatedAt)
-      ? new Date(localItem.updatedAt).getTime() : null;
-    var cloudTs=(cloudItem&&typeof cloudItem==='object'&&cloudItem.updatedAt)
-      ? new Date(cloudItem.updatedAt).getTime() : null;
-    // Cloud wins only when we can compare timestamps and cloud is newer or equal
-    if(cloudTs!==null && localTs!==null && cloudTs>=localTs){ result[key]=cloudItem; return; }
-    if(cloudTs!==null && localTs===null){ result[key]=cloudItem; return; }
-    // Local wins: cloudTs is null, or localTs > cloudTs
+    var l=local ? local[key] : undefined;
+    var c=cloud[key];
+    if(!l){ result[key]=c; return; }
+    var lts=(l&&l.updatedAt)||0;
+    var cts=(c&&c.updatedAt)||0;
+    if(cts>=lts) result[key]=c;
   });
   return result;
 }
@@ -1053,11 +1048,11 @@ function _applyCol(col, lsKey, colData, force){
   if(cloudLts>(_colLocalTs[col]||0)) _colLocalTs[col]=cloudLts;
   try{ localStorage.setItem('gp-cts-'+col,String(_colServerTs[col]||0)); }catch(e){}
   try{ localStorage.setItem('gp-lts-'+col,String(_colLocalTs[col]||0)); }catch(e){}
-  // REASSERT if merged differs from what local had before merge
+  // REASSERT if merged differs from what cloud sent (local has changes cloud doesn't have)
   if(!force && _initialized){
     var mc2=_MERGE_ARRAY_COLS[lsKey];
     var isObjCol=_MERGE_OBJECT_COLS.indexOf(lsKey)!==-1;
-    if((mc2||isObjCol) && mergedStr!==(localRaw||'null')){
+    if((mc2||isObjCol) && mergedStr!==cloudDataStr){
       var now=Date.now();
       if(now-(_lastReassertTs[col]||0)>2000){
         console.log('[SYNC] REASSERT', col);
@@ -1319,7 +1314,7 @@ function openCadastro(mode, id) {
   var cad=document.getElementById('cad-title');
 
   if(mode==='edit'&&id){
-    var s=students.find(function(x){return x.id===id;}); if(!s)return;
+    var s=students.find(function(x){return x.id===id&&!x.deleted;}); if(!s)return;
     editingId=id;
     if(cad)cad.innerHTML='Editar <span>Aluno</span>';
     if(document.getElementById('f-nome'))document.getElementById('f-nome').value=s.nome||'';
@@ -1614,7 +1609,7 @@ function addLicenca(sid, inicio, fim) {
   licencas[sid].push({id: Date.now()+'', inicio: inicio, fim: fim, diasExtendidos: dias, criadaEm: new Date().toISOString()});
   saveLicencas();
   // Estender vencimento pelo número de dias da licença
-  var s = students.find(function(x){ return x.id === sid; });
+  var s = students.find(function(x){ return x.id === sid&&!x.deleted; });
   if(s && s.vencimento) {
     var v = new Date(s.vencimento + 'T12:00:00');
     v.setDate(v.getDate() + dias);
@@ -1632,7 +1627,7 @@ function removeLicenca(sid, licId) {
   // Reverter extensão do vencimento
   if(lic) {
     var dias = lic.diasExtendidos || (Math.round((new Date(lic.fim+'T00:00:00') - new Date(lic.inicio+'T00:00:00')) / 86400000) + 1);
-    var s = students.find(function(x){ return x.id === sid; });
+    var s = students.find(function(x){ return x.id === sid&&!x.deleted; });
     if(s && s.vencimento) {
       var v = new Date(s.vencimento + 'T12:00:00');
       v.setDate(v.getDate() - dias);
@@ -1863,7 +1858,7 @@ function loadPlanos() {
           // Migrate: sync names and prices from current defaults
           var changed = false;
           PLANOS_DEFAULT.forEach(function(def) {
-            var p = PLANOS.find(function(x){ return x.id === def.id; });
+            var p = PLANOS.find(function(x){ return x.id === def.id&&!x.deleted; });
             if (p) {
               if (p.precoInd !== def.precoInd || p.precoExt !== def.precoExt || p.nome !== def.nome) {
                 p.precoInd = def.precoInd;
@@ -2212,11 +2207,11 @@ function refreshAll(){
   try{renderDashboard();}catch(e){}
 }
 function toggleStatus(id,ns){
-  var s=students.find(function(x){return x.id===id;});
+  var s=students.find(function(x){return x.id===id&&!x.deleted;});
   if(s){s.status=ns;s.statusManual=ns;save();renderTable();renderStats();renderFinanceiro();renderNotifs();}
 }
 function renovarAluno(id){
-  var s=students.find(function(x){return x.id===id;}); if(!s)return;
+  var s=students.find(function(x){return x.id===id&&!x.deleted;}); if(!s)return;
   var base=s.vencimento?new Date(s.vencimento+'T12:00:00'):new Date();
   var hoje=new Date();hoje.setHours(0,0,0,0); if(base<hoje)base=new Date(hoje);
   base.setMonth(base.getMonth()+1);
@@ -2341,7 +2336,7 @@ function verListaHoje(){
 }
 
 function getAulasDoMes(sid){
-  var s=students.find(function(x){return x.id===sid;}); if(!s||!s.plano)return{feitas:0,direito:0,faltas:0};
+  var s=students.find(function(x){return x.id===sid&&!x.deleted;}); if(!s||!s.plano)return{feitas:0,direito:0,faltas:0};
   var spw=PLAN_DAYS[s.plano]||0,now=new Date(),y=now.getFullYear(),m=now.getMonth();
   var dim=new Date(y,m+1,0).getDate(),dir=Math.round(spw*dim/7),f=0,fa=0;
   var sAgs=agendas.filter(function(a){return a.alunoId===sid;});
@@ -2616,7 +2611,7 @@ function clearForm(){
 function openModal(mode,id){
   editingId=null; currentPhoto=null;
   if(mode==='edit'&&id){
-    var s=students.find(function(x){return x.id===id;}); if(!s)return;
+    var s=students.find(function(x){return x.id===id&&!x.deleted;}); if(!s)return;
     editingId=id;
     document.getElementById('modal-title').textContent='Editar Aluno';
     document.getElementById('f-nome').value=s.nome||'';
@@ -2689,7 +2684,7 @@ function saveStudent(){
     status:document.getElementById('f-status').value,foto:currentPhoto||null,
     categoria:(document.getElementById('f-categ')&&document.getElementById('f-categ').value)||'fixa',
     qtdAulas:parseInt(document.getElementById('f-qtd')&&document.getElementById('f-qtd').value)||null,
-    criadoEm:editingId?(students.find(function(x){return x.id===editingId;})||{}).criadoEm:new Date().toISOString()
+    criadoEm:editingId?(students.find(function(x){return x.id===editingId&&!x.deleted;})||{}).criadoEm:new Date().toISOString()
   });
   var days=Array.from(document.querySelectorAll('#f-days-picker .day-btn.selected')).map(function(b){return parseInt(b.dataset.day);});
   if(days.length){
@@ -2710,10 +2705,10 @@ function saveStudent(){
           return a.days.includes(d) && parseInt(a.inicio.split(':')[0])===h;
         });
         if(ocupados.length>=2){
-          var nomes=ocupados.map(function(a){var s=students.find(function(x){return x.id===a.alunoId;});return s?s.nome.split(' ')[0]:'?';});
+          var nomes=ocupados.map(function(a){var s=students.find(function(x){return x.id===a.alunoId&&!x.deleted;});return s?s.nome.split(' ')[0]:'?';});
           conflitos.push(DAY_NAMES[d]+' '+t+' \u2014 hor\u00e1rio lotado ('+nomes.join(' + ')+')');
         } else if(ocupados.length===1 && obj.modalidade!=='Duo'){
-          var sOcup=students.find(function(x){return x.id===ocupados[0].alunoId;});
+          var sOcup=students.find(function(x){return x.id===ocupados[0].alunoId&&!x.deleted;});
           var nomeOcup=sOcup?sOcup.nome.split(' ')[0]:'?';
           conflitos.push(DAY_NAMES[d]+' '+t+' \u2014 j\u00e1 tem '+nomeOcup+' (use Duo ou escolha outro hor\u00e1rio)');
         }
@@ -2796,7 +2791,7 @@ function calcValorAvulsa(){
 }
 
 function openDetail(id){
-  var s=students.find(function(x){return x.id===id;}); if(!s)return;
+  var s=students.find(function(x){return x.id===id&&!x.deleted;}); if(!s)return;
   var ini=escapeHtml(s.nome.split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase());
   var fotoSafe=safeImageSrc(s.foto);
   var av=fotoSafe?'<img src="'+fotoSafe+'" alt="">':ini;
@@ -3443,7 +3438,7 @@ function renderSlotModal(){
       addReposicao(sid, 'desmarcacao');
       savePresencas();
 
-      var s=students.find(function(x){return x.id===sid;});
+      var s=students.find(function(x){return x.id===sid&&!x.deleted;});
       var nome=s?s.nome.split(' ')[0]:'Aluno';
       var rep=getReposicoes(sid);
       toast(nome+': aula desmarcada. '+rep+' reposi\u00e7\u00e3o'+(rep>1?'\u00f5es':'')+' dispon\u00edvel'+(rep>1?'is':'')+'.');
@@ -3466,7 +3461,7 @@ function renderSlotModal(){
     var sid=document.getElementById('add-aluno-sel').value;
     var hora=document.getElementById('add-aluno-hora').value;
     if(!sid){toast('Selecione um aluno.');return;}
-    var sAdd=students.find(function(x){return x.id===sid;});
+    var sAdd=students.find(function(x){return x.id===sid&&!x.deleted;});
     var nome2=sAdd?sAdd.nome.split(' ')[0]:'Aluno';
     var slotDateAdd=getSlotDateStr();
     // Obter o tipo do item selecionado no dropdown (reposicao | extra | pacote)
@@ -3631,7 +3626,7 @@ function abrirMeta(){
 }
 
 function gerarRecibo(id){
-  var s=students.find(function(x){return x.id===id;}); if(!s)return;
+  var s=students.find(function(x){return x.id===id&&!x.deleted;}); if(!s)return;
   var hoje=new Date().toLocaleDateString('pt-BR');
   var lines2=[
     'GIACOMO PONTE - Personal Trainer',
@@ -4009,7 +4004,7 @@ function atualizarSelectsPlanos() {
 }
 
 function getAulasPacote(studentId) {
-  var s = students.find(function(x){ return x.id === studentId; });
+  var s = students.find(function(x){ return x.id === studentId&&!x.deleted; });
   if (!s) return null;
   var p = getPlano(s.plano);
   if (!p || p.tipo !== 'pacote') return null;
@@ -4138,7 +4133,7 @@ function renderTabTreino() {
 }
 
 function openTreinoAluno(sid) {
-  var s=students.find(function(x){return x.id===sid;}); if(!s)return;
+  var s=students.find(function(x){return x.id===sid&&!x.deleted;}); if(!s)return;
   var t=getTreino(sid);
   document.getElementById('treino-aluno-nome').textContent=s.nome;
   document.getElementById('treino-aluno-id').value=sid;
@@ -4531,7 +4526,7 @@ function getPrioridadeAcao() {
 }
 
 function cobrarAluno(sid) {
-  var s=students.find(function(x){return x.id===sid;}); if(!s)return;
+  var s=students.find(function(x){return x.id===sid&&!x.deleted;}); if(!s)return;
   var ph=waPhone(s); if(!ph){alert('Sem telefone.');return;}
   var diasAtraso=s.vencimento?Math.abs(Math.ceil((new Date(s.vencimento+'T12:00:00')-new Date())/86400000)):3;
   var dataVenc=s.vencimento?new Date(s.vencimento+'T12:00:00').toLocaleDateString('pt-BR'):'';
@@ -4544,7 +4539,7 @@ function cobrarAluno(sid) {
 }
 
 function reengajarAluno(sid) {
-  var s=students.find(function(x){return x.id===sid;}); if(!s)return;
+  var s=students.find(function(x){return x.id===sid&&!x.deleted;}); if(!s)return;
   var ph=waPhone(s); if(!ph){alert('Sem telefone.');return;}
   var dias=getDaysAbsent(sid)||0;
   var msg=dias>=14
@@ -4554,7 +4549,7 @@ function reengajarAluno(sid) {
 }
 
 function renovarComMensagem(sid) {
-  var s=students.find(function(x){return x.id===sid;}); if(!s)return;
+  var s=students.find(function(x){return x.id===sid&&!x.deleted;}); if(!s)return;
   renovarAluno(sid);
   var ph=waPhone(s); if(!ph)return;
   var msgs=[
@@ -4650,7 +4645,7 @@ function renderComparativo() {
 }
 
 function gerarLinkAluno(sid) {
-  var s=students.find(function(x){return x.id===sid;}); if(!s)return;
+  var s=students.find(function(x){return x.id===sid&&!x.deleted;}); if(!s)return;
   var data={
     nome:s.nome, plano:s.plano, modalidade:s.modalidade,
     vencimento:s.vencimento, status:s.status,
@@ -4992,7 +4987,7 @@ function renderHistoricoVisual() {
 
 
 function sugerirHorariosLivres(sid) {
-  var s = students.find(function(x){ return x.id===sid; });
+  var s = students.find(function(x){ return x.id===sid&&!x.deleted; });
   if (!s) return [];
 
   
@@ -5014,7 +5009,7 @@ function sugerirHorariosLivres(sid) {
 }
 
 function openReposicao(sid) {
-  var s = students.find(function(x){ return x.id===sid; });
+  var s = students.find(function(x){ return x.id===sid&&!x.deleted; });
   if (!s) return;
 
   // Buscar slots livres nas próximas 2 semanas (datas específicas)
@@ -5079,7 +5074,7 @@ function openReposicao(sid) {
 }
 
 function agendarReposicao(sid, dateStr, hora) {
-  var s = students.find(function(x){ return x.id===sid; });
+  var s = students.find(function(x){ return x.id===sid&&!x.deleted; });
   if (!s) return;
   // Verificar saldo antes de confirmar
   if(getReposicoes(sid) <= 0){
@@ -5139,7 +5134,7 @@ function openNovaDespesa() {
   document.getElementById('modal-despesa').style.display='flex';
 }
 function editarDespesa(id) {
-  var d=despesas.find(function(x){return x.id===id;}); if(!d) return;
+  var d=despesas.find(function(x){return x.id===id&&!x.deleted;}); if(!d) return;
   document.getElementById('desp-id').value=d.id;
   document.getElementById('desp-desc').value=d.descricao;
   document.getElementById('desp-valor').value=d.valor;
@@ -5237,7 +5232,7 @@ function renderDespesasPanel() {
 }
 
 function openPagamento(sid) {
-  var s = students.find(function(x){ return x.id===sid; }); if(!s) return;
+  var s = students.find(function(x){ return x.id===sid&&!x.deleted; }); if(!s) return;
   document.getElementById('pag-sid').value = sid;
   document.getElementById('pag-nome').textContent = s.nome;
   document.getElementById('pag-data').value = todayStr();
@@ -5267,7 +5262,7 @@ function salvarPagamento() {
   savePagamentos();
   closeModal('modal-pagamento');
   // Perguntar se deseja renovar o plano
-  var s = students.find(function(x){ return x.id===sid; });
+  var s = students.find(function(x){ return x.id===sid&&!x.deleted; });
   if(s && (s.status==='atrasado'||s.status==='vencendo')) {
     if(confirm('Deseja renovar o plano de '+s.nome.split(' ')[0]+' por mais 1 mês?')) {
       renovarAluno(sid);
@@ -5551,7 +5546,7 @@ function renderDashboard() {
       });
       if(idHoje.length){
         var rows = idHoje.map(function(id){
-          var s = students.find(function(x){ return x.id===id; }); if(!s) return '';
+          var s = students.find(function(x){ return x.id===id&&!x.deleted; }); if(!s) return '';
           var ag = agsHoje.find(function(a){ return a.alunoId===id; });
           var hora = ag ? ag.inicio : '';
           return '<div class="dash-row notif-info" style="cursor:pointer;" onclick="openDetail(\''+id+'\')">'
@@ -5729,7 +5724,7 @@ function renderRelatorioMensal() {
     out += '<div style="font-family:Raleway,sans-serif;font-size:0.58rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--accent-l);margin-bottom:8px;">Pagamentos recebidos (' + pagsMes.length + ')</div>';
     var pagsSorted = pagsMes.slice().sort(function(a,b){return b.data.localeCompare(a.data);});
     out += pagsSorted.map(function(p) {
-      var s = students.find(function(x){ return x.id === p.alunoId; });
+      var s = students.find(function(x){ return x.id === p.alunoId&&!x.deleted; });
       var nome = s ? s.nome.split(' ')[0] : '?';
       return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(74,127,165,0.1);">'
         + '<div><div style="font-size:0.85rem;font-weight:600;color:var(--white);">' + nome + '</div>'
