@@ -255,28 +255,32 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
 [data-theme="light"] .day-time-row .dt-lbl{color:#64748b;}
 
 /* Dashboard */
-.dash-kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;}
-.dash-kpi{background:var(--card);padding:16px 14px;border-radius:6px;border-left:3px solid var(--accent);}
-.dash-kpi.ok{border-color:var(--success);}
-.dash-kpi.warn{border-color:var(--warning);}
-.dash-kpi.danger{border-color:var(--danger);}
-.dash-kpi-val{font-family:'Raleway',sans-serif;font-size:1.5rem;font-weight:800;color:var(--white);}
+.dash-kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:24px;}
+.dash-kpi{background:rgba(74,127,165,0.05);padding:14px 14px 12px;border-radius:8px;border:1px solid rgba(74,127,165,0.15);}
+.dash-kpi.ok{background:rgba(39,174,96,0.06);border-color:rgba(39,174,96,0.2);}
+.dash-kpi.warn{background:rgba(243,156,18,0.06);border-color:rgba(243,156,18,0.2);}
+.dash-kpi.danger{background:rgba(231,76,60,0.06);border-color:rgba(231,76,60,0.2);}
+.dash-kpi-icon{font-size:1rem;margin-bottom:8px;display:block;}
+.dash-kpi-val{font-family:'Raleway',sans-serif;font-size:1.9rem;font-weight:800;color:var(--white);line-height:1;}
 .dash-kpi.ok .dash-kpi-val{color:var(--success);}
 .dash-kpi.warn .dash-kpi-val{color:var(--warning);}
 .dash-kpi.danger .dash-kpi-val{color:var(--danger);}
-.dash-kpi-lbl{font-size:0.58rem;color:var(--white-dim);text-transform:uppercase;letter-spacing:0.1em;margin-top:4px;}
-.dash-section{margin-bottom:16px;}
-.dash-section-title{font-family:'Raleway',sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:8px;}
-.dash-row{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;margin-bottom:2px;border-radius:4px;}
+.dash-kpi-lbl{font-size:0.55rem;color:var(--white-dim);text-transform:uppercase;letter-spacing:0.12em;margin-top:6px;}
+.dash-section{margin-bottom:8px;}
+.dash-section-title{font-family:'Raleway',sans-serif;font-size:0.62rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--accent-l);margin-bottom:8px;}
+.dash-row{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;margin-bottom:4px;border-radius:6px;}
 .dash-row-name{font-size:0.88rem;font-weight:600;color:var(--white);}
 .dash-row-sub{font-size:0.7rem;color:var(--white-dim);margin-top:2px;}
-[data-theme="light"] .dash-kpi{background:#fff;box-shadow:0 1px 4px rgba(0,0,0,0.07);}
+.dash-avatar{width:36px;height:36px;border-radius:50%;background:rgba(74,127,165,0.18);display:flex;align-items:center;justify-content:center;font-family:'Raleway',sans-serif;font-size:0.6rem;font-weight:700;color:var(--accent-l);flex-shrink:0;letter-spacing:0.02em;}
+[data-theme="light"] .dash-kpi{background:rgba(74,127,165,0.04);border-color:rgba(74,127,165,0.18);}
+[data-theme="light"] .dash-kpi.ok{background:rgba(39,174,96,0.05);}
+[data-theme="light"] .dash-kpi.danger{background:rgba(231,76,60,0.05);}
 [data-theme="light"] .dash-kpi-val{color:#0f1f33;}
 [data-theme="light"] .dash-kpi.ok .dash-kpi-val{color:var(--success);}
 [data-theme="light"] .dash-kpi.warn .dash-kpi-val{color:var(--warning);}
 [data-theme="light"] .dash-kpi.danger .dash-kpi-val{color:var(--danger);}
 [data-theme="light"] .dash-row-name{color:#0f1f33;}
-
+[data-theme="light"] .dash-row-sub{color:#4a5568;}
 /* Student cards */
 .st-card{display:flex;align-items:center;gap:12px;padding:13px 14px;background:var(--card);margin-bottom:6px;border-radius:6px;cursor:pointer;border-left:4px solid transparent;transition:background 0.15s,opacity 0.15s;}
 .st-card.st-ok{border-left-color:var(--success);background:rgba(39,174,96,0.05);}
@@ -439,8 +443,9 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
     <!-- DASHBOARD -->
     <div id="tab-dashboard">
       <div class="tab-header">
-        <div class="page-title">Ol&aacute;, <span>Giacomo</span></div>
+        <div class="page-title">Ol&aacute;, <span>Giacomo</span> 👋</div>
         <div class="page-sub" id="dash-data"></div>
+        <div id="dash-frase" style="font-size:0.82rem;color:var(--white-dim);margin-top:6px;font-weight:500;"></div>
       </div>
       <div class="dash-kpi-grid" id="dash-kpis"></div>
       <div class="dash-section" id="dash-dia"></div>
@@ -799,10 +804,10 @@ function _getDeviceId(){
 
 function _setSyncStatus(status, detail){
   var el=document.getElementById('sync-status'); if(!el) return;
-  if(status==='ok')  { el.textContent='\u2601 Sync'; el.style.color='var(--success)'; }
-  else if(status==='up')  { el.textContent='\u2191 Enviando...'; el.style.color='var(--accent-l)'; }
-  else if(status==='err') { el.textContent='\u26a0 Sem sync'; el.style.color='var(--warning)'; if(detail) console.error('[GP Sync]', detail); }
-  else { el.textContent=''; }
+  if(status==='ok')  { el.innerHTML='🟢 Sincronizado'; el.style.color='var(--success)'; }
+  else if(status==='up')  { el.innerHTML='🟡 Sincronizando...'; el.style.color='var(--white-dim)'; }
+  else if(status==='err') { el.innerHTML='🔴 Offline'; el.style.color='var(--danger)'; if(detail) console.error('[GP Sync]', detail); }
+  else { el.innerHTML=''; }
 }
 
 function _loadColTs(){
@@ -1982,6 +1987,7 @@ function isFeriado(dateStr){ return !!isHoliday(new Date(dateStr+'T12:00:00')); 
 
 // Retorna apenas itens não deletados — usar em todas as renderizações
 function _visible(arr){ return (arr||[]).filter(function(i){ return !i.deleted; }); }
+function _initials(nome){ var p=(nome||'').trim().split(/\s+/); return p.length>=2?(p[0][0]+p[p.length-1][0]).toUpperCase():(p[0]||'').substring(0,2).toUpperCase(); }
 
 function save() {
   try{
@@ -5459,26 +5465,25 @@ function renderDashboardDia(){
   var el = document.getElementById('dash-dia');
   if(!el) return;
   var MAX = 5;
-  var EMPTY = '<div style="font-size:0.78rem;color:var(--white-dim);padding:8px 0 4px;">Nada por aqui hoje 👌</div>';
 
   function bloco(emoji, titulo, count, btnLabel, btnAction, rows){
     var btn = btnLabel
-      ? '<button onclick="'+btnAction+'" style="background:none;border:1px solid var(--border);color:var(--white-dim);border-radius:4px;font-size:0.6rem;padding:4px 9px;cursor:pointer;font-family:inherit;letter-spacing:0.04em;">'+btnLabel+'</button>'
+      ? '<button onclick="'+btnAction+'" style="background:none;border:1px solid var(--border);color:var(--white-dim);border-radius:4px;font-size:0.6rem;padding:4px 9px;cursor:pointer;font-family:inherit;letter-spacing:0.04em;flex-shrink:0;">'+btnLabel+'</button>'
       : '';
-    return '<div style="margin-bottom:20px;">'
-      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
-      +'<div class="dash-section-title">'+emoji+' '+titulo+' <span style="font-weight:400;opacity:0.6;">('+count+')</span></div>'
+    return '<div style="margin-bottom:28px;">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:8px;border-bottom:1px solid var(--border);margin-bottom:12px;">'
+      +'<div class="dash-section-title" style="margin-bottom:0;">'+emoji+' '+titulo+' <span style="font-weight:400;opacity:0.6;">('+count+')</span></div>'
       +btn+'</div>'+rows+'</div>';
   }
 
-  var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border);">'
+  var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding-bottom:10px;border-bottom:2px solid var(--border);">'
     +'<div style="font-size:0.6rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent-l);">📋 Dashboard do Dia</div>'
-    +'<button onclick="openModoRapido()" style="background:rgba(74,127,165,0.15);border:1px solid var(--accent);color:var(--accent-l);border-radius:4px;font-size:0.62rem;padding:5px 11px;cursor:pointer;font-family:inherit;font-weight:600;">⚡ Modo Rápido</button>'
+    +'<button onclick="openModoRapido()" style="background:var(--accent);border:none;color:#fff;border-radius:6px;font-size:0.65rem;padding:8px 16px;cursor:pointer;font-family:inherit;font-weight:700;letter-spacing:0.04em;">⚡ Modo Rápido</button>'
     +'</div>';
   var acao = getAcaoDoDia();
   window._acaoDoDiaFn = acao ? acao.acaoFn : null;
   if(acao){
-    html += '<div style="background:rgba(231,76,60,0.08);border:1px solid rgba(231,76,60,0.25);border-radius:6px;padding:14px 16px;margin-bottom:20px;">'
+    html += '<div style="background:rgba(231,76,60,0.08);border:1px solid rgba(231,76,60,0.25);border-radius:8px;padding:14px 16px;margin-bottom:24px;">'
       +'<div style="font-size:0.6rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--danger);margin-bottom:6px;">🔥 Ação do Dia</div>'
       +'<div style="font-size:0.85rem;color:var(--white);margin-bottom:10px;">'+acao.motivo+'</div>'
       +'<button onclick="if(window._acaoDoDiaFn)window._acaoDoDiaFn()" style="background:none;border:1px solid rgba(37,211,102,0.4);color:#25D366;border-radius:4px;font-size:0.68rem;padding:7px 14px;cursor:pointer;font-family:inherit;font-weight:600;">👉 Resolver agora</button>'
@@ -5492,12 +5497,16 @@ function renderDashboardDia(){
     var s=it.student, slot=it.slot;
     var bc = it.status==='presente'?'badge-ok':it.status==='faltou'?'badge-late':'badge-solo';
     var bl = it.status==='presente'?'Presente':it.status==='faltou'?'Faltou':'Pendente';
-    r1 += '<div class="dash-row notif-info" style="cursor:pointer;margin-bottom:2px;" onclick="openDetail(\''+s.id+'\')">'
-      +'<div><div class="dash-row-name">'+s.nome+'</div>'
+    var avBg = it.status==='presente'?'rgba(39,174,96,0.15)':it.status==='faltou'?'rgba(231,76,60,0.15)':'rgba(74,127,165,0.15)';
+    r1 += '<div class="dash-row notif-info" style="cursor:pointer;margin-bottom:4px;" onclick="openDetail(\''+s.id+'\')">'
+      +'<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">'
+      +'<div class="dash-avatar" style="background:'+avBg+';">'+_initials(s.nome)+'</div>'
+      +'<div style="min-width:0;"><div class="dash-row-name">'+s.nome+'</div>'
       +'<div class="dash-row-sub">'+slot.inicio+(slot.fim?' – '+slot.fim:'')+'</div></div>'
+      +'</div>'
       +'<span class="badge '+bc+'">'+bl+'</span></div>';
   });
-  if(!hoje.length) r1 = EMPTY;
+  if(!hoje.length) r1 = '<div style="font-size:0.78rem;color:var(--white-dim);padding:10px 2px;">Tudo em dia hoje 👌</div>';
   else if(hoje.length>MAX) r1 += '<div style="font-size:0.7rem;color:var(--white-dim);padding:4px 0;">+'+(hoje.length-MAX)+' mais</div>';
   html += bloco('🏋️','Alunos de Hoje', hoje.length, 'Ver agenda', "showTab('agenda')", r1);
 
@@ -5506,14 +5515,16 @@ function renderDashboardDia(){
   var r2 = '';
   ontem.slice(0,MAX).forEach(function(it){
     var s=it.student, slot=it.slot;
-    r2 += '<div class="dash-row notif-warn" style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">'
-      +'<div onclick="openDetail(\''+s.id+'\')" style="cursor:pointer;flex:1;min-width:0;">'
-      +'<div class="dash-row-name">'+s.nome+'</div>'
+    r2 += '<div class="dash-row notif-warn" style="margin-bottom:4px;">'
+      +'<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer;" onclick="openDetail(\''+s.id+'\')">'
+      +'<div class="dash-avatar" style="background:rgba(231,76,60,0.12);">'+_initials(s.nome)+'</div>'
+      +'<div style="min-width:0;"><div class="dash-row-name">'+s.nome+'</div>'
       +'<div class="dash-row-sub">'+slot.inicio+'</div></div>'
+      +'</div>'
       +'<button onclick="reengajarAluno(\''+s.id+'\')" style="background:none;border:1px solid rgba(37,211,102,0.3);color:#25D366;border-radius:4px;font-size:0.6rem;padding:5px 9px;cursor:pointer;font-family:inherit;flex-shrink:0;">💬 Reengajar</button>'
       +'</div>';
   });
-  if(!ontem.length) r2 = EMPTY;
+  if(!ontem.length) r2 = '<div style="font-size:0.78rem;color:var(--white-dim);padding:10px 2px;">Sem faltas ontem — bom trabalho 🔥</div>';
   else if(ontem.length>MAX) r2 += '<div style="font-size:0.7rem;color:var(--white-dim);padding:4px 0;">+'+(ontem.length-MAX)+' mais</div>';
   html += bloco('⚠️','Faltaram Ontem', ontem.length, '', '', r2);
 
@@ -5525,16 +5536,19 @@ function renderDashboardDia(){
     var atrasado = s.status==='atrasado';
     var diffLabel = diff===null?'Atrasado':diff<0?Math.abs(diff)+' dias em atraso':diff===0?'Vence hoje':'Em '+diff+' dias';
     var valor = s.valor ? 'R$ '+parseFloat(s.valor).toFixed(2).replace('.',',') : '';
-    r3 += '<div class="dash-row '+(atrasado?'notif-danger':'notif-warn')+'" style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">'
-      +'<div onclick="openDetail(\''+s.id+'\')" style="cursor:pointer;flex:1;min-width:0;">'
-      +'<div class="dash-row-name">'+s.nome+'</div>'
+    var avBg = atrasado ? 'rgba(231,76,60,0.12)' : 'rgba(243,156,18,0.12)';
+    r3 += '<div class="dash-row '+(atrasado?'notif-danger':'notif-warn')+'" style="margin-bottom:4px;">'
+      +'<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer;" onclick="openDetail(\''+s.id+'\')">'
+      +'<div class="dash-avatar" style="background:'+avBg+';">'+_initials(s.nome)+'</div>'
+      +'<div style="min-width:0;"><div class="dash-row-name">'+s.nome+'</div>'
       +'<div class="dash-row-sub">'+valor+(s.vencimento?' · '+fmtDate(s.vencimento):'')+'</div></div>'
+      +'</div>'
       +'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">'
       +'<span class="badge '+(atrasado?'badge-late':'badge-warn')+'">'+diffLabel+'</span>'
       +'<button onclick="cobrarAluno(\''+s.id+'\')" style="background:none;border:1px solid rgba(37,211,102,0.3);color:#25D366;border-radius:4px;font-size:0.6rem;padding:4px 8px;cursor:pointer;font-family:inherit;">💬 Cobrar</button>'
       +'</div></div>';
   });
-  if(!cobs.length) r3 = EMPTY;
+  if(!cobs.length) r3 = '<div style="font-size:0.78rem;color:var(--white-dim);padding:10px 2px;">Sem pendências — bom trabalho 🔥</div>';
   else if(cobs.length>MAX) r3 += '<div style="font-size:0.7rem;color:var(--white-dim);padding:4px 0;">+'+(cobs.length-MAX)+' mais</div>';
   html += bloco('💰','Cobranças Pendentes', cobs.length, '', '', r3);
 
@@ -5545,17 +5559,20 @@ function renderDashboardDia(){
     var s=it.student, dias=it.dias;
     var bc = dias>=3?'badge-late':dias>=2?'badge-warn':'badge-solo';
     var borderCol = dias>=3?'var(--danger)':dias>=2?'var(--warning)':'var(--accent)';
-    var label = dias===1?'1 falta seguida na agenda':dias+' faltas seguidas na agenda';
-    r4 += '<div class="dash-row" style="background:var(--card);display:flex;align-items:center;gap:8px;border-left:3px solid '+borderCol+';margin-bottom:2px;">'
-      +'<div onclick="openDetail(\''+s.id+'\')" style="cursor:pointer;flex:1;min-width:0;">'
-      +'<div class="dash-row-name">'+s.nome+'</div>'
+    var label = dias===1?'1 falta seguida':dias+' faltas seguidas';
+    var avBg = dias>=3?'rgba(231,76,60,0.12)':dias>=2?'rgba(243,156,18,0.12)':'rgba(74,127,165,0.12)';
+    r4 += '<div class="dash-row" style="background:var(--card);border-left:3px solid '+borderCol+';margin-bottom:4px;">'
+      +'<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer;" onclick="openDetail(\''+s.id+'\')">'
+      +'<div class="dash-avatar" style="background:'+avBg+';">'+_initials(s.nome)+'</div>'
+      +'<div style="min-width:0;"><div class="dash-row-name">'+s.nome+'</div>'
       +'<div class="dash-row-sub">'+label+'</div></div>'
+      +'</div>'
       +'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">'
       +'<span class="badge '+bc+'">'+dias+'F</span>'
-      +'<button onclick="reengajarAluno(\''+s.id+'\')" style="background:none;border:1px solid rgba(37,211,102,0.3);color:#25D366;border-radius:4px;font-size:0.6rem;padding:4px 8px;cursor:pointer;font-family:inherit;">💬 Reengajar</button>'
+      +'<button onclick="reengajarAluno(\''+s.id+'\')" style="background:none;border:1px solid rgba(37,211,102,0.3);color:#25D366;border-radius:4px;font-size:0.6rem;padding:4px 8px;cursor:pointer;font-family:inherit;">💬</button>'
       +'</div></div>';
   });
-  if(!risco.length) r4 = EMPTY;
+  if(!risco.length) r4 = '<div style="font-size:0.78rem;color:var(--white-dim);padding:10px 2px;">Nenhum risco hoje 👊</div>';
   else if(risco.length>MAX) r4 += '<div style="font-size:0.7rem;color:var(--white-dim);padding:4px 0;">+'+(risco.length-MAX)+' mais</div>';
   html += bloco('🚨','Alunos em Risco', risco.length, '', '', r4);
 
@@ -5567,7 +5584,7 @@ function renderDashboard() {
   var mesNomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   var diasSem = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
   var dataEl = document.getElementById('dash-data');
-  if(dataEl) dataEl.textContent = diasSem[now.getDay()]+', '+now.getDate()+' de '+mesNomes[now.getMonth()];
+  if(dataEl) dataEl.textContent = diasSem[now.getDay()] + ' • ' + now.getDate() + ' de ' + mesNomes[now.getMonth()];
 
   // KPIs
   var total = _visible(students).length;
@@ -5577,18 +5594,32 @@ function renderDashboard() {
   var kpisEl = document.getElementById('dash-kpis');
   if(kpisEl) kpisEl.innerHTML =
     '<div class="dash-kpi" style="cursor:pointer;" onclick="openDashGrupo(&quot;total&quot;)">'
+      +'<span class="dash-kpi-icon">👥</span>'
       +'<div class="dash-kpi-val">'+total+'</div><div class="dash-kpi-lbl">Total de alunos</div>'
     +'</div>'
    +'<div class="dash-kpi ok" style="cursor:pointer;" onclick="openDashGrupo(&quot;ativos&quot;)">'
+      +'<span class="dash-kpi-icon">🟢</span>'
       +'<div class="dash-kpi-val">'+emDia+'</div><div class="dash-kpi-lbl">Ativos</div>'
     +'</div>'
    +'<div class="dash-kpi danger" style="grid-column:1/-1;cursor:pointer;" onclick="openDashGrupo(&quot;inadimplentes&quot;)">'
-      +'<div class="dash-kpi-val">'+inad+'</div><div class="dash-kpi-lbl">Inadimplentes</div>'
+      +'<div style="display:flex;align-items:center;gap:14px;">'
+      +'<span style="font-size:1.6rem;line-height:1;">🔴</span>'
+      +'<div><div class="dash-kpi-val">'+inad+'</div><div class="dash-kpi-lbl">Inadimplentes</div></div>'
+      +'</div>'
     +'</div>';
 
   renderDashboardDia();
 
-  // Vencimentos próximos (3 dias) — notificação de vencimento
+  // Frase dinâmica
+  var fraseEl = document.getElementById('dash-frase');
+  if(fraseEl){
+    var nHoje = getAlunosHoje().length;
+    fraseEl.textContent = nHoje > 0
+      ? nHoje + ' aluno'+(nHoje===1?'':'s')+' hoje — bora treinar 💪'
+      : 'Dia sem aulas — aproveite 😌';
+  }
+
+  // Vencimentos próximos (3 dias)
   var hoje2 = new Date(); hoje2.setHours(0,0,0,0);
   var vencProx = _visible(students).filter(function(s){
     if(!s.vencimento) return false;
@@ -5604,21 +5635,25 @@ function renderDashboard() {
         var v = new Date(s.vencimento+'T12:00:00'); v.setHours(0,0,0,0);
         var diff = Math.ceil((v-hoje2)/86400000);
         var label = diff===0?'Hoje!':diff===1?'Amanhã':'Em '+diff+' dias';
-        return '<div class="dash-row notif-danger" style="cursor:pointer;" onclick="openDetail(\''+s.id+'\')">'
-          +'<div><div class="dash-row-name">'+s.nome+'</div><div class="dash-row-sub">Vence: '+fmtDate(s.vencimento)+'</div></div>'
+        return '<div class="dash-row notif-danger" style="cursor:pointer;margin-bottom:4px;" onclick="openDetail(\''+s.id+'\')">'
+          +'<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">'
+          +'<div class="dash-avatar" style="background:rgba(231,76,60,0.12);">'+_initials(s.nome)+'</div>'
+          +'<div style="min-width:0;"><div class="dash-row-name">'+s.nome+'</div>'
+          +'<div class="dash-row-sub">Vence: '+fmtDate(s.vencimento)+'</div></div></div>'
           +'<span class="badge badge-late">'+label+'</span>'
           +'</div>';
       }).join('');
-      vencEl.innerHTML = '<div class="dash-section-title" style="color:var(--danger);">⚠ Vencimentos em 3 dias ('+vencProx.length+')</div>'+vrows;
+      vencEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:8px;border-bottom:1px solid var(--border);margin-bottom:12px;">'
+        +'<div class="dash-section-title" style="margin-bottom:0;color:var(--danger);">⚠ Vencimentos em 3 dias ('+vencProx.length+')</div></div>'+vrows;
     } else {
       vencEl.innerHTML = '';
     }
   }
 
-  // Aniversariantes: hoje e proximos 5 dias
+  // Aniversariantes
   var anivEl = document.getElementById('dash-aniv');
   if(anivEl){
-    var diasNomes=['Dom','Seg','Ter','Qua','Qui','Sex','S\u00e1b'];
+    var diasNomes=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
     var anivProx=[];
     for(var di=0; di<=5; di++){
       var d2=new Date(now); d2.setDate(now.getDate()+di); d2.setHours(12,0,0,0);
@@ -5634,26 +5669,29 @@ function renderDashboard() {
       var atitle=document.createElement('div');
       atitle.className='dash-section-title';
       atitle.style.color='var(--warning)';
-      atitle.innerHTML='\u2728 Anivers\u00e1rios ('+anivProx.length+')';
+      atitle.innerHTML='✨ Aniversários ('+anivProx.length+')';
       anivEl.appendChild(atitle);
       anivProx.forEach(function(item){
         var s=item.s, di=item.dias;
         var isHoje=di===0;
         var idade=getIdade(s.nascimento);
-        var dLabel=isHoje?'Hoje!':(di===1?'Amanh\u00e3':diasNomes[item.date.getDay()]+', daqui '+di+' dias');
+        var dLabel=isHoje?'Hoje!':(di===1?'Amanhã':diasNomes[item.date.getDay()]+', daqui '+di+' dias');
         var row=document.createElement('div');
         row.className='dash-row';
-        row.style.cssText='background:var(--card);cursor:pointer;'+(isHoje?'border-left:3px solid var(--warning);':'');
-        row.innerHTML='<div><div class="dash-row-name">'+(isHoje?'\u{1F381} ':'')+s.nome+'</div>'
+        row.style.cssText='background:var(--card);cursor:pointer;margin-bottom:4px;'+(isHoje?'border-left:3px solid var(--warning);':'');
+        row.innerHTML='<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">'
+          +'<div class="dash-avatar" style="background:rgba(243,156,18,0.12);">'+_initials(s.nome)+'</div>'
+          +'<div style="min-width:0;"><div class="dash-row-name">'+(isHoje?'🎁 ':'')+s.nome+'</div>'
           +'<div class="dash-row-sub" style="color:'+(isHoje?'var(--warning)':'var(--white-dim)')+';">'
-          +dLabel+' \u00B7 '+idade+(isHoje?'+1':'')+' anos</div></div>'
-          +(isHoje?'<span class="badge badge-warn">Hoje!</span>':'<span style="font-size:1.1rem;">\u{1F382}</span>');
+          +dLabel+' · '+idade+(isHoje?'+1':'')+' anos</div></div></div>'
+          +(isHoje?'<span class="badge badge-warn">Hoje!</span>':'<span style="font-size:1.1rem;">🎂</span>');
         row.onclick=(function(sid){ return function(){ openDetail(sid); }; })(s.id);
         anivEl.appendChild(row);
       });
     }
   }
 }
+
 
 function openDashGrupo(tipo){
   var title='', lista=[];
