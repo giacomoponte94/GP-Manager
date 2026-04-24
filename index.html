@@ -1654,13 +1654,17 @@ function saveChavePix(){ try{ localStorage.setItem('gp-pix',chavePix); }catch(e)
 
 var reciboHeader = '';
 var reciboRodape = '';
+var reciboCorpo  = '';
+var RECIBO_CORPO_DEFAULT = 'Aluno: {nome}\nPlano: {plano}\nValor: {valor}\nData: {data}\nVencimento: {vencimento}';
 function loadReciboConfig(){
   try{ reciboHeader=localStorage.getItem('gp-recibo-header'); if(reciboHeader===null)reciboHeader='GIACOMO PONTE - Personal Trainer'; }catch(e){}
   try{ reciboRodape=localStorage.getItem('gp-recibo-rodape'); if(reciboRodape===null)reciboRodape='@giacomoponte'; }catch(e){}
+  try{ reciboCorpo=localStorage.getItem('gp-recibo-corpo'); if(reciboCorpo===null)reciboCorpo=RECIBO_CORPO_DEFAULT; }catch(e){}
 }
 function saveReciboConfig(){
   try{ localStorage.setItem('gp-recibo-header',reciboHeader); }catch(e){}
   try{ localStorage.setItem('gp-recibo-rodape',reciboRodape); }catch(e){}
+  try{ localStorage.setItem('gp-recibo-corpo',reciboCorpo); }catch(e){}
 }
 
 function loadDiasPermitidos() {
@@ -3654,13 +3658,13 @@ function gerarRecibo(id){
   var lines2=[];
   if(reciboHeader)lines2.push(reciboHeader);
   lines2.push(sep,'COMPROVANTE DE PAGAMENTO',sep);
-  lines2.push(
-    'Aluno: '+s.nome,
-    'Plano: '+(getPlanNome(s.plano)||'--')+(s.modalidade?' ('+s.modalidade+')':''),
-    'Valor: '+(s.valor?'R$ '+parseFloat(s.valor).toLocaleString('pt-BR',{minimumFractionDigits:2}):'--'),
-    'Data: '+hoje,
-    'Vencimento: '+fmtDate(s.vencimento)
-  );
+  var _corpo=(reciboCorpo||RECIBO_CORPO_DEFAULT)
+    .replace(/\{nome\}/g,s.nome)
+    .replace(/\{plano\}/g,(getPlanNome(s.plano)||'--')+(s.modalidade?' ('+s.modalidade+')':''))
+    .replace(/\{valor\}/g,s.valor?'R$ '+parseFloat(s.valor).toLocaleString('pt-BR',{minimumFractionDigits:2}):'--')
+    .replace(/\{data\}/g,hoje)
+    .replace(/\{vencimento\}/g,fmtDate(s.vencimento));
+  _corpo.split('\n').forEach(function(l){lines2.push(l);});
   lines2.push(sep);
   if(reciboRodape)lines2.push(reciboRodape);
   var txt=lines2.join('\n');
@@ -3855,6 +3859,9 @@ function renderConfiguracoes() {
   out += '<div style="display:flex;flex-direction:column;gap:8px;">';
   out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">Cabe\u00E7alho (nome / apresenta\u00E7\u00E3o)</div>';
   out += '<input type="text" id="cfg-recibo-header" placeholder="Ex: Jo\u00E3o Silva - Personal Trainer" value="'+escapeHTML(reciboHeader)+'" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;"></div>';
+  out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">Corpo do comprovante</div>';
+  out += '<div style="font-size:0.65rem;color:rgba(74,127,165,0.7);margin-bottom:6px;">Vari\u00E1veis: <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{nome}</code> <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{plano}</code> <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{valor}</code> <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{data}</code> <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{vencimento}</code></div>';
+  out += '<textarea id="cfg-recibo-corpo" rows="6" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;font-family:monospace;resize:vertical;line-height:1.5;">'+escapeHTML(reciboCorpo)+'</textarea></div>';
   out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">Rodap\u00E9 (instagram / contato)</div>';
   out += '<input type="text" id="cfg-recibo-rodape" placeholder="Ex: @seuperfil" value="'+escapeHTML(reciboRodape)+'" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;"></div>';
   out += '<button class="btn btn-primary" style="height:42px;" onclick="salvarReciboConfig()">Salvar comprovante</button>';
@@ -5787,6 +5794,7 @@ function salvarChavePix() {
 function salvarReciboConfig() {
   reciboHeader = (document.getElementById('cfg-recibo-header').value||'').trim();
   reciboRodape = (document.getElementById('cfg-recibo-rodape').value||'').trim();
+  reciboCorpo  = (document.getElementById('cfg-recibo-corpo').value||'').trim();
   saveReciboConfig();
   toast('Comprovante salvo!');
 }
