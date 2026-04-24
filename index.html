@@ -908,27 +908,29 @@ function _registerDelete(item){
   var map=_getDeletedMap(); map[item.id]=Date.now(); _saveDeletedMap(map);
 }
 
-// Combina dois arrays por ID. Cloud vence quando mais novo; empate desempata por deviceId.
-// Usa _mergeItem para nunca perder campos locais extras. Tombstones ficam no resultado.
+// Merge two arrays by item.id. Winner = highest updatedAt; tie broken by deviceId string.
+// Anti-resurrection: cloud item rejected if local tombstone is newer.
 function _mergeById(localArr, cloudArr, getId){
   var map={}; var deletedMap=_getDeletedMap();
   (localArr||[]).forEach(function(item){ map[getId(item)]=item; });
   (cloudArr||[]).forEach(function(item){
     var id=getId(item);
-    // Proteção anti-ressurreição: rejeita item cloud mais antigo que o delete local
-    if(deletedMap[id] && _getTs(item)<=deletedMap[id]){
-      console.log('[GP Sync] Ressurreição bloqueada:', id);
-      return;
+    var cTs=_getTs(item);
+    // Block resurrection: cloud item older than local delete
+    if(deletedMap[id] && cTs<=deletedMap[id]){
+      console.log('[SYNC] resurrection blocked:',id); return;
     }
     var existing=map[id];
-    if(!existing){ map[id]=item; }
-    else{
-      var lTs=_getTs(existing); var cTs=_getTs(item);
+    if(!existing){
+      map[id]=item;
+    } else {
+      var lTs=_getTs(existing);
       if(cTs>lTs){
         map[id]=_mergeItem(existing,item);
-      } else if(cTs===lTs){
-        if((item.deviceId||'')>(existing.deviceId||'')) map[id]=_mergeItem(existing,item);
+      } else if(cTs===lTs && (item.deviceId||'')>(existing.deviceId||'')){
+        map[id]=_mergeItem(existing,item);
       }
+      // local wins when lTs > cTs — no change needed
     }
   });
   return Object.values(map);
@@ -952,15 +954,20 @@ function _deepMerge(local, cloud){
   return result;
 }
 
+// Merge two key-value objects. Per-key winner = highest updatedAt.
+// Keys only in local are preserved. Keys only in cloud are added.
 function _mergeObjectByKey(local, cloud){
   var result=Object.assign({},local||{});
   Object.keys(cloud||{}).forEach(function(key){
-    var l=local ? local[key] : undefined;
-    var c=cloud[key];
-    if(!l){ result[key]=c; return; }
-    var lts=(l&&l.updatedAt)||0;
-    var cts=(c&&c.updatedAt)||0;
-    if(cts>=lts) result[key]=c;
+    var l=result[key]; var c=cloud[key];
+    if(l===undefined){ result[key]=c; return; }
+    var lTs=_getTs(l); var cTs=_getTs(c);
+    if(cTs>lTs){
+      result[key]=c;
+    } else if(cTs===lTs && (c&&c.deviceId||'')>(l&&l.deviceId||'')){
+      result[key]=c;
+    }
+    // local wins when lTs > cTs — no change needed
   });
   return result;
 }
