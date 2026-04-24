@@ -847,6 +847,7 @@ function _pushCol(lsKey){
     var payload={ data:rawVal, localTs:now, serverTs:firebase.database.ServerValue.TIMESTAMP, device:_getDeviceId() };
     _colPushing[col]=true;
     console.log('[SYNC] PUSH', col);
+    if(col==='agendas') console.log('[SYNC] PUSH agendas', rawVal);
     try{
       await _colsRef.child(col).set(payload);
       delete _colPushing[col];
@@ -1980,7 +1981,11 @@ function loadAll() {
   try{var f=localStorage.getItem('gp-fe');if(f)feriadosCustom=normalizeTextMap(JSON.parse(f));}catch(e){}
   try{var b=localStorage.getItem('gp-bl');if(b)bloqueios=JSON.parse(b);}catch(e){}
 }
-function saveAgendas()  { try{localStorage.setItem('gp-a',JSON.stringify(_cleanupDeleted(agendas,7*24*60*60*1000)));}catch(e){} }
+function saveAgendas() {
+  localStorage.setItem('gp-a', JSON.stringify(agendas));
+  console.log('[SYNC] agendas SAVE');
+  _pushCol('gp-a');
+}
 function savePresencas(){ try{localStorage.setItem('gp-p',JSON.stringify(presencas));}catch(e){} }
 function saveNotas()    { try{notasSessao=normalizeTextMap(notasSessao);localStorage.setItem('gp-n',JSON.stringify(notasSessao));}catch(e){} }
 function saveEvolucao() { try{localStorage.setItem('gp-ev',JSON.stringify(evolucaoData));}catch(e){} }
