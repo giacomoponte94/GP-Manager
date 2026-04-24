@@ -1310,6 +1310,9 @@ function openCadastro(mode, id) {
   var dt=document.getElementById('f-day-times'); if(dt)dt.innerHTML='';
   var dh=document.getElementById('f-days-hint'); if(dh)dh.textContent='';
 
+  try{atualizarSelectsPlanos();}catch(e){}
+  try{buildDaysPicker();}catch(e){}
+
   var cad=document.getElementById('cad-title');
 
   if(mode==='edit'&&id){
@@ -1348,9 +1351,6 @@ function openCadastro(mode, id) {
   } else {
     if(cad)cad.innerHTML='Novo <span>Aluno</span>';
   }
-
-  try{atualizarSelectsPlanos();}catch(e){}
-  try{buildDaysPicker();}catch(e){}
 
   // Mostrar cadastro, mantendo "Alunos" ativo no drawer
   document.querySelectorAll('.ham-item[data-tab]').forEach(function(b){
@@ -2717,15 +2717,15 @@ function saveStudent(){
       return;
     }
 
-    // Sem conflitos — agora sim modifica agendas
-    if(editingId) agendas=agendas.filter(function(a){return a.alunoId!==editingId;});
+    // Sem conflitos — agora sim modifica agendas (tombstone antes de recriar)
+    if(editingId){var _now=Date.now(),_dev=_getDeviceId();agendas=agendas.map(function(a){if(a.alunoId!==editingId)return a;var t2=Object.assign({},a,{deleted:true,updatedAt:_now,deviceId:_dev});_registerDelete(t2);return t2;});}
     Object.keys(byTime).forEach(function(t){
       var h=parseInt(t.split(':')[0]);
-      agendas.push({id:Date.now().toString()+'_'+t,alunoId:obj.id,days:byTime[t],inicio:t,fim:String((h+1)%24).padStart(2,'0')+':00',obs:''});
+      agendas.push({id:Date.now().toString()+'_'+t,alunoId:obj.id,days:byTime[t],inicio:t,fim:String((h+1)%24).padStart(2,'0')+':00',obs:'',updatedAt:Date.now(),deviceId:_getDeviceId()});
     });
   } else {
-    // Sem dias selecionados — apenas limpa agendas do aluno em edição
-    if(editingId) agendas=agendas.filter(function(a){return a.alunoId!==editingId;});
+    // Sem dias selecionados — tombstone agendas do aluno em edição
+    if(editingId){var _now2=Date.now(),_dev2=_getDeviceId();agendas=agendas.map(function(a){if(a.alunoId!==editingId)return a;var t3=Object.assign({},a,{deleted:true,updatedAt:_now2,deviceId:_dev2});_registerDelete(t3);return t3;});}
   }
   if(editingId){var i=students.findIndex(function(x){return x.id===editingId;});if(i>=0)students[i]=obj;else students.push(obj);}
   else students.push(obj);
