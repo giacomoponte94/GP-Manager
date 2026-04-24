@@ -4095,35 +4095,23 @@ function renderTabTreino() {
     var t = treinosData[s.id];
     var temTreino = !!(t && t.divisoes && t.divisoes.length);
     var numDiv = temTreino ? t.divisoes.length : 0;
-    var numEx = temTreino ? t.divisoes.reduce(function(a,d){ return a+(d.exercicios?d.exercicios.length:0); },0) : 0;
-    var updAt = temTreino && t.updatedAt ? new Date(t.updatedAt).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : null;
-
-    // Dias de agenda deste aluno
+    var numEx  = temTreino ? t.divisoes.reduce(function(a,d){ return a+(d.exercicios?d.exercicios.length:0); },0) : 0;
     var diasAg = agendas.filter(function(a){ return a.alunoId===s.id; });
     var diasLabel = diasAg.length ? diasAg.map(function(a){ return a.days.map(function(d){ return DNAMES[d]; }).join('/'); }).join(', ') : null;
+    var resumo = temTreino
+      ? numDiv+' divis\u00E3o'+(numDiv===1?'':'es')+' \u00B7 '+numEx+' exerc\u00EDcio'+(numEx!==1?'s':'')
+      : 'Sem treino \u2014 toque para criar';
+    var borderColor = temTreino ? 'var(--accent)' : 'var(--border)';
+    var resumoColor = temTreino ? 'var(--white-dim)' : 'rgba(74,127,165,0.5)';
+    var resumoStyle = temTreino ? '' : 'font-style:italic;';
 
-    out += '<div style="background:var(--card);margin:0 16px 10px;padding:16px;border-left:3px solid '+(temTreino?'var(--accent)':'var(--border)')+';border-radius:0 4px 4px 0;">';
-    out += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">';
+    out += '<div onclick="openTreinoAluno(\''+s.id+'\'')" style="background:var(--card);margin:0 16px 10px;padding:14px 16px;border-left:3px solid '+borderColor+';border-radius:0 4px 4px 0;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;">';
     out += '<div style="flex:1;min-width:0;">';
-    out += '<div style="font-weight:600;font-size:0.92rem;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+s.nome+'</div>';
-    out += '<div style="font-size:0.7rem;color:var(--accent-l);margin-top:2px;">'+(s.plano?getPlanNome(s.plano):'\u2014')+(diasLabel?' \u00B7 '+diasLabel:'')+'</div>';
-    if(temTreino){
-      out += '<div style="font-size:0.72rem;color:var(--white-dim);margin-top:5px;">';
-      out += numDiv+' divis\u00E3o'+(numDiv!==1?'es':'')+' \u00B7 '+numEx+' exerc\u00EDcio'+(numEx!==1?'s':'');
-      if(updAt) out += ' \u00B7 atualizado '+updAt;
-      out += '</div>';
-      // Preview das divisões
-      out += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">';
-      t.divisoes.forEach(function(div){
-        out += '<span style="font-size:0.62rem;background:rgba(74,127,165,0.15);color:var(--accent-l);padding:2px 8px;border-radius:10px;">'+div.nome+'</span>';
-      });
-      out += '</div>';
-    } else {
-      out += '<div style="font-size:0.72rem;color:var(--white-dim);margin-top:5px;font-style:italic;">Sem treino cadastrado</div>';
-    }
+    out += '<div style="font-weight:600;font-size:0.9rem;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+s.nome+'</div>';
+    out += '<div style="font-size:0.68rem;color:var(--accent-l);margin-top:2px;">'+(s.plano?getPlanNome(s.plano):'\u2014')+(diasLabel?' \u00B7 '+diasLabel:'')+'</div>';
+    out += '<div style="font-size:0.7rem;color:'+resumoColor+';margin-top:4px;'+resumoStyle+'">'+resumo+'</div>';
     out += '</div>';
-    out += '<button class="btn '+(temTreino?'btn-outline':'btn-primary')+' btn-sm" style="flex-shrink:0;height:36px;padding:0 14px;font-size:0.6rem;" onclick="openTreinoAluno(\''+s.id+'\')">'+(temTreino?'&#9998; Editar':'+ Criar')+'</button>';
-    out += '</div>';
+    out += '<span style="font-size:1.1rem;color:var(--white-dim);flex-shrink:0;">&#8250;</span>';
     out += '</div>';
   });
   list.innerHTML = out;
