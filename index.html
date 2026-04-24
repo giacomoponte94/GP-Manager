@@ -1578,7 +1578,7 @@ function useReposicao(sid, motivo) {
   return false;
 }
 // --- Licença ---
-function getLicencasAluno(sid) { return licencas[sid] || []; }
+function getLicencasAluno(sid) { return (licencas[sid]||[]).filter(function(l){ return !l.deleted; }); }
 function isEmLicenca(sid, dateStr) {
   var lics = getLicencasAluno(sid);
   var d = new Date(dateStr + 'T12:00:00');
@@ -1618,7 +1618,12 @@ function addLicenca(sid, inicio, fim) {
 function removeLicenca(sid, licId) {
   if(!licencas[sid]) return;
   var lic = licencas[sid].find(function(l){ return l.id === licId; });
-  licencas[sid] = licencas[sid].filter(function(l){ return l.id !== licId; });
+  var now=Date.now(); var dev=_getDeviceId();
+  licencas[sid] = licencas[sid].map(function(l){
+    if(l.id!==licId) return l;
+    var t=Object.assign({},l,{deleted:true,updatedAt:now,deviceId:dev});
+    _registerDelete(t); return t;
+  });
   saveLicencas();
   // Reverter extensão do vencimento
   if(lic) {
@@ -3401,7 +3406,7 @@ function renderSlotModal(){
     btn.onclick=function(){
       var sid=btn.getAttribute('data-sid'),dt=btn.getAttribute('data-date'),st=btn.getAttribute('data-st');
       var k=presKey(sid,dt);
-      if(_presStatus(presencas[k])===st) delete presencas[k]; else presencas[k]=_presEntry(st);
+      if(_presStatus(presencas[k])===st) presencas[k]=_presDelete(); else presencas[k]=_presEntry(st);
       savePresencas();renderSlotModal();renderCalendar();renderStats();
     };
   });
@@ -5098,7 +5103,7 @@ function saveDespesas() {
   localStorage.setItem('gp-desp', JSON.stringify(despesas)); _pushCol('gp-desp');
 }
 function getDespesasMes(ym) {
-  return despesas.filter(function(d){ return d.data && d.data.substring(0,7)===ym; });
+  return despesas.filter(function(d){ return !d.deleted && d.data && d.data.substring(0,7)===ym; });
 }
 function getTotalDespesasMes(ym) {
   return getDespesasMes(ym).reduce(function(a,d){ return a+(parseFloat(d.valor)||0); }, 0);
@@ -5154,7 +5159,12 @@ function salvarDespesa() {
 }
 function excluirDespesa(id) {
   if(!confirm('Remover esta despesa?')) return;
-  despesas=despesas.filter(function(d){return d.id!==id;});
+  var now=Date.now(); var dev=_getDeviceId();
+  despesas=despesas.map(function(d){
+    if(d.id!==id) return d;
+    var t=Object.assign({},d,{deleted:true,updatedAt:now,deviceId:dev});
+    _registerDelete(t); return t;
+  });
   saveDespesas();
   renderFinanceiro();
   renderDashboard();
@@ -5323,7 +5333,7 @@ function renderModoRapido(){
     btn.onclick=function(){
       var sid=btn.getAttribute('data-sid'),st=btn.getAttribute('data-st');
       var k=presKey(sid,ds);
-      if(_presStatus(presencas[k])===st) delete presencas[k]; else presencas[k]=_presEntry(st);
+      if(_presStatus(presencas[k])===st) presencas[k]=_presDelete(); else presencas[k]=_presEntry(st);
       savePresencas(); renderModoRapido(); renderCalendar(); renderStats();
     };
   });
