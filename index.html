@@ -1882,7 +1882,7 @@ function savePlanos() {
   localStorage.setItem('gp-planos', JSON.stringify(_cleanupDeleted(PLANOS,7*24*60*60*1000))); _pushCol('gp-planos');
 }
 function getPlano(id) {
-  return PLANOS.find(function(p){ return p.id === id; }) || null;
+  return PLANOS.find(function(p){ return p.id === id && !p.deleted; }) || null;
 }
 function getPlanNome(id) {
   var p = getPlano(id); return p ? p.nome : (id || '');
@@ -2203,7 +2203,7 @@ function computeStatus(s) {
   return 'em dia';
 }
 function refreshAll(){
-  try{students.forEach(function(s){if(!s.statusManual)s.status=computeStatus(s);});}catch(e){}
+  try{_visible(students).forEach(function(s){if(!s.statusManual)s.status=computeStatus(s);});}catch(e){}
   try{save();}catch(e){}
   try{renderTable();}catch(e){}
   try{renderStats();}catch(e){}
@@ -2261,7 +2261,7 @@ function renderTable(){
   var fP=safeVal('filt-plano','');
   var fM=safeVal('filt-modal','');
   var dow=new Date().getDay();
-  var hojeIds=filterHojeAtivo?agendas.filter(function(a){return a.days.includes(dow);}).map(function(a){return a.alunoId;}).filter(function(id,i,ar){return ar.indexOf(id)===i;}):null;
+  var hojeIds=filterHojeAtivo?agendas.filter(function(a){return !a.deleted&&a.days.includes(dow);}).map(function(a){return a.alunoId;}).filter(function(id,i,ar){return ar.indexOf(id)===i;}):null;
   var _vs=_visible(students);
   var f=_vs.filter(function(s){
     var mQ=!q||s.nome.toLowerCase().includes(q)||(s.email||'').toLowerCase().includes(q);
@@ -2344,7 +2344,7 @@ function getAulasDoMes(sid){
   var s=students.find(function(x){return x.id===sid&&!x.deleted;}); if(!s||!s.plano)return{feitas:0,direito:0,faltas:0};
   var spw=PLAN_DAYS[s.plano]||0,now=new Date(),y=now.getFullYear(),m=now.getMonth();
   var dim=new Date(y,m+1,0).getDate(),dir=Math.round(spw*dim/7),f=0,fa=0;
-  var sAgs=agendas.filter(function(a){return a.alunoId===sid;});
+  var sAgs=agendas.filter(function(a){return !a.deleted&&a.alunoId===sid;});
   var dowsAluno=[];
   sAgs.forEach(function(a){a.days.forEach(function(dw){if(dowsAluno.indexOf(dw)===-1)dowsAluno.push(dw);});});
   if(dowsAluno.length){
@@ -3349,7 +3349,7 @@ function renderSlotModal(){
         if(slotDateChk && isEmLicenca(s.id, slotDateChk)) return null;
         var planoS=getPlano(s.plano);
         var repS=getReposicoes(s.id);
-        var temQualquerRec=agendas.some(function(a){return a.alunoId===s.id;});
+        var temQualquerRec=agendas.some(function(a){return !a.deleted&&a.alunoId===s.id;});
         var isPacote=planoS&&planoS.tipo==='pacote';
         var isLivre =s.categoria==='flexivel';
         if(isPacote){
@@ -3620,7 +3620,7 @@ function renderFinanceiro(){
 
 function calcFreqMedia(){
   var c=0,tot=0;
-  students.forEach(function(s){var d=getAulasDoMes(s.id);if(d.direito>0){tot+=d.feitas/d.direito*100;c++;}});
+  _visible(students).forEach(function(s){var d=getAulasDoMes(s.id);if(d.direito>0){tot+=d.feitas/d.direito*100;c++;}});
   return c>0?Math.round(tot/c):0;
 }
 function getMeta(){ return parseFloat(localStorage.getItem('gp-meta'))||0; }
@@ -4105,7 +4105,7 @@ function renderTabTreino() {
     var temTreino = !!(t && t.divisoes && t.divisoes.length);
     var numDiv = temTreino ? t.divisoes.length : 0;
     var numEx  = temTreino ? t.divisoes.reduce(function(a,d){ return a+(d.exercicios?d.exercicios.length:0); },0) : 0;
-    var diasAg = agendas.filter(function(a){ return a.alunoId===s.id; });
+    var diasAg = agendas.filter(function(a){ return !a.deleted&&a.alunoId===s.id; });
     var diasLabel = diasAg.length ? diasAg.map(function(a){ return a.days.map(function(d){ return DNAMES[d]; }).join('/'); }).join(', ') : null;
     var resumo = temTreino
       ? numDiv+' divis\u00E3o'+(numDiv===1?'':'es')+' \u00B7 '+numEx+' exerc\u00EDcio'+(numEx!==1?'s':'')
@@ -4355,7 +4355,7 @@ function calcSimulacao() {
 
   var now=new Date(),y=now.getFullYear(),m=now.getMonth();
   var perdaFaltas=0;
-  students.forEach(function(s){
+  _visible(students).forEach(function(s){
     var plano=getPlano(s.plano); if(!plano||plano.tipo!=='fixo')return;
     var spw=plano.diasSemana||0; if(!spw||!s.valor)return;
     var dim=new Date(y,m+1,0).getDate();
@@ -4989,7 +4989,7 @@ function sugerirHorariosLivres(sid) {
   for (var dow = 1; dow <= 6; dow++) {       
     for (var h = 6; h <= 19; h++) {
       var ocupados = agendas.filter(function(a){
-        return a.days.includes(dow) && parseInt(a.inicio.split(':')[0])===h;
+        return !a.deleted && a.days.includes(dow) && parseInt(a.inicio.split(':')[0])===h;
       }).length;
       if (ocupados < 2) {
         livres.push({ dow: dow, hora: h, ocupados: ocupados });
@@ -5272,7 +5272,7 @@ function salvarPagamento() {
 }
 
 function getPagamentosAluno(sid) {
-  return pagamentos.filter(function(p){ return p.alunoId===sid; })
+  return pagamentos.filter(function(p){ return !p.deleted&&p.alunoId===sid; })
     .sort(function(a,b){ return b.data.localeCompare(a.data); });
 }
 
@@ -5289,7 +5289,7 @@ function _tlogRow(sid, date){
 function getAcaoDoDia(){
   // Prioridade 1: faltou sessões agendadas + inadimplente
   var found=null;
-  students.forEach(function(s){
+  _visible(students).forEach(function(s){
     if(found) return;
     var f=getMissedSessionsStreak(s.id);
     if(f>=1&&s.status==='atrasado') found={student:s,motivo:s.nome.split(' ')[0]+' faltou '+f+(f===1?' aula agendada':' aulas agendadas')+' e est\u00e1 em atraso',acaoFn:function(){cobrarAluno(s.id);}};
@@ -5557,7 +5557,7 @@ function renderDashboard() {
     for(var di=0; di<=5; di++){
       var d2=new Date(now); d2.setDate(now.getDate()+di); d2.setHours(12,0,0,0);
       var dm=d2.getMonth()+1, dd=d2.getDate();
-      students.forEach(function(s){
+      _visible(students).forEach(function(s){
         if(!s.nascimento) return;
         var p=s.nascimento.split('-');
         if(parseInt(p[1])===dm && parseInt(p[2])===dd) anivProx.push({s:s,dias:di,date:d2});
@@ -5628,6 +5628,7 @@ function renderRelatorioMensal() {
 
   // Pagamentos registrados no mês atual
   var pagsMes = pagamentos.filter(function(p) {
+    if(p.deleted) return false;
     var d = new Date(p.data + 'T12:00:00');
     return d.getFullYear() === y && d.getMonth() === m;
   });
