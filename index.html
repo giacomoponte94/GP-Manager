@@ -445,7 +445,6 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
       <div class="dash-kpi-grid" id="dash-kpis"></div>
       <div class="dash-section" id="dash-dia"></div>
       <div class="dash-section" id="dash-aniv"></div>
-      <div class="dash-section" id="dash-hoje"></div>
       <div class="dash-section" id="dash-venc"></div>
     </div>
 
@@ -5526,41 +5525,6 @@ function renderDashboard() {
     +'</div>';
 
   renderDashboardDia();
-
-  // Aulas hoje
-  var ds = todayStr();
-  var hojeEl = document.getElementById('dash-hoje');
-  if(hojeEl){
-    var ferHoje = isHoliday(new Date());
-    if(ferHoje){
-      hojeEl.innerHTML = '<div class="dash-section-title">Aulas hoje</div>'
-        +'<div style="font-size:0.8rem;color:var(--white-dim);padding:10px 0;">&#127956; Feriado: '+ferHoje+' \u2014 agenda fechada.</div>';
-    } else {
-      var agsHoje = getAgendasParaData(ds);
-      var idHoje = agsHoje.filter(function(a){ return _visible(students).some(function(s){ return s.id===a.alunoId; }); }).map(function(a){ return a.alunoId; }).filter(function(id,i,ar){ return ar.indexOf(id)===i; });
-      // Ordenar por horário de início
-      idHoje.sort(function(a,b){
-        var hA=(agsHoje.find(function(x){return x.alunoId===a;})||{}).inicio||'';
-        var hB=(agsHoje.find(function(x){return x.alunoId===b;})||{}).inicio||'';
-        return hA.localeCompare(hB);
-      });
-      if(idHoje.length){
-        var rows = idHoje.map(function(id){
-          var s = students.find(function(x){ return x.id===id&&!x.deleted; }); if(!s) return '';
-          var ag = agsHoje.find(function(a){ return a.alunoId===id; });
-          var hora = ag ? ag.inicio : '';
-          return '<div class="dash-row notif-info" style="cursor:pointer;" onclick="openDetail(\''+id+'\')">'
-            +'<div><div class="dash-row-name">'+s.nome+'</div><div class="dash-row-sub">'+hora+(s.plano?' \u00B7 '+getPlanNome(s.plano):'')+'</div></div>'
-            +'<span class="badge badge-ok">Hoje</span>'
-            +'</div>';
-        }).join('');
-        hojeEl.innerHTML = '<div class="dash-section-title">Aulas hoje ('+idHoje.length+')</div>'+rows;
-      } else {
-        hojeEl.innerHTML = '<div class="dash-section-title">Aulas hoje</div>'
-          +'<div style="font-size:0.8rem;color:var(--white-dim);padding:10px 0;">Nenhuma aula agendada para hoje.</div>';
-      }
-    }
-  }
 
   // Vencimentos próximos (3 dias) — notificação de vencimento
   var hoje2 = new Date(); hoje2.setHours(0,0,0,0);
