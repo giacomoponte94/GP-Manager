@@ -4171,7 +4171,7 @@ function renderTabTreino() {
       ? '<span class="badge badge-duo">'+numDiv+'D / '+numEx+'E</span>'
       : '<span class="badge badge-solo">Sem treino</span>';
 
-    out += '<div class="st-card" onclick="openTreinoAluno(''+s.id+'')" style="cursor:pointer;">'
+    out += '<div class="st-card treino-item" data-sid="'+s.id+'" style="cursor:pointer;">'
       +'<div class="st-card-av" style="background:'+avBg+';color:'+avColor+';">'+_initials(s.nome)+'</div>'
       +'<div class="st-card-body">'
       +'<div class="st-card-name">'+s.nome+'</div>'
@@ -4181,6 +4181,9 @@ function renderTabTreino() {
       +'</div>';
   });
   list.innerHTML = out;
+  list.querySelectorAll('.treino-item').forEach(function(el){
+    el.onclick = function(){ openTreinoAluno(el.getAttribute('data-sid')); };
+  });
 }
 function openTreinoAluno(alunoId) {
   var aluno=students.find(function(a){return a.id===alunoId&&!a.deleted;}); if(!aluno)return;
