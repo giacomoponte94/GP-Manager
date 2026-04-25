@@ -5770,7 +5770,8 @@ function renderRelatorioMensal() {
     var d = new Date(p.data + 'T12:00:00');
     return d.getFullYear() === y && d.getMonth() === m;
   });
-  var totalPago = pagsMes.reduce(function(a, p) { return a + (parseFloat(p.valor) || 0); }, 0);
+  // Use status-based calculation (consistent with Financeiro screen)
+  var totalPago = _visible(students).filter(function(s){ return s.status==='em dia'; }).reduce(function(a,s){ return a+(parseFloat(s.valor)||0); },0);
 
   // Presenças e faltas no mês
   var aulasMes = 0, faltasMes = 0;
