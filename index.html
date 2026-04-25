@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@300;400;600;700;800&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
 <style>
 
 
@@ -395,15 +396,15 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
       <div class="login-brand-sub">Gi&aacute;como Ponte</div>
       <div class="login-brand-title">Personal <span>Pro</span></div>
     </div>
-    <label class="form-label">Usu&aacute;rio</label>
-    <input type="text" id="lin-u" autocomplete="username" style="width:100%;background:var(--dark);border:1px solid var(--border);color:var(--white);padding:12px 14px;border-radius:4px;font-size:0.92rem;margin-bottom:14px;-webkit-appearance:none;outline:none;">
+    <label class="form-label">Email</label>
+    <input type="email" id="lin-email" autocomplete="email" style="width:100%;background:var(--dark);border:1px solid var(--border);color:var(--white);padding:12px 14px;border-radius:4px;font-size:0.92rem;margin-bottom:14px;-webkit-appearance:none;outline:none;">
     <label class="form-label">Senha</label>
     <input type="password" id="lin-p" autocomplete="current-password" style="width:100%;background:var(--dark);border:1px solid var(--border);color:var(--white);padding:12px 14px;border-radius:4px;font-size:0.92rem;margin-bottom:14px;-webkit-appearance:none;outline:none;">
-    <div class="login-err" id="lin-err">Usu&aacute;rio ou senha incorretos.</div>
-    <div id="login-help" style="font-size:0.78rem;color:var(--white-dim);margin-bottom:14px;line-height:1.5;">No primeiro acesso neste dispositivo, o usu&aacute;rio e a senha informados ser&atilde;o salvos como credenciais locais.</div>
-    <button class="btn btn-primary" style="width:100%;height:48px;" onclick="doLogin()">Entrar</button>
+    <div class="login-err" id="lin-err"></div>
+    <button class="btn btn-primary" style="width:100%;height:48px;margin-bottom:8px;" onclick="doLogin()">Entrar</button>
+    <button class="btn btn-outline" style="width:100%;height:44px;" onclick="doRegister()">Criar conta</button>
     <div style="text-align:center;margin-top:14px;">
-      <a href="#" id="reset-access-link" style="font-size:0.76rem;color:var(--white-dim);text-decoration:underline;" onclick="resetAccess();return false;">Redefinir acesso</a>
+      <a href="#" style="font-size:0.76rem;color:var(--white-dim);text-decoration:underline;" onclick="forgotPassword();return false;">Esqueci a senha</a>
     </div>
   </div>
 </div>
@@ -746,12 +747,34 @@ var firebaseConfig = {
   appId: "1:680333411172:web:ec373d87f989a8eea1f071"
 };
 firebase.initializeApp(firebaseConfig);
-// [6] Persiste writes pendentes em IndexedDB — sobrevivem a reloads/BFCache no mobile
 try{ firebase.database().setPersistenceEnabled(true); }catch(e){}
-// Legacy ref — leitura única para migração da estrutura antiga
-var _legacyRef = firebase.database().ref('gp/data');
-var _colsRef   = firebase.database().ref('gp/collections');
-var _histRef   = firebase.database().ref('gp/history');
+
+var auth = firebase.auth();
+var currentUser = null;
+
+// DB refs — set after auth via _initUserRefs(uid)
+var _legacyRef = null;
+var _colsRef   = null;
+var _histRef   = null;
+
+function _initUserRefs(uid) {
+  _colsRef   = firebase.database().ref('users/' + uid + '/collections');
+  _legacyRef = firebase.database().ref('users/' + uid + '/data');
+  _histRef   = firebase.database().ref('users/' + uid + '/history');
+}
+
+// One-time migration: copy gp/collections → users/{uid}/collections if user has no data yet
+function _migrateIfNeeded(uid) {
+  _colsRef.once('value').then(function(userSnap) {
+    if(userSnap.exists()) return; // already has user data
+    firebase.database().ref('gp/collections').once('value').then(function(legSnap) {
+      if(!legSnap.exists()) return; // no legacy data either
+      _colsRef.set(legSnap.val()).then(function() {
+        console.log('[MIGRATE] gp/collections → users/' + uid + '/collections done');
+      }).catch(function(e){ console.warn('[MIGRATE] write error', e); });
+    }).catch(function(e){ console.warn('[MIGRATE] read error', e); });
+  }).catch(function(e){ console.warn('[MIGRATE] check error', e); });
+}
 
 // localStorage key → Firebase collection name
 var _COL_MAP = {
@@ -823,6 +846,7 @@ function _loadColTs(){
 
 function _saveHistory(){
   try{
+    if(!_histRef) return;
     var now=Date.now();
     if(now-_lastHistoryTs<5*60*1000) return;
     _lastHistoryTs=now;
@@ -843,6 +867,7 @@ function _saveHistory(){
 
 // Push uma única coleção com debounce de 300ms
 function _pushCol(lsKey){
+  if(!_colsRef) return;
   var col=_COL_MAP[lsKey]; if(!col){ console.warn('[SYNC] unknown lsKey:',lsKey); return; }
   if(_colTimers[col]) clearTimeout(_colTimers[col]);
   _setSyncStatus('up');
@@ -1090,6 +1115,7 @@ function _registerCollectionListeners(){
 }
 
 function startCloudSync(){
+  if(!_colsRef || !_legacyRef) { _setSyncStatus('err'); return; }
   _loadColTs();
   console.log('[GP Sync] Iniciando sync por coleção...');
   // Verifica estrutura legada gp/data e migra se necessário
@@ -1818,7 +1844,6 @@ function confirmarSlotPicker() {
 
 
 
-const AUTH_STORAGE_KEY = 'gp-auth-v2';
 let students = [], agendas = [], presencas = {}, notasSessao = {}, evolucaoData = {};
 let historicoCob = {}, feriadosCustom = {}, bloqueios = {}, editingId = null, currentPhoto = null;
 let _alunoTreinoAtual = null;
@@ -1827,41 +1852,7 @@ let excecoes = {};
 let editingAgId = null, agSlotDay = null, agSlotHour = 6, filterHojeAtivo = false;
 let calView = 'semana', currentDay = new Date(), currentWeekStart = getMonday(new Date());
 
-function getStoredAuth() {
-  try {
-    var raw = localStorage.getItem(AUTH_STORAGE_KEY);
-    if (!raw) return null;
-    var parsed = JSON.parse(raw);
-    if (!parsed || !parsed.user || !parsed.passHash) return null;
-    return parsed;
-  } catch (e) {
-    return null;
-  }
-}
-
-async function hashCredential(value) {
-  var normalized = cleanText(value, 200);
-  if (!normalized || !window.crypto || !window.crypto.subtle || !window.TextEncoder) return normalized;
-  var data = new TextEncoder().encode(normalized);
-  var hash = await window.crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hash)).map(function(b) {
-    return b.toString(16).padStart(2, '0');
-  }).join('');
-}
-
-function updateLoginHelp() {
-  var help = document.getElementById('login-help');
-  if (!help) return;
-  help.textContent = getStoredAuth()
-    ? 'Use as credenciais locais deste dispositivo para acessar o app.'
-    : 'No primeiro acesso neste dispositivo, o usuario e a senha informados serao salvos como credenciais locais.';
-}
-
-async function verifyPasswordInput(pass) {
-  var auth = getStoredAuth();
-  if (!auth) return false;
-  return (await hashCredential(pass || '')) === auth.passHash;
-}
+function verifyPasswordInput() { return Promise.resolve(!!currentUser); }
 
 
 var PLANOS_DEFAULT = [
@@ -2163,77 +2154,59 @@ function importarDados() {
   i.click();
 }
 
+var _AUTH_MSGS = {
+  'auth/user-not-found':'Email não cadastrado.',
+  'auth/wrong-password':'Senha incorreta.',
+  'auth/invalid-credential':'Email ou senha incorretos.',
+  'auth/invalid-email':'Email inválido.',
+  'auth/email-already-in-use':'Este email já está cadastrado.',
+  'auth/weak-password':'A senha deve ter ao menos 6 caracteres.',
+  'auth/too-many-requests':'Muitas tentativas. Aguarde e tente novamente.',
+  'auth/network-request-failed':'Sem conexão. Verifique sua internet.'
+};
+function _loginErr(msg){ var e=document.getElementById('lin-err'); if(e){e.textContent=msg;e.style.display='block';} }
+function _loginErrClear(){ var e=document.getElementById('lin-err'); if(e){e.textContent='';e.style.display='none';} }
+
 async function doLogin() {
-  var errEl = document.getElementById('lin-err');
+  _loginErrClear();
+  var email=(document.getElementById('lin-email').value||'').trim();
+  var pass=document.getElementById('lin-p').value||'';
+  if(!email||!pass){ _loginErr('Informe email e senha.'); return; }
   try {
-    var u=cleanText(document.getElementById('lin-u').value, 80);
-    var p=document.getElementById('lin-p').value||'';
-    if(errEl) errEl.style.display='none';
-    if(!u || !p){
-      if(errEl){ errEl.textContent='Informe usuario e senha.'; errEl.style.display='block'; }
-      return;
-    }
-    var auth = getStoredAuth();
-    if(!auth){
-      if(p.length < 6){
-        if(errEl){ errEl.textContent='Defina uma senha com pelo menos 6 caracteres.'; errEl.style.display='block'; }
-        return;
-      }
-      try {
-        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({
-          user: u,
-          passHash: await hashCredential(p),
-          createdAt: new Date().toISOString()
-        }));
-        updateLoginHelp();
-      } catch (e) {
-        if(errEl){ errEl.textContent='Nao foi possivel salvar as credenciais locais.'; errEl.style.display='block'; }
-        return;
-      }
-      auth = getStoredAuth();
-    }
-    if(auth && u===auth.user && await hashCredential(p)===auth.passHash){
-      try{localStorage.setItem('gp-sess',JSON.stringify({exp:new Date(Date.now()+7*86400000).toISOString(), user:u}));}catch(e){}
-      document.getElementById('login-screen').style.display='none';
-      document.getElementById('app').style.display='flex';
-      setTimeout(function(){try{initApp();}catch(e){ console.error('initApp err',e); }},50);
-    } else if(errEl) {
-      errEl.textContent='Usuario ou senha incorretos. Use "Redefinir acesso" se esqueceu as credenciais.';
-      errEl.style.display='block';
-    }
+    await auth.signInWithEmailAndPassword(email, pass);
+    // onAuthStateChanged handles the rest
   } catch(e) {
-    if(errEl){ errEl.textContent='Erro: '+(e&&e.message?e.message:String(e)); errEl.style.display='block'; }
+    _loginErr(_AUTH_MSGS[e.code]||e.message);
   }
 }
+
+async function doRegister() {
+  _loginErrClear();
+  var email=(document.getElementById('lin-email').value||'').trim();
+  var pass=document.getElementById('lin-p').value||'';
+  if(!email||!pass){ _loginErr('Informe email e senha.'); return; }
+  if(pass.length<6){ _loginErr('A senha deve ter ao menos 6 caracteres.'); return; }
+  try {
+    var cred = await auth.createUserWithEmailAndPassword(email, pass);
+    await firebase.database().ref('users/'+cred.user.uid+'/profile').set({
+      email:email, tipo:'personal', createdAt:new Date().toISOString()
+    });
+    // onAuthStateChanged handles the rest
+  } catch(e) {
+    _loginErr(_AUTH_MSGS[e.code]||e.message);
+  }
+}
+
+function forgotPassword() {
+  var email=(document.getElementById('lin-email').value||'').trim();
+  if(!email){ _loginErr('Informe seu email para recuperar a senha.'); return; }
+  auth.sendPasswordResetEmail(email)
+    .then(function(){ _loginErrClear(); alert('Email de recuperação enviado para '+email); })
+    .catch(function(e){ _loginErr(_AUTH_MSGS[e.code]||e.message); });
+}
+
 function doLogout() {
-  try{localStorage.removeItem('gp-sess');}catch(e){}
-  document.getElementById('app').style.display='none';
-  document.getElementById('login-screen').style.display='flex';
-  document.getElementById('lin-u').value='';
-  document.getElementById('lin-p').value='';
-  updateLoginHelp();
-}
-function resetAccess() {
-  if(!confirm('Isso vai apagar as credenciais salvas neste dispositivo. Voce precisara criar um novo usuario e senha. Continuar?')) return;
-  try{localStorage.removeItem(AUTH_STORAGE_KEY);}catch(e){}
-  try{localStorage.removeItem('gp-sess');}catch(e){}
-  document.getElementById('lin-u').value='';
-  document.getElementById('lin-p').value='';
-  var errEl=document.getElementById('lin-err');
-  if(errEl){errEl.style.display='none';}
-  updateLoginHelp();
-  var help=document.getElementById('login-help');
-  if(help){help.textContent='Credenciais redefinidas. Informe um novo usuario e senha para criar o acesso.';}
-}
-function tryAutoLogin() {
-  try{
-    var s=localStorage.getItem('gp-sess');
-    if(s){var d=JSON.parse(s);if(new Date(d.exp)>new Date()){
-      document.getElementById('login-screen').style.display='none';
-      document.getElementById('app').style.display='flex';
-      setTimeout(function(){try{initApp();}catch(e){}},50); return;
-    }}
-  }catch(e){}
+  auth.signOut();
 }
 
 function computeStatus(s) {
@@ -3743,10 +3716,25 @@ function initApp(){
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-  try { updateLoginHelp(); } catch(e) {}
   try { repairDocumentEncoding(); } catch(e) {}
   try { initTheme(); } catch(e) {}
-  try { tryAutoLogin(); } catch(e) { console.error('tryAutoLogin err',e); }
+
+  // Firebase Auth state — single source of truth for login/logout
+  auth.onAuthStateChanged(function(user) {
+    if(user) {
+      currentUser = user;
+      _initUserRefs(user.uid);
+      _migrateIfNeeded(user.uid);
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app').style.display = 'flex';
+      setTimeout(function(){ try{initApp();}catch(e){ console.error('initApp err',e); } }, 50);
+    } else {
+      currentUser = null;
+      document.getElementById('login-screen').style.display = 'flex';
+      document.getElementById('app').style.display = 'none';
+    }
+  });
+
   try {
     var linP = document.getElementById('lin-p');
     if(linP) linP.addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
