@@ -402,6 +402,9 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
     <div class="login-err" id="lin-err">Usu&aacute;rio ou senha incorretos.</div>
     <div id="login-help" style="font-size:0.78rem;color:var(--white-dim);margin-bottom:14px;line-height:1.5;">No primeiro acesso neste dispositivo, o usu&aacute;rio e a senha informados ser&atilde;o salvos como credenciais locais.</div>
     <button class="btn btn-primary" style="width:100%;height:48px;" onclick="doLogin()">Entrar</button>
+    <div style="text-align:center;margin-top:14px;">
+      <a href="#" id="reset-access-link" style="font-size:0.76rem;color:var(--white-dim);text-decoration:underline;" onclick="resetAccess();return false;">Redefinir acesso</a>
+    </div>
   </div>
 </div>
 
@@ -2162,40 +2165,44 @@ function importarDados() {
 
 async function doLogin() {
   var errEl = document.getElementById('lin-err');
-  var u=cleanText(document.getElementById('lin-u').value, 80);
-  var p=document.getElementById('lin-p').value||'';
-  if(errEl) errEl.style.display='none';
-  if(!u || !p){
-    if(errEl){ errEl.textContent='Informe usuario e senha.'; errEl.style.display='block'; }
-    return;
-  }
-  var auth = getStoredAuth();
-  if(!auth){
-    if(p.length < 6){
-      if(errEl){ errEl.textContent='Defina uma senha com pelo menos 6 caracteres.'; errEl.style.display='block'; }
+  try {
+    var u=cleanText(document.getElementById('lin-u').value, 80);
+    var p=document.getElementById('lin-p').value||'';
+    if(errEl) errEl.style.display='none';
+    if(!u || !p){
+      if(errEl){ errEl.textContent='Informe usuario e senha.'; errEl.style.display='block'; }
       return;
     }
-    try {
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({
-        user: u,
-        passHash: await hashCredential(p),
-        createdAt: new Date().toISOString()
-      }));
-      updateLoginHelp();
-    } catch (e) {
-      if(errEl){ errEl.textContent='Nao foi possivel salvar as credenciais locais.'; errEl.style.display='block'; }
-      return;
+    var auth = getStoredAuth();
+    if(!auth){
+      if(p.length < 6){
+        if(errEl){ errEl.textContent='Defina uma senha com pelo menos 6 caracteres.'; errEl.style.display='block'; }
+        return;
+      }
+      try {
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({
+          user: u,
+          passHash: await hashCredential(p),
+          createdAt: new Date().toISOString()
+        }));
+        updateLoginHelp();
+      } catch (e) {
+        if(errEl){ errEl.textContent='Nao foi possivel salvar as credenciais locais.'; errEl.style.display='block'; }
+        return;
+      }
+      auth = getStoredAuth();
     }
-    auth = getStoredAuth();
-  }
-  if(auth && u===auth.user && await hashCredential(p)===auth.passHash){
-    try{localStorage.setItem('gp-sess',JSON.stringify({exp:new Date(Date.now()+7*86400000).toISOString(), user:u}));}catch(e){}
-    document.getElementById('login-screen').style.display='none';
-    document.getElementById('app').style.display='flex';
-    setTimeout(function(){try{initApp();}catch(e){}},50);
-  } else if(errEl) {
-    errEl.textContent='Usuario ou senha incorretos.';
-    errEl.style.display='block';
+    if(auth && u===auth.user && await hashCredential(p)===auth.passHash){
+      try{localStorage.setItem('gp-sess',JSON.stringify({exp:new Date(Date.now()+7*86400000).toISOString(), user:u}));}catch(e){}
+      document.getElementById('login-screen').style.display='none';
+      document.getElementById('app').style.display='flex';
+      setTimeout(function(){try{initApp();}catch(e){ console.error('initApp err',e); }},50);
+    } else if(errEl) {
+      errEl.textContent='Usuario ou senha incorretos. Use "Redefinir acesso" se esqueceu as credenciais.';
+      errEl.style.display='block';
+    }
+  } catch(e) {
+    if(errEl){ errEl.textContent='Erro: '+(e&&e.message?e.message:String(e)); errEl.style.display='block'; }
   }
 }
 function doLogout() {
@@ -2205,6 +2212,18 @@ function doLogout() {
   document.getElementById('lin-u').value='';
   document.getElementById('lin-p').value='';
   updateLoginHelp();
+}
+function resetAccess() {
+  if(!confirm('Isso vai apagar as credenciais salvas neste dispositivo. Voce precisara criar um novo usuario e senha. Continuar?')) return;
+  try{localStorage.removeItem(AUTH_STORAGE_KEY);}catch(e){}
+  try{localStorage.removeItem('gp-sess');}catch(e){}
+  document.getElementById('lin-u').value='';
+  document.getElementById('lin-p').value='';
+  var errEl=document.getElementById('lin-err');
+  if(errEl){errEl.style.display='none';}
+  updateLoginHelp();
+  var help=document.getElementById('login-help');
+  if(help){help.textContent='Credenciais redefinidas. Informe um novo usuario e senha para criar o acesso.';}
 }
 function tryAutoLogin() {
   try{
