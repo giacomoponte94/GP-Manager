@@ -5689,7 +5689,7 @@ function renderDashboard() {
   if(anivEl){
     var diasNomes=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
     var anivProx=[];
-    for(var di=0; di<=5; di++){
+    for(var di=0; di<=7; di++){
       var d2=new Date(now); d2.setDate(now.getDate()+di); d2.setHours(12,0,0,0);
       var dm=d2.getMonth()+1, dd=d2.getDate();
       _visible(students).forEach(function(s){
@@ -5698,31 +5698,49 @@ function renderDashboard() {
         if(parseInt(p[1])===dm && parseInt(p[2])===dd) anivProx.push({s:s,dias:di,date:d2});
       });
     }
-    anivEl.innerHTML='';
-    if(anivProx.length){
-      var atitle=document.createElement('div');
-      atitle.className='dash-section-title';
-      atitle.style.color='var(--warning)';
-      atitle.innerHTML='✨ Aniversários ('+anivProx.length+')';
-      anivEl.appendChild(atitle);
-      anivProx.forEach(function(item){
-        var s=item.s, di=item.dias;
-        var isHoje=di===0;
-        var idade=getIdade(s.nascimento);
-        var dLabel=isHoje?'Hoje!':(di===1?'Amanhã':diasNomes[item.date.getDay()]+', daqui '+di+' dias');
-        var row=document.createElement('div');
-        row.className='dash-row';
-        row.style.cssText='background:var(--card);cursor:pointer;margin-bottom:4px;'+(isHoje?'border-left:3px solid var(--warning);':'');
-        row.innerHTML='<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">'
-          +'<div class="dash-avatar" style="background:rgba(243,156,18,0.12);">'+_initials(s.nome)+'</div>'
-          +'<div style="min-width:0;"><div class="dash-row-name">'+(isHoje?'🎁 ':'')+s.nome+'</div>'
-          +'<div class="dash-row-sub" style="color:'+(isHoje?'var(--warning)':'var(--white-dim)')+';">'
-          +dLabel+' · '+idade+(isHoje?'+1':'')+' anos</div></div></div>'
-          +(isHoje?'<span class="badge badge-warn">Hoje!</span>':'<span style="font-size:1.1rem;">🎂</span>');
-        row.onclick=(function(sid){ return function(){ openDetail(sid); }; })(s.id);
-        anivEl.appendChild(row);
-      });
+    var hoje   = anivProx.filter(function(x){ return x.dias===0; });
+    var proxim = anivProx.filter(function(x){ return x.dias>0; });
+
+    var out='';
+    out+='<div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:8px;border-bottom:1px solid var(--border);margin-bottom:12px;">'
+      +'<div class="dash-section-title" style="margin-bottom:0;">🎂 Próximos aniversários</div>'
+      +(anivProx.length?'<span style="font-size:0.72rem;color:var(--white-dim);">'+anivProx.length+' nos próximos 7 dias</span>':'')
+      +'</div>';
+
+    if(!anivProx.length){
+      out+='<div style="font-size:0.82rem;color:var(--white-dim);padding:4px 0;">Nenhum aniversário nos próximos 7 dias.</div>';
+    } else {
+      if(hoje.length){
+        out+='<div style="font-size:0.68rem;font-weight:600;color:var(--warning);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;">Hoje</div>';
+        hoje.forEach(function(item){
+          var s=item.s;
+          var idade=getIdade(s.nascimento);
+          out+='<div class="dash-row" style="background:rgba(243,156,18,0.08);border-left:3px solid var(--warning);cursor:pointer;margin-bottom:6px;" onclick="openDetail(\''+s.id+'\')">'
+            +'<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">'
+            +'<div class="dash-avatar" style="background:rgba(243,156,18,0.18);font-size:1rem;">🎁</div>'
+            +'<div style="min-width:0;"><div class="dash-row-name">'+s.nome+'</div>'
+            +'<div class="dash-row-sub" style="color:var(--warning);">Faz '+idade+' anos hoje!</div></div></div>'
+            +'<span class="badge badge-warn">Hoje!</span>'
+            +'</div>';
+        });
+      }
+      if(proxim.length){
+        if(hoje.length) out+='<div style="font-size:0.68rem;font-weight:600;color:var(--white-dim);text-transform:uppercase;letter-spacing:0.1em;margin:10px 0 6px;">Próximos</div>';
+        proxim.forEach(function(item){
+          var s=item.s, di=item.dias;
+          var idade=getIdade(s.nascimento);
+          var dLabel=di===1?'Amanhã':diasNomes[item.date.getDay()]+' · daqui '+di+' dias';
+          out+='<div class="dash-row" style="background:var(--card);cursor:pointer;margin-bottom:6px;" onclick="openDetail(\''+s.id+'\')">'
+            +'<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">'
+            +'<div class="dash-avatar" style="background:rgba(74,127,165,0.1);">'+_initials(s.nome)+'</div>'
+            +'<div style="min-width:0;"><div class="dash-row-name">'+s.nome+'</div>'
+            +'<div class="dash-row-sub">'+dLabel+' · '+idade+' anos</div></div></div>'
+            +'<span style="font-size:1.1rem;">🎂</span>'
+            +'</div>';
+        });
+      }
     }
+    anivEl.innerHTML=out;
   }
 }
 
