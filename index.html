@@ -2293,7 +2293,7 @@ function showTab(tab){
       if(tab==='dashboard'){renderDashboard();}
       else if(tab==='alunos'){renderTable();renderStats();renderNotifs();renderLockIn();renderPaineis();renderAutomacao();}
       else if(tab==='treino'){renderTabTreino();}
-      else if(tab==='agenda'){renderCalendar();setTimeout(function(){navScrollToCurrentHour();},80);}
+      else if(tab==='agenda'){renderCalendar();}
       else if(tab==='financeiro'){renderFinanceiro();renderSimulacao();renderComparativo();renderHistoricoVisual();}
     }catch(e){}
   },20);
