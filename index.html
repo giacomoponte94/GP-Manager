@@ -1610,7 +1610,7 @@ function addReposicao(sid, motivo) {
   reposicoes[sid] = (reposicoes[sid]||0) + 1;
   saveReposicoes();
   if(!repHistorico[sid]) repHistorico[sid] = [];
-  repHistorico[sid].push({tipo:'add', date:new Date().toISOString().split('T')[0], motivo: motivo||'manual', ts: new Date().toISOString()});
+  repHistorico[sid].push({tipo:'add', date:todayStr(), motivo: motivo||'manual', ts: new Date().toISOString()});
   saveRepHistorico();
   return true;
 }
@@ -1619,7 +1619,7 @@ function useReposicao(sid, motivo) {
     reposicoes[sid]--;
     saveReposicoes();
     if(!repHistorico[sid]) repHistorico[sid] = [];
-    repHistorico[sid].push({tipo:'use', date:new Date().toISOString().split('T')[0], motivo: motivo||'agendado', ts: new Date().toISOString()});
+    repHistorico[sid].push({tipo:'use', date:todayStr(), motivo: motivo||'agendado', ts: new Date().toISOString()});
     saveRepHistorico();
     return true;
   }
@@ -1957,7 +1957,7 @@ const FERIADOS_FIXOS = {
 function fmt(v)  { return 'R$\u00A0' + Math.round(v).toLocaleString('pt-BR'); }
 function fmtDate(s){ return s ? new Date(s+'T12:00:00').toLocaleDateString('pt-BR') : '\u2014'; }
 function getMonday(d) { var c=new Date(d); c.setHours(0,0,0,0); var day=c.getDay(); c.setDate(c.getDate()-day); return c; }
-function todayStr() { return new Date().toISOString().split('T')[0]; }
+function todayStr() { var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function presKey(id,ds){ return id+'_'+ds; }
 function _presStatus(entry){
   if(!entry) return null;
@@ -2574,7 +2574,7 @@ function renderNotifs(){
   var aus=_vs.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;});
   if(aus.length) notifs.push({p:1,icon:'!',msg:'<strong>'+aus.length+' aluno'+(aus.length>1?'s':'')+' faltando aulas agendadas</strong>',tipo:'warn',cta:null});
   var dow=new Date().getDay();
-  var ds2=new Date().toISOString().split('T')[0];
+  var ds2=todayStr();
   if(!isHoliday(new Date())){
     var th=Array.from(new Set(getAgendasParaData(ds2).filter(function(a){return _vs.some(function(s){return s.id===a.alunoId;});}).map(function(a){return a.alunoId;})));
     if(th.length) notifs.push({p:2,icon:'',msg:'<strong>'+th.length+' aluno'+(th.length>1?'s':'')+' agendado'+(th.length>1?'s':'')+' hoje</strong>',tipo:'info',cta:{lbl:'Ver lista',fn:'verListaHoje()'}});
