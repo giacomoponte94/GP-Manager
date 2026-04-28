@@ -588,11 +588,16 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
         <div><label class="form-label">Objetivo</label><input type="text" id="f-obj" placeholder="Ex: Hipertrofia, Emagrecimento..." class="form-inp"></div>
         <div><label class="form-label">Plano</label><select id="f-plano" onchange="onStudentPlanoChange()" class="form-sel"><option value="">&mdash;</option></select></div>
         <div id="f-categ-row"><label class="form-label">Categoria</label><select id="f-categ" onchange="onStudentPlanoChange()" class="form-sel"><option value="fixa">Agenda Fixa</option><option value="flexivel">Flex&iacute;vel</option></select></div>
+        <div id="f-preco-avulsa-row" style="display:none;"><label class="form-label">Valor da aula (R$)</label><input type="number" id="f-preco-avulsa" min="0" step="1" placeholder="Ex: 95" class="form-inp" oninput="calcValorAvulsa()"></div>
         <div id="f-qtd-row" style="display:none;"><label class="form-label">Qtd. de aulas</label><input type="number" id="f-qtd" min="1" placeholder="Ex: 10" class="form-inp" oninput="calcValorAvulsa()"></div>
         <div><label class="form-label">Modalidade</label><select id="f-modal" onchange="autoFillValor()" class="form-sel"><option value="">&mdash;</option><option value="Individual">Individual</option><option value="Duo">Duo</option></select></div>
         <div><label class="form-label">In&iacute;cio</label><input type="date" id="f-inicio" onchange="autoFillValor()" class="form-inp"></div>
         <div><label class="form-label">Vencimento</label><input type="date" id="f-venc" class="form-inp"></div>
-        <div><label class="form-label">Valor (R$)</label><input type="number" id="f-valor" class="form-inp"></div>
+        <div>
+          <label class="form-label" id="f-valor-label">Valor (R$)</label>
+          <input type="number" id="f-valor" class="form-inp">
+          <div id="f-valor-avulsa-info" style="display:none;font-size:0.72rem;color:var(--accent-l);margin-top:4px;"></div>
+        </div>
       </div>
       <div id="f-agenda-wrap" style="display:none;margin-top:20px;padding-top:20px;border-top:1px solid var(--border);">
         <div class="form-label" style="margin-bottom:6px;">Dias e Hor&aacute;rios</div>
@@ -1372,6 +1377,10 @@ function openCadastro(mode, id) {
     if(s.foto){var pp2=document.getElementById('f-photo-prev');if(pp2)pp2.innerHTML='<img src="'+s.foto+'" style="width:100%;height:100%;object-fit:cover;">';}
     if(document.getElementById('f-categ')) document.getElementById('f-categ').value = s.categoria || 'fixa';
     if(document.getElementById('f-qtd')) document.getElementById('f-qtd').value = s.qtdAulas || '';
+    if(document.getElementById('f-preco-avulsa')){
+      var _pa=s.precoAvulsa||(getPlano(s.plano)&&getPlano(s.plano).precoInd)||'';
+      document.getElementById('f-preco-avulsa').value=_pa;
+    }
     try{ onStudentPlanoChange(); }catch(e){}
     var sAgs=agendas.filter(function(a){return a.alunoId===id;});
     if(sAgs.length){
@@ -1527,6 +1536,9 @@ function normalizeStudentRecord(raw) {
     foto: safeImageSrc(raw.foto),
     categoria: cleanText(raw.categoria, 20) || 'fixa',
     qtdAulas: raw.qtdAulas == null ? null : (parseInt(raw.qtdAulas, 10) || null),
+    precoAvulsa: raw.precoAvulsa == null ? null : (parseFloat(raw.precoAvulsa) || null),
+    valorUnitario: raw.valorUnitario == null ? null : (parseFloat(raw.valorUnitario) || null),
+    valorTotal: raw.valorTotal == null ? null : (parseFloat(raw.valorTotal) || null),
     criadoEm: raw.criadoEm || new Date().toISOString(),
     deleted: isDeleted,
     updatedAt: raw.updatedAt || null,
@@ -1905,6 +1917,21 @@ function getPlanNome(id) {
   var p = getPlano(id); return p ? p.nome : (id || '');
 }
 
+function getPlanoValorTotal(s) {
+  if (!s) return 0;
+  // Novo formato: valorTotal explícito tem prioridade
+  if (typeof s.valorTotal === 'number') return s.valorTotal;
+  // Novo formato: valorUnitario × qtdAulas
+  if (typeof s.valorUnitario === 'number' && s.qtdAulas) return s.valorUnitario * s.qtdAulas;
+  // Compatibilidade: precoAvulsa × qtdAulas (campo anterior)
+  if (s.precoAvulsa && s.qtdAulas) return parseFloat(s.precoAvulsa) * s.qtdAulas;
+  // Fallback legado: valor × qtdAulas (quando valor era preço unitário)
+  var _ps = getPlano(s.plano);
+  if (_ps && _ps.tipo === 'pacote' && s.qtdAulas && s.valor) return (parseFloat(s.valor) || 0) * s.qtdAulas;
+  // Fallback final
+  return parseFloat(s.valor) || 0;
+}
+
 var PLAN_PRICES = {};
 var PLAN_DAYS   = {};
 var PLAN_NAMES  = [];
@@ -2211,6 +2238,9 @@ function doLogout() {
 
 function computeStatus(s) {
   if(s.statusManual==='atrasado') return 'atrasado';
+  // Pacote/avulsa: pagamento pontual, sem renovação mensal — sempre "em dia"
+  var _ps=getPlano(s.plano);
+  if(_ps&&_ps.tipo==='pacote') return 'em dia';
   if(!s.vencimento) return 'em dia';
   var hoje=new Date(); hoje.setHours(0,0,0,0);
   var venc=new Date(s.vencimento+'T12:00:00');
@@ -2304,7 +2334,8 @@ function renderTable(){
     var hoje3=new Date(); var bdtag=np&&parseInt(np[1])===(hoje3.getMonth()+1)&&parseInt(np[2])===hoje3.getDate()?'<span style="margin-left:4px;"></span>':'';
     var ab=getAbsenceBadge(s.id);
     var modTag=s.modalidade==='Duo'?'<span class="badge badge-duo" style="font-size:0.6rem;padding:1px 5px;">Duo</span>':'';
-    var subParts=[getPlanNome(s.plano)||'',s.modalidade||'',s.valor?'R$ '+Math.round(parseFloat(s.valor)).toLocaleString('pt-BR'):'',s.vencimento?'Vence '+fmtDate(s.vencimento):''];
+    var _vSrch=getPlanoValorTotal(s);
+    var subParts=[getPlanNome(s.plano)||'',s.modalidade||'',_vSrch>0?'R$ '+Math.round(_vSrch).toLocaleString('pt-BR'):'',s.vencimento?'Vence '+fmtDate(s.vencimento):''];
     var sub=subParts.filter(Boolean).join(' · ');
     sub=escapeHtml(fixMojibake(sub));
     var sid=escapeHtml(s.id);
@@ -2474,7 +2505,7 @@ function renderPaineis(){
       var dataFmt=new Date(s.vencimento+'T12:00:00').toLocaleDateString('pt-BR');
       var msgVenc;
       if(d===0){
-        msgVenc='Oi, '+s.nome.split(' ')[0]+'! Hoje é o dia!\n\nSeu plano *'+getPlanNome(s.plano)+'* vence hoje, *'+dataFmt+'*. Que tal já aproveitar e renovar agora para continuar treinando sem nenhuma pausa?\n\n*Valor:* R$ '+(parseFloat(s.valor)||0).toLocaleString('pt-BR',{minimumFractionDigits:2})+(chavePix?'\n*Chave Pix:* '+chavePix:'')+'\n\nMe manda o comprovante assim que fizer e tá confirmado!';
+        msgVenc='Oi, '+s.nome.split(' ')[0]+'! Hoje é o dia!\n\nSeu plano *'+getPlanNome(s.plano)+'* vence hoje, *'+dataFmt+'*. Que tal já aproveitar e renovar agora para continuar treinando sem nenhuma pausa?\n\n*Valor:* R$ '+getPlanoValorTotal(s).toLocaleString('pt-BR',{minimumFractionDigits:2})+(chavePix?'\n*Chave Pix:* '+chavePix:'')+'\n\nMe manda o comprovante assim que fizer e tá confirmado!';
       } else {
         var diasTexto=d===1?'*amanhã*':'em *'+d+' dias*';
         msgVenc='Oi, '+s.nome.split(' ')[0]+'! 👋\n\nPassando aqui para te avisar que seu plano *'+getPlanNome(s.plano)+'* vence '+diasTexto+', no dia *'+dataFmt+'*.\n\nJá vamos adiantando a renovação? Garanta seu horário e continue sem interrupção nos treinos.\n\nMe confirma e te mando tudo certinho!';
@@ -2493,7 +2524,7 @@ function renderPaineis(){
   }
 
   if(ausentes.length){
-    var recRisco=ausentes.reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
+    var recRisco=ausentes.reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
     out+='<div style="margin-bottom:18px;">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'
       +pnlTitle('Em risco de evasao ('+ausentes.length+')')
@@ -2537,7 +2568,7 @@ function renderNotifs(){
   if(ah.length) notifs.push({p:0,icon:'',msg:'Aniversario: <strong>'+ah.map(function(s){return s.nome.split(' ')[0];}).join(', ')+'</strong>',tipo:'info',cta:null});
   var inad=_vs.filter(function(s){return s.status==='atrasado';});
   if(inad.length){
-    var vr=inad.reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
+    var vr=inad.reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
     notifs.push({p:0,icon:'',msg:'<strong>'+fmt(vr)+'</strong> em atraso \u2014 '+inad.length+' aluno'+(inad.length>1?'s':''),tipo:'danger',cta:{lbl:'Cobrar',fn:'cobrarInadimplentes()'}});
   }
   var aus=_vs.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;});
@@ -2566,7 +2597,7 @@ function cobrarInadimplentes(){
     var ph=waPhone(s); if(!ph)return;
     var diasAtraso=s.vencimento?Math.abs(Math.ceil((new Date(s.vencimento+'T12:00:00')-new Date())/86400000)):3;
     var dataVenc=s.vencimento?new Date(s.vencimento+'T12:00:00').toLocaleDateString('pt-BR'):'';
-    var msgInad='Oi, '+s.nome.split(' ')[0]+', tudo bem?\n\nNotei que seu plano *'+getPlanNome(s.plano)+'* venceu há '+diasAtraso+' dia'+(diasAtraso!==1?'s':'')+(dataVenc?', em *'+dataVenc+'*':'')+', e ainda não identifiquei o pagamento por aqui.\n\nSei que o dia a dia é corrido, mas não quero que você perca seus horários nem o ritmo dos treinos que você vem mantendo. Vamos resolver isso hoje ainda? 😊\n\n*Valor:* R$ '+(parseFloat(s.valor)||0).toLocaleString('pt-BR',{minimumFractionDigits:2})+(chavePix?'\n*Chave Pix:* '+chavePix:'')+'\n\nQualquer dificuldade, me chama que a gente conversa. 🤝';
+    var msgInad='Oi, '+s.nome.split(' ')[0]+', tudo bem?\n\nNotei que seu plano *'+getPlanNome(s.plano)+'* venceu há '+diasAtraso+' dia'+(diasAtraso!==1?'s':'')+(dataVenc?', em *'+dataVenc+'*':'')+', e ainda não identifiquei o pagamento por aqui.\n\nSei que o dia a dia é corrido, mas não quero que você perca seus horários nem o ritmo dos treinos que você vem mantendo. Vamos resolver isso hoje ainda? 😊\n\n*Valor:* R$ '+getPlanoValorTotal(s).toLocaleString('pt-BR',{minimumFractionDigits:2})+(chavePix?'\n*Chave Pix:* '+chavePix:'')+'\n\nQualquer dificuldade, me chama que a gente conversa. 🤝';
     window.open('https://wa.me/'+ph+'?text='+encodeURIComponent(msgInad),'_blank');
     if(!historicoCob[s.id])historicoCob[s.id]=[];
     historicoCob[s.id].push({data:new Date().toISOString(),tipo:'manual'});
@@ -2699,6 +2730,22 @@ function saveStudent(){
     var modalKey=modal||'Individual';
     valor=PLAN_PRICES[plano][modalKey]||PLAN_PRICES[plano]['Individual']||'';
   }
+  var _planoS=getPlano(plano);
+  var _saveValorUnitario=null, _saveValorTotal=null;
+  if(_planoS&&_planoS.tipo==='pacote'){
+    var _qtd=parseInt(document.getElementById('f-qtd')&&document.getElementById('f-qtd').value)||0;
+    var _precoEl=document.getElementById('f-preco-avulsa');
+    var _preco=parseFloat(_precoEl&&_precoEl.value)||_planoS.precoInd||0;
+    if(_qtd>0&&_preco>0){
+      _saveValorUnitario=_preco;
+      _saveValorTotal=_qtd*_preco;
+      valor=String(_saveValorTotal);
+    }
+  } else {
+    // Para planos fixos, valorTotal = valor mensal
+    var _vNum=parseFloat(valor)||0;
+    if(_vNum>0) _saveValorTotal=_vNum;
+  }
   var venc=document.getElementById('f-venc').value||(function(){
     if(!inicio)return '';
     var d=new Date(inicio+'T12:00:00'); d.setMonth(d.getMonth()+1);
@@ -2716,6 +2763,9 @@ function saveStudent(){
     status:document.getElementById('f-status').value,foto:currentPhoto||null,
     categoria:(document.getElementById('f-categ')&&document.getElementById('f-categ').value)||'fixa',
     qtdAulas:parseInt(document.getElementById('f-qtd')&&document.getElementById('f-qtd').value)||null,
+    precoAvulsa:parseFloat(document.getElementById('f-preco-avulsa')&&document.getElementById('f-preco-avulsa').value)||null,
+    valorUnitario:_saveValorUnitario,
+    valorTotal:_saveValorTotal,
     criadoEm:editingId?(students.find(function(x){return x.id===editingId&&!x.deleted;})||{}).criadoEm:new Date().toISOString()
   });
   var days=Array.from(document.querySelectorAll('#f-days-picker .day-btn.selected')).map(function(b){return parseInt(b.dataset.day);});
@@ -2794,7 +2844,9 @@ function handlePhoto(e){
 function autoFillValor(){
   var p=document.getElementById('f-plano').value,m=document.getElementById('f-modal').value;
   var vEl=document.getElementById('f-valor');
-  if(p&&m&&PLAN_PRICES[p]&&PLAN_PRICES[p][m])vEl.value=PLAN_PRICES[p][m];
+  var planoS=getPlano(p);
+  var isPacote=planoS&&planoS.tipo==='pacote';
+  if(!isPacote&&p&&m&&PLAN_PRICES[p]&&PLAN_PRICES[p][m])vEl.value=PLAN_PRICES[p][m];
   showAgendaSection();
   if(p&&document.getElementById('f-inicio').value){
     var d=new Date(document.getElementById('f-inicio').value+'T12:00:00');d.setMonth(d.getMonth()+1);
@@ -2808,9 +2860,20 @@ function onStudentPlanoChange(){
   var isAvulsa = planoS && planoS.tipo === 'pacote';
   var categRow = document.getElementById('f-categ-row');
   var qtdRow = document.getElementById('f-qtd-row');
+  var precoRow = document.getElementById('f-preco-avulsa-row');
+  var valorLabel = document.getElementById('f-valor-label');
+  var valorInfo = document.getElementById('f-valor-avulsa-info');
   if(categRow) categRow.style.display = isAvulsa ? 'none' : '';
   if(qtdRow) qtdRow.style.display = isAvulsa ? '' : 'none';
+  if(precoRow) precoRow.style.display = isAvulsa ? '' : 'none';
+  if(valorLabel) valorLabel.textContent = isAvulsa ? 'Valor total (R$)' : 'Valor (R$)';
+  if(!isAvulsa && valorInfo) valorInfo.style.display = 'none';
+  if(isAvulsa){
+    var precoEl = document.getElementById('f-preco-avulsa');
+    if(precoEl && !precoEl.value && planoS.precoInd) precoEl.value = planoS.precoInd;
+  }
   autoFillValor();
+  if(isAvulsa) calcValorAvulsa();
   showAgendaSection();
 }
 function calcValorAvulsa(){
@@ -2818,8 +2881,20 @@ function calcValorAvulsa(){
   var planoS = getPlano(pId);
   if(!planoS || planoS.tipo !== 'pacote') return;
   var qtd = parseInt(document.getElementById('f-qtd').value) || 0;
-  var preco = planoS.precoInd || 0;
-  if(qtd > 0 && preco > 0) document.getElementById('f-valor').value = qtd * preco;
+  var precoEl = document.getElementById('f-preco-avulsa');
+  var preco = parseFloat(precoEl && precoEl.value) || planoS.precoInd || 0;
+  var total = qtd > 0 && preco > 0 ? qtd * preco : 0;
+  var valorEl = document.getElementById('f-valor');
+  var infoEl = document.getElementById('f-valor-avulsa-info');
+  if(total > 0){
+    if(valorEl) valorEl.value = total;
+    if(infoEl){
+      infoEl.textContent = qtd + ' aula'+(qtd!==1?'s':'')+' × R$ '+preco.toLocaleString('pt-BR')+' = R$ '+total.toLocaleString('pt-BR');
+      infoEl.style.display = 'block';
+    }
+  } else {
+    if(infoEl) infoEl.style.display = 'none';
+  }
 }
 
 function openDetail(id){
@@ -2873,10 +2948,10 @@ function openDetail(id){
     var dataFmtC=s.vencimento?new Date(s.vencimento+'T12:00:00').toLocaleDateString('pt-BR'):'';
     var msgCStr;
     if(diasRestC!==null&&diasRestC===0){
-      msgCStr='Oi, '+nome1+'! Hoje é o dia! 📅\n\nSeu plano *'+getPlanNome(s.plano)+'* vence hoje, *'+dataFmtC+'*. Que tal já aproveitar e renovar agora para continuar treinando sem nenhuma pausa?\n\nVocê vem evoluindo muito, seria uma pena parar agora. 💪🔥\n\n*Valor:* R$ '+(parseFloat(s.valor)||0).toLocaleString('pt-BR',{minimumFractionDigits:2})+(chavePix?'\n*Chave Pix:* '+chavePix:'')+'\n\nMe manda o comprovante assim que fizer e tá confirmado!';
+      msgCStr='Oi, '+nome1+'! Hoje é o dia! 📅\n\nSeu plano *'+getPlanNome(s.plano)+'* vence hoje, *'+dataFmtC+'*. Que tal já aproveitar e renovar agora para continuar treinando sem nenhuma pausa?\n\nVocê vem evoluindo muito, seria uma pena parar agora. 💪🔥\n\n*Valor:* R$ '+getPlanoValorTotal(s).toLocaleString('pt-BR',{minimumFractionDigits:2})+(chavePix?'\n*Chave Pix:* '+chavePix:'')+'\n\nMe manda o comprovante assim que fizer e tá confirmado!';
     } else if(diasRestC!==null&&diasRestC<0){
       var diasAtrasoD=Math.abs(diasRestC);
-      msgCStr='Oi, '+nome1+', tudo bem?\n\nNotei que seu plano *'+getPlanNome(s.plano)+'* venceu há '+diasAtrasoD+' dia'+(diasAtrasoD!==1?'s':'')+(dataFmtC?', em *'+dataFmtC+'*':'')+', e ainda não identifiquei o pagamento por aqui.\n\nSei que o dia a dia é corrido, mas não quero que você perca seus horários nem o ritmo dos treinos que você vem mantendo. Vamos resolver isso hoje ainda? 😊\n\n*Valor:* R$ '+(parseFloat(s.valor)||0).toLocaleString('pt-BR',{minimumFractionDigits:2})+(chavePix?'\n*Chave Pix:* '+chavePix:'')+'\n\nQualquer dificuldade, me chama que a gente conversa. 🤝';
+      msgCStr='Oi, '+nome1+', tudo bem?\n\nNotei que seu plano *'+getPlanNome(s.plano)+'* venceu há '+diasAtrasoD+' dia'+(diasAtrasoD!==1?'s':'')+(dataFmtC?', em *'+dataFmtC+'*':'')+', e ainda não identifiquei o pagamento por aqui.\n\nSei que o dia a dia é corrido, mas não quero que você perca seus horários nem o ritmo dos treinos que você vem mantendo. Vamos resolver isso hoje ainda? 😊\n\n*Valor:* R$ '+getPlanoValorTotal(s).toLocaleString('pt-BR',{minimumFractionDigits:2})+(chavePix?'\n*Chave Pix:* '+chavePix:'')+'\n\nQualquer dificuldade, me chama que a gente conversa. 🤝';
     } else {
       var diasTextoC=diasRestC===null?'em breve':diasRestC===1?'*amanhã*':'em *'+diasRestC+' dias*';
       msgCStr='Oi, '+nome1+'! 👋\n\nPassando aqui para te avisar que seu plano *'+getPlanNome(s.plano)+'* vence '+diasTextoC+(dataFmtC?', no dia *'+dataFmtC+'*':'')+'. \n\nJá vamos adiantando a renovação? Garanta seu horário e continue sem interrupção nos treinos. 🗓️💪\n\nMe confirma e te mando tudo certinho!';
@@ -2902,7 +2977,8 @@ function openDetail(id){
     +'<div class="detail-item"><div class="detail-item-label">Nascimento</div><div class="detail-item-value">'+fmtDate(s.nascimento)+'</div></div>'
     +'<div class="detail-item"><div class="detail-item-label">Inicio</div><div class="detail-item-value">'+fmtDate(s.inicio)+'</div></div>'
     +'<div class="detail-item"><div class="detail-item-label">Vencimento</div><div class="detail-item-value">'+fmtDate(s.vencimento)+'</div></div>'
-    +'<div class="detail-item"><div class="detail-item-label">Valor</div><div class="detail-item-value">'+(s.valor?'R$ '+parseFloat(s.valor).toLocaleString('pt-BR',{minimumFractionDigits:0}):'\u2014')+'</div></div>'
+    +(function(){var _vd=getPlanoValorTotal(s);var _psd=getPlano(s.plano);var _vstr=_vd>0?'R$ '+Math.round(_vd).toLocaleString('pt-BR'):'\u2014';if(_psd&&_psd.tipo==='pacote'&&s.qtdAulas)_vstr='Pacote '+s.qtdAulas+' aulas \u00b7 R$ '+Math.round(_vd).toLocaleString('pt-BR');return '<div class="detail-item"><div class="detail-item-label">Valor</div><div class="detail-item-value">'+_vstr+'</div></div>';})()
+
     +'<div class="detail-item"><div class="detail-item-label">Telefone</div><div class="detail-item-value">'+escapeHtml(s.telefone||'\u2014')+'</div></div>'
     +(s.obs?'<div class="detail-item" style="grid-column:1/-1"><div class="detail-item-label">Obs saude</div><div class="detail-item-value">'+escapeHtml(s.obs)+'</div></div>':'')
     +'</div>'
@@ -3544,17 +3620,17 @@ function renderFinanceiro(){
   if(ml)ml.textContent=mes.charAt(0).toUpperCase()+mes.slice(1);
 
   var _vsf=_visible(students);
-  var total=_vsf.reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
-  var rec=_vsf.filter(function(s){return s.status==='em dia';}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
-  var at=_vsf.filter(function(s){return s.status==='atrasado';}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
-  var ven=_vsf.filter(function(s){return s.status==='vencendo';}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
+  var total=_vsf.reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
+  var rec=_vsf.filter(function(s){return s.status==='em dia';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
+  var at=_vsf.filter(function(s){return s.status==='atrasado';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
+  var ven=_vsf.filter(function(s){return s.status==='vencendo';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
   var pct=total>0?Math.round(rec/total*100):0;
   var ativos=_vsf.filter(function(s){return s.status!=='atrasado';}).length;
   var inat=_vsf.filter(function(s){return s.status==='atrasado';}).length;
   var freq=calcFreqMedia();
   var risco=_vsf.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;}).length;
-  var recRisco=_vsf.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
-  var proj=_vsf.filter(function(s){return s.status==='em dia'||s.status==='vencendo';}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
+  var recRisco=_vsf.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
+  var proj=_vsf.filter(function(s){return s.status==='em dia'||s.status==='vencendo';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
 
   var dash=document.getElementById('fin-dash'); if(!dash)return;
   var out='';
@@ -3616,7 +3692,13 @@ function renderFinanceiro(){
     ftb.innerHTML=sorted.map(function(s){
       var sb=s.status==='em dia'?'<span class="badge badge-ok">Em dia</span>':s.status==='atrasado'?'<span class="badge badge-late">Inativo</span>':'<span class="badge badge-warn">Vencendo</span>';
       var venc=fmtDate(s.vencimento);
-      var valor=s.valor?'R$\u00a0'+parseFloat(s.valor).toLocaleString('pt-BR',{minimumFractionDigits:0}):'\u2014';
+      var _vt=getPlanoValorTotal(s);
+      var _plS=getPlano(s.plano);
+      var valor=_vt>0?'R$\u00a0'+Math.round(_vt).toLocaleString('pt-BR'):'\u2014';
+      if(_plS&&_plS.tipo==='pacote'&&s.qtdAulas){
+        var _vu=s.valorUnitario||s.precoAvulsa||(s.qtdAulas?_vt/s.qtdAulas:0);
+        valor='Pacote: '+s.qtdAulas+' aula'+(s.qtdAulas!==1?'s':'')+' \u00b7 Total: R$\u00a0'+Math.round(_vt).toLocaleString('pt-BR');
+      }
       var mod=s.modalidade==='Duo'?'<span class="badge badge-duo">Duo</span>':'<span class="badge badge-solo">Ind</span>';
       var ns=s.status==='atrasado'?'em dia':s.status==='vencendo'?'em dia':'atrasado';
       var bl=s.status==='em dia'?'Marcar inativo':'Marcar pago';
@@ -3671,7 +3753,7 @@ function gerarRecibo(id){
   var _corpo=(reciboCorpo||RECIBO_CORPO_DEFAULT)
     .replace(/\{nome\}/g,s.nome)
     .replace(/\{plano\}/g,(getPlanNome(s.plano)||'--')+(s.modalidade?' ('+s.modalidade+')':''))
-    .replace(/\{valor\}/g,s.valor?'R$ '+parseFloat(s.valor).toLocaleString('pt-BR',{minimumFractionDigits:2}):'--')
+    .replace(/\{valor\}/g,(function(){var _vr=getPlanoValorTotal(s);return _vr>0?'R$ '+_vr.toLocaleString('pt-BR',{minimumFractionDigits:2}):'--';})())
     .replace(/\{data\}/g,hoje)
     .replace(/\{vencimento\}/g,fmtDate(s.vencimento));
   _corpo.split('\n').forEach(function(l){lines2.push(l);});
@@ -4444,19 +4526,19 @@ function calcSimulacao() {
   var inad  =_visible(students).filter(function(s){return s.status==='atrasado';});
   var ausentes=_visible(students).filter(function(s){var d=getDaysAbsent(s.id);return d!==null&&d>=7&&s.status!=='atrasado';});
 
-  var recAtual  =ativos.reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
-  var recGarant =_visible(students).filter(function(s){return s.status==='em dia';}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
-  var recInad   =inad.reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
-  var recRisco  =ausentes.reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
+  var recAtual  =ativos.reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
+  var recGarant =_visible(students).filter(function(s){return s.status==='em dia';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
+  var recInad   =inad.reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
+  var recRisco  =ausentes.reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
 
   var now=new Date(),y=now.getFullYear(),m=now.getMonth();
   var perdaFaltas=0;
   _visible(students).forEach(function(s){
     var plano=getPlano(s.plano); if(!plano||plano.tipo!=='fixo')return;
-    var spw=plano.diasSemana||0; if(!spw||!s.valor)return;
+    var spw=plano.diasSemana||0; var _vf=getPlanoValorTotal(s); if(!spw||!_vf)return;
     var dim=new Date(y,m+1,0).getDate();
     var tot=Math.round(spw*dim/7);
-    var vps=parseFloat(s.valor)/(tot||1);
+    var vps=_vf/(tot||1);
     Object.keys(presencas).forEach(function(k){
       if(k.indexOf(s.id+'_')!==0)return;
       var ds=k.replace(s.id+'_','');
@@ -4558,13 +4640,13 @@ function getPrioridadeAcao() {
   var acoes=[];
 
   _visible(students).filter(function(s){return s.status==='atrasado';})
-    .sort(function(a,b){return (parseFloat(b.valor)||0)-(parseFloat(a.valor)||0);})
+    .sort(function(a,b){return getPlanoValorTotal(b)-getPlanoValorTotal(a);})
     .forEach(function(s){
       var ph=waPhone(s);
       acoes.push({
         tipo:'cobrar', prioridade:0,
         titulo:'Cobrar: '+s.nome,
-        detalhe:'R$ '+(parseFloat(s.valor)||0).toLocaleString('pt-BR')+' em atraso',
+        detalhe:'R$ '+Math.round(getPlanoValorTotal(s)).toLocaleString('pt-BR')+' em atraso',
         cor:'var(--danger)',
         icon:'',
         cta:ph?{lbl:'Cobrar agora',fn:'cobrarAluno("'+s.id+'")'}:null
@@ -4575,7 +4657,7 @@ function getPrioridadeAcao() {
     var d=getDaysAbsent(s.id);
     return d!==null&&d>=7&&s.status!=='atrasado';
   }).map(function(s){
-    return {s,score:(parseFloat(s.valor)||0)*(getDaysAbsent(s.id)||0)};
+    return {s,score:getPlanoValorTotal(s)*(getDaysAbsent(s.id)||0)};
   }).sort(function(a,b){return b.score-a.score;})
     .slice(0,3)
     .forEach(function(x){
@@ -4584,7 +4666,7 @@ function getPrioridadeAcao() {
       acoes.push({
         tipo:'reengajar', prioridade:1,
         titulo:'Reengajar: '+x.s.nome,
-        detalhe:'Ausente ha '+dias+' dias \u00B7 R$ '+(parseFloat(x.s.valor)||0).toLocaleString('pt-BR')+'/mes em risco',
+        detalhe:'Ausente ha '+dias+' dias \u00B7 R$ '+Math.round(getPlanoValorTotal(x.s)).toLocaleString('pt-BR')+' em risco',
         cor:'var(--warning)',
         icon:'\uDC4B',
         cta:ph?{lbl:'Enviar mensagem',fn:'reengajarAluno("'+x.s.id+'")'}:null
@@ -4597,7 +4679,7 @@ function getPrioridadeAcao() {
     var v=new Date(s.vencimento+'T12:00:00');v.setHours(0,0,0,0);
     var d=Math.ceil((v-hoje)/86400000);
     return d>=0&&d<=7;
-  }).sort(function(a,b){return (parseFloat(b.valor)||0)-(parseFloat(a.valor)||0);})
+  }).sort(function(a,b){return getPlanoValorTotal(b)-getPlanoValorTotal(a);})
     .slice(0,3)
     .forEach(function(s){
       var v=new Date(s.vencimento+'T12:00:00');v.setHours(0,0,0,0);
@@ -4605,7 +4687,7 @@ function getPrioridadeAcao() {
       acoes.push({
         tipo:'renovar', prioridade:1,
         titulo:'Renovar: '+s.nome,
-        detalhe:'Vence '+(dias===0?'hoje':'em '+dias+'d')+' \u00B7 R$ '+(parseFloat(s.valor)||0).toLocaleString('pt-BR'),
+        detalhe:'Vence '+(dias===0?'hoje':'em '+dias+'d')+' \u00B7 R$ '+Math.round(getPlanoValorTotal(s)).toLocaleString('pt-BR'),
         cor:'var(--accent)',
         icon:'',
         cta:{lbl:'Renovar + mensagem',fn:'renovarComMensagem("'+s.id+'")'}
@@ -4620,7 +4702,7 @@ function cobrarAluno(sid) {
   var ph=waPhone(s); if(!ph){alert('Sem telefone.');return;}
   var diasAtraso=s.vencimento?Math.abs(Math.ceil((new Date(s.vencimento+'T12:00:00')-new Date())/86400000)):3;
   var dataVenc=s.vencimento?new Date(s.vencimento+'T12:00:00').toLocaleDateString('pt-BR'):'';
-  var msgInad='Oi, '+s.nome.split(' ')[0]+', tudo bem?\n\nNotei que seu plano *'+getPlanNome(s.plano)+'* venceu há '+diasAtraso+' dia'+(diasAtraso!==1?'s':'')+(dataVenc?', em *'+dataVenc+'*':'')+', e ainda não identifiquei o pagamento por aqui.\n\nSei que o dia a dia é corrido, mas não quero que você perca seus horários nem o ritmo dos treinos que você vem mantendo. Vamos resolver isso hoje ainda? 😊\n\n*Valor:* R$ '+(parseFloat(s.valor)||0).toLocaleString('pt-BR',{minimumFractionDigits:2})+(chavePix?'\n*Chave Pix:* '+chavePix:'')+'\n\nQualquer dificuldade, me chama que a gente conversa. 🤝';
+  var msgInad='Oi, '+s.nome.split(' ')[0]+', tudo bem?\n\nNotei que seu plano *'+getPlanNome(s.plano)+'* venceu há '+diasAtraso+' dia'+(diasAtraso!==1?'s':'')+(dataVenc?', em *'+dataVenc+'*':'')+', e ainda não identifiquei o pagamento por aqui.\n\nSei que o dia a dia é corrido, mas não quero que você perca seus horários nem o ritmo dos treinos que você vem mantendo. Vamos resolver isso hoje ainda? 😊\n\n*Valor:* R$ '+getPlanoValorTotal(s).toLocaleString('pt-BR',{minimumFractionDigits:2})+(chavePix?'\n*Chave Pix:* '+chavePix:'')+'\n\nQualquer dificuldade, me chama que a gente conversa. 🤝';
   var msg=encodeURIComponent(msgInad);
   if(!historicoCob[sid])historicoCob[sid]=[];
   historicoCob[sid].push({data:new Date().toISOString(),tipo:'cobranca'});
@@ -4679,8 +4761,8 @@ function saveHistoricoFin() {
 }
 function registrarMesAtual() {
   var key=new Date().toISOString().substring(0,7); 
-  var rec=_visible(students).filter(function(s){return s.status==='em dia';}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
-  var tot=_visible(students).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
+  var rec=_visible(students).filter(function(s){return s.status==='em dia';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
+  var tot=_visible(students).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
   historicoFin[key]={rec,tot,alunos:_visible(students).length};
   saveHistoricoFin();
 }
@@ -4851,9 +4933,9 @@ function gerarRelatorio() {
   var mes = now.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
   var mesLabel = mes.charAt(0).toUpperCase() + mes.slice(1);
 
-  var total    = _visible(students).reduce(function(a,s){ return a+(parseFloat(s.valor)||0); },0);
-  var recebido = _visible(students).filter(function(s){ return s.status==='em dia'; }).reduce(function(a,s){ return a+(parseFloat(s.valor)||0); },0);
-  var atrasado = _visible(students).filter(function(s){ return s.status==='atrasado'; }).reduce(function(a,s){ return a+(parseFloat(s.valor)||0); },0);
+  var total    = _visible(students).reduce(function(a,s){ return a+getPlanoValorTotal(s); },0);
+  var recebido = _visible(students).filter(function(s){ return s.status==='em dia'; }).reduce(function(a,s){ return a+getPlanoValorTotal(s); },0);
+  var atrasado = _visible(students).filter(function(s){ return s.status==='atrasado'; }).reduce(function(a,s){ return a+getPlanoValorTotal(s); },0);
   var ativos   = _visible(students).filter(function(s){ return s.status!=='atrasado'; }).length;
   var inat     = _visible(students).filter(function(s){ return s.status==='atrasado'; }).length;
   var meta     = getMeta();
@@ -4874,7 +4956,7 @@ function gerarRelatorio() {
     var cor  = s.status==='em dia'?'#1e8449':s.status==='atrasado'?'#c0392b':'#d68910';
     var lb   = s.status==='em dia'?'Em dia':s.status==='atrasado'?'Inativo':'Vencendo';
     var venc = fmtDate(s.vencimento);
-    var valor = s.valor ? 'R$ '+parseFloat(s.valor).toLocaleString('pt-BR',{minimumFractionDigits:0}) : '\u2014';
+    var _vRel=getPlanoValorTotal(s); var valor = _vRel>0 ? 'R$ '+Math.round(_vRel).toLocaleString('pt-BR') : '\u2014';
     var sb   = '<span style="color:'+cor+';font-weight:600;">'+lb+'</span>';
     var bgRow = s.status==='atrasado'?'#fff8f8':s.status==='vencendo'?'#fffbf2':'';
     return '<tr style="background:'+bgRow+';">'
@@ -4974,7 +5056,7 @@ function exportarListaPDF() {
     var cor = s.status==='em dia'?'#1e8449':s.status==='atrasado'?'#c0392b':'#d68910';
     var lb  = s.status==='em dia'?'Em dia':s.status==='atrasado'?'Inativo':'Vencendo';
     var venc = fmtDate(s.vencimento);
-    var valor = s.valor ? fmtR(parseFloat(s.valor)) : '\u2014';
+    var valor = getPlanoValorTotal(s) > 0 ? fmtR(getPlanoValorTotal(s)) : '\u2014';
     var tel = s.telefone ? s.telefone : '\u2014';
     var bg = i%2===0?'#f9fafb':'#fff';
     return '<tr style="background:'+bg+';">'
@@ -5271,7 +5353,7 @@ function renderDespesasPanel() {
   var now=new Date(), ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   var lista=getDespesasMes(ym).sort(function(a,b){return b.data.localeCompare(a.data);});
   var totalDesp=getTotalDespesasMes(ym);
-  var recBruta=_visible(students).filter(function(s){return s.status==='em dia';}).reduce(function(a,s){return a+(parseFloat(s.valor)||0);},0);
+  var recBruta=_visible(students).filter(function(s){return s.status==='em dia';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
   var recLiq=recBruta-totalDesp;
   var aulasTotal=getTotalAulasMes();
   var custoPorAula=aulasTotal>0?totalDesp/aulasTotal:0;
@@ -5331,7 +5413,7 @@ function openPagamento(sid) {
   document.getElementById('pag-sid').value = sid;
   document.getElementById('pag-nome').textContent = s.nome;
   document.getElementById('pag-data').value = todayStr();
-  document.getElementById('pag-valor').value = s.valor ? Math.round(parseFloat(s.valor)) : '';
+  document.getElementById('pag-valor').value = getPlanoValorTotal(s) > 0 ? Math.round(getPlanoValorTotal(s)) : '';
   document.getElementById('pag-forma').value = 'Pix';
   document.getElementById('pag-obs').value = '';
   // Fechar modal-detail antes de abrir
@@ -5559,7 +5641,7 @@ function renderDashboardDia(){
     var s=it.student, diff=it.diff;
     var atrasado = s.status==='atrasado';
     var diffLabel = diff===null?'Atrasado':diff<0?Math.abs(diff)+' dias em atraso':diff===0?'Vence hoje':'Em '+diff+' dias';
-    var valor = s.valor ? 'R$ '+parseFloat(s.valor).toFixed(2).replace('.',',') : '';
+    var _vCob=getPlanoValorTotal(s); var valor = _vCob>0 ? 'R$ '+_vCob.toFixed(2).replace('.',',') : '';
     var avBg = atrasado ? 'rgba(231,76,60,0.12)' : 'rgba(243,156,18,0.12)';
     r3 += '<div class="dash-row '+(atrasado?'notif-danger':'notif-warn')+'" style="margin-bottom:4px;">'
       +'<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer;" onclick="openDetail(\''+s.id+'\')">'
@@ -5777,7 +5859,7 @@ function renderRelatorioMensal() {
     return d.getFullYear() === y && d.getMonth() === m;
   });
   // Use status-based calculation (consistent with Financeiro screen)
-  var totalPago = _visible(students).filter(function(s){ return s.status==='em dia'; }).reduce(function(a,s){ return a+(parseFloat(s.valor)||0); },0);
+  var totalPago = _visible(students).filter(function(s){ return s.status==='em dia'; }).reduce(function(a,s){ return a+getPlanoValorTotal(s); },0);
 
   // Presenças e faltas no mês
   var aulasMes = 0, faltasMes = 0;
