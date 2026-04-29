@@ -2777,8 +2777,15 @@ function saveStudent(){
     days.forEach(function(d){var t=times[d]||'06:00';if(!byTime[t])byTime[t]=[];byTime[t].push(d);});
 
     // Verificar conflitos ANTES de modificar agendas
-    // Agendas de referência: excluir o próprio aluno em edição
-    var agsRef=editingId?agendas.filter(function(a){return a.alunoId!==editingId;}):agendas;
+    // Agendas de referência: excluir deletadas, o próprio aluno em edição e alunos com início futuro
+    var _todayRef=todayStr();
+    var agsRef=agendas.filter(function(a){
+      if(a.deleted||a.alunoId===(editingId||null))return false;
+      var _sr=students.find(function(x){return x.id===a.alunoId&&!x.deleted;});
+      if(!_sr)return false;
+      if(_sr.inicio&&_sr.inicio>_todayRef)return false;
+      return true;
+    });
     var conflitos=[];
     Object.keys(byTime).forEach(function(t){
       var h=parseInt(t.split(':')[0]);
