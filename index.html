@@ -98,8 +98,10 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
 .badge-ok{background:rgba(39,174,96,0.15);color:var(--success);}
 .badge-late{background:rgba(231,76,60,0.15);color:var(--danger);}
 .badge-warn{background:rgba(243,156,18,0.15);color:var(--warning);}
+.badge-agrd{background:rgba(74,127,165,0.15);color:var(--accent-l);}
 .badge-duo{background:rgba(74,127,165,0.2);color:var(--accent-l);}
 .badge-solo{background:rgba(255,255,255,0.06);color:var(--white-dim);}
+.st-agrd .student-name{color:var(--accent-l);}
 .modal-overlay{display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,0.7);z-index:500;align-items:flex-end;justify-content:center;}
 .modal-overlay.open{display:flex;}
 .modal{background:var(--dark);width:100%;max-height:85vh;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 20px calc(32px + env(safe-area-inset-bottom,0px));border-radius:12px 12px 0 0;}
@@ -489,7 +491,7 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
           <input type="text" id="search-inp" placeholder="Buscar aluno..." oninput="renderTable()" style="padding-left:36px;margin-bottom:0;width:100%;background:var(--dark);border:1px solid var(--border);color:var(--white);height:42px;border-radius:4px;-webkit-appearance:none;outline:none;font-size:0.92rem;">
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-          <select class="filter-select" id="filt-status" onchange="renderTable()"><option value="">Todos os status</option><option value="em dia">Em dia</option><option value="vencendo">Vencendo</option><option value="atrasado">Inativo</option></select>
+          <select class="filter-select" id="filt-status" onchange="renderTable()"><option value="">Todos os status</option><option value="em dia">Em dia</option><option value="vencendo">Vencendo</option><option value="atrasado">Inativo</option><option value="aguardando">Aguardando</option></select>
           <select class="filter-select" id="filt-plano" onchange="renderTable()"><option value="">Todos os planos</option></select>
         </div>
         <select class="filter-select" id="filt-modal" onchange="renderTable()"><option value="">Individual e Duo</option><option value="Individual">Individual</option><option value="Duo">Duo</option></select>
@@ -2260,6 +2262,8 @@ function doLogout() {
 }
 
 function computeStatus(s) {
+  // Aluno com início futuro fica "aguardando" independente de qualquer outro critério
+  if(s.inicio && s.inicio > todayStr()) return 'aguardando';
   if(s.statusManual==='atrasado') return 'atrasado';
   // Pacote/avulsa: pagamento pontual, sem renovação mensal — sempre "em dia"
   var _ps=getPlano(s.plano);
@@ -2346,8 +2350,8 @@ function renderTable(){
     var ini=escapeHtml(s.nome.split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase());
     var fotoSafe=safeImageSrc(s.foto);
     var avInner=fotoSafe?'<img src="'+fotoSafe+'" alt="">':ini;
-    var stClass=s.status==='em dia'?'st-ok':s.status==='atrasado'?'st-late':'st-warn';
-    var sb=s.status==='em dia'?'<span class="badge badge-ok">&#10003; Em dia</span>':s.status==='atrasado'?'<span class="badge badge-late">&#8226; Inativo</span>':'<span class="badge badge-warn">&#9888; Vencendo</span>';
+    var stClass=s.status==='em dia'?'st-ok':s.status==='atrasado'?'st-late':s.status==='aguardando'?'st-agrd':'st-warn';
+    var sb=s.status==='em dia'?'<span class="badge badge-ok">&#10003; Em dia</span>':s.status==='atrasado'?'<span class="badge badge-late">&#8226; Inativo</span>':s.status==='aguardando'?'<span class="badge badge-agrd">&#9711; Aguardando</span>':'<span class="badge badge-warn">&#9888; Vencendo</span>';
     var aulas=getAulasDoMes(s.id); var atag=aulas.direito>0?'<span style="font-size:0.62rem;color:var(--white-dim);margin-left:4px;">'+aulas.feitas+'/'+aulas.direito+'</span>':'';
     var hoje2=new Date();hoje2.setHours(0,0,0,0);
     var vd=s.vencimento?new Date(s.vencimento+'T12:00:00'):null;
@@ -2381,12 +2385,14 @@ function renderStats(){
   var tot=_vs.length, em=_vs.filter(function(s){return s.status==='em dia';}).length;
   var ven=_vs.filter(function(s){return s.status==='vencendo';}).length;
   var at=_vs.filter(function(s){return s.status==='atrasado';}).length;
+  var agrd=_vs.filter(function(s){return s.status==='aguardando';}).length;
   var _stc=document.getElementById('st-count');if(_stc)_stc.textContent=tot+(tot===1?' aluno':' alunos')+' cadastrados';
   document.getElementById('stats-row').innerHTML=
     '<div class="stat-card"><div class="stat-num">'+tot+'</div><div class="stat-lbl">Total</div></div>'
     +'<div class="stat-card"><div class="stat-num" style="color:var(--success)">'+em+'</div><div class="stat-lbl">Em dia</div></div>'
     +'<div class="stat-card warning"><div class="stat-num">'+ven+'</div><div class="stat-lbl">Vencendo</div></div>'
-    +'<div class="stat-card danger"><div class="stat-num">'+at+'</div><div class="stat-lbl">Atraso</div></div>';
+    +'<div class="stat-card danger"><div class="stat-num">'+at+'</div><div class="stat-lbl">Atraso</div></div>'
+    +(agrd>0?'<div class="stat-card" style="border-top:2px solid var(--accent);grid-column:1/-1;"><div class="stat-num" style="color:var(--accent-l);">'+agrd+'</div><div class="stat-lbl">Aguardando início</div></div>':'');
   renderPaineis();
   renderNotifs();
   try{renderAutomacao();}catch(e){}
@@ -2989,7 +2995,7 @@ function openDetail(id){
   var ini=escapeHtml(s.nome.split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase());
   var fotoSafe=safeImageSrc(s.foto);
   var av=fotoSafe?'<img src="'+fotoSafe+'" alt="">':ini;
-  var sb=s.status==='em dia'?'<span class="badge badge-ok">Em dia</span>':s.status==='atrasado'?'<span class="badge badge-late">Inativo</span>':'<span class="badge badge-warn">Vencendo</span>';
+  var sb=s.status==='em dia'?'<span class="badge badge-ok">Em dia</span>':s.status==='atrasado'?'<span class="badge badge-late">Inativo</span>':s.status==='aguardando'?'<span class="badge badge-agrd">Aguardando</span>':'<span class="badge badge-warn">Vencendo</span>';
   var aulas=getAulasDoMes(s.id);
   var pacote=getAulasPacote(s.id);
   var aulasBar='';
@@ -3716,24 +3722,26 @@ function renderFinanceiro(){
 
   var _vsf=_visible(students);
   var _today=todayStr();
-  var total=_vsf.reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
-  var rec=_vsf.filter(function(s){return s.status==='em dia';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
-  var at=_vsf.filter(function(s){return s.status==='atrasado';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
-  var ven=_vsf.filter(function(s){return s.status==='vencendo';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
+  // Exclui "aguardando" dos cálculos do mês corrente
+  var _vsf_ativos=_vsf.filter(function(s){return s.status!=='aguardando';});
+  var total=_vsf_ativos.reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
+  var rec=_vsf_ativos.filter(function(s){return s.status==='em dia';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
+  var at=_vsf_ativos.filter(function(s){return s.status==='atrasado';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
+  var ven=_vsf_ativos.filter(function(s){return s.status==='vencendo';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
   var pct=total>0?Math.round(rec/total*100):0;
-  var ativos=_vsf.filter(function(s){return s.status!=='atrasado';}).length;
-  var inat=_vsf.filter(function(s){return s.status==='atrasado';}).length;
+  var ativos=_vsf_ativos.filter(function(s){return s.status!=='atrasado';}).length;
+  var inat=_vsf_ativos.filter(function(s){return s.status==='atrasado';}).length;
   var freq=calcFreqMedia();
   var risco=_vsf.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;}).length;
   var recRisco=_vsf.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
   var proj=_vsf.filter(function(s){return s.status==='em dia'||s.status==='vencendo';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
-  // Competência: pre-paid students who haven't started yet (verified by actual payment record)
+  // Competência: alunos "aguardando" com pagamento já realizado (adiantamento)
   var _temPagamento=function(sid){return pagamentos.some(function(p){return !p.deleted&&p.alunoId===sid;});};
-  var _adiantados=_vsf.filter(function(s){return s.inicio&&s.inicio>_today&&_temPagamento(s.id);});
+  var _adiantados=_vsf.filter(function(s){return s.status==='aguardando'&&_temPagamento(s.id);});
   var _adiantTotal=_adiantados.reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
-  var _recCompetencia=rec-_adiantTotal;
-  // Accrual pending: future students with no payment record yet
-  var _futurosNaoPagos=_vsf.filter(function(s){return s.inicio&&s.inicio>_today&&!_temPagamento(s.id);});
+  var _recCompetencia=rec; // rec já exclui aguardando; adiantamentos são caixa, não competência
+  // Alunos aguardando sem pagamento ainda
+  var _futurosNaoPagos=_vsf.filter(function(s){return s.status==='aguardando'&&!_temPagamento(s.id);});
   var _futurosTotal=_futurosNaoPagos.reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
 
   var dash=document.getElementById('fin-dash'); if(!dash)return;
@@ -3756,9 +3764,9 @@ function renderFinanceiro(){
     out+='<div style="font-family:Raleway,sans-serif;font-size:0.55rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Análise · Competência</div>';
     out+='<div style="display:flex;gap:8px;margin-bottom:10px;">';
     out+='<div style="flex:1;background:rgba(39,174,96,0.07);border:1px solid rgba(39,174,96,0.18);border-radius:6px;padding:10px 10px;">';
-    out+='<div style="font-size:0.55rem;color:var(--white-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">Caixa</div>';
-    out+='<div style="font-size:0.9rem;font-weight:700;color:var(--success);">'+fmt(rec)+'</div>';
-    out+='<div style="font-size:0.6rem;color:var(--white-dim);margin-top:2px;">recebido no mês</div>';
+    out+='<div style="font-size:0.55rem;color:var(--white-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">Caixa recebido</div>';
+    out+='<div style="font-size:0.9rem;font-weight:700;color:var(--success);">'+fmt(rec+_adiantTotal)+'</div>';
+    out+='<div style="font-size:0.6rem;color:var(--white-dim);margin-top:2px;">incl. adiantamentos</div>';
     out+='</div>';
     out+='<div style="flex:1;background:rgba(74,127,165,0.07);border:1px solid rgba(74,127,165,0.18);border-radius:6px;padding:10px 10px;">';
     out+='<div style="font-size:0.55rem;color:var(--white-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">Competência</div>';
@@ -3830,7 +3838,7 @@ function renderFinanceiro(){
   if(!sorted.length){ ftb.innerHTML='<div class="empty-state"><p>Nenhum aluno.</p></div>'; }
   else {
     ftb.innerHTML=sorted.map(function(s){
-      var sb=s.status==='em dia'?'<span class="badge badge-ok">Em dia</span>':s.status==='atrasado'?'<span class="badge badge-late">Inativo</span>':'<span class="badge badge-warn">Vencendo</span>';
+      var sb=s.status==='em dia'?'<span class="badge badge-ok">Em dia</span>':s.status==='atrasado'?'<span class="badge badge-late">Inativo</span>':s.status==='aguardando'?'<span class="badge badge-agrd">Aguardando</span>':'<span class="badge badge-warn">Vencendo</span>';
       var venc=fmtDate(s.vencimento);
       var _vt=getPlanoValorTotal(s);
       var _plS=getPlano(s.plano);
@@ -3846,16 +3854,13 @@ function renderFinanceiro(){
       var nomeSafe=escapeHtml(s.nome);
       var planoSafe=escapeHtml(getPlanNome(s.plano)||'\u2014');
       var ren=(s.status==='atrasado'||s.status==='vencendo')?'<button class="btn btn-primary btn-sm" onclick="renovarAluno(this.dataset.sid)" data-sid="'+sid+'">Renovar</button>':'';
-      var isFuturo=s.inicio&&s.inicio>_today;
-      var _sFutPago=isFuturo&&_temPagamento(s.id);
-      var avBg=isFuturo?'rgba(74,127,165,0.15)':s.status==='em dia'?'rgba(39,174,96,0.15)':s.status==='atrasado'?'rgba(231,76,60,0.15)':'rgba(243,156,18,0.15)';
-      var avColor=isFuturo?'var(--accent-l)':s.status==='em dia'?'var(--success)':s.status==='atrasado'?'var(--danger)':'var(--warning)';
-      // Override badge for pre-start students
-      var sbFin=sb;
-      if(isFuturo&&_sFutPago) sbFin='<span class="badge" style="background:rgba(243,156,18,0.18);color:var(--warning);">Pr\u00E9-pago</span>';
-      else if(isFuturo) sbFin='<span class="badge" style="background:rgba(74,127,165,0.12);color:var(--accent-l);">Aguardando</span>';
-      var inicioTag=isFuturo?'<div style="font-size:0.62rem;color:var(--accent-l);margin-top:3px;padding:3px 8px;background:rgba(74,127,165,0.08);border-radius:3px;display:inline-block;">Inicia em '+fmtDate(s.inicio)+'</div>':'';
-      var competTag=_sFutPago?'<div style="font-size:0.6rem;color:var(--warning);margin-top:2px;">Adiantamento \u00B7 Compet\u00EAncia: pr\u00F3x. m\u00EAs</div>':(isFuturo?'<div style="font-size:0.6rem;color:var(--white-dim);margin-top:2px;">A receber \u00B7 Compet\u00EAncia: pr\u00F3x. m\u00EAs</div>':'');
+      var _isAguard=s.status==='aguardando';
+      var _sFutPago=_isAguard&&_temPagamento(s.id);
+      var avBg=_isAguard?'rgba(74,127,165,0.15)':s.status==='em dia'?'rgba(39,174,96,0.15)':s.status==='atrasado'?'rgba(231,76,60,0.15)':'rgba(243,156,18,0.15)';
+      var avColor=_isAguard?'var(--accent-l)':s.status==='em dia'?'var(--success)':s.status==='atrasado'?'var(--danger)':'var(--warning)';
+      var sbFin=_sFutPago?'<span class="badge badge-agrd">Pr\u00E9-pago</span>':sb;
+      var inicioTag=_isAguard&&s.inicio?'<div style="font-size:0.62rem;color:var(--accent-l);margin-top:3px;padding:3px 8px;background:rgba(74,127,165,0.08);border-radius:3px;display:inline-block;">Inicia em '+fmtDate(s.inicio)+'</div>':'';
+      var competTag=_sFutPago?'<div style="font-size:0.6rem;color:var(--warning);margin-top:2px;">Adiantamento \u00B7 Compet\u00EAncia: pr\u00F3x. m\u00EAs</div>':(_isAguard?'<div style="font-size:0.6rem;color:var(--white-dim);margin-top:2px;">A receber \u00B7 Compet\u00EAncia: pr\u00F3x. m\u00EAs</div>':'');
       return '<div style="background:var(--card);border-radius:10px;padding:14px;margin-bottom:8px;'+(isFuturo?'border-left:3px solid var(--accent);':'')+'">'+
         '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
         +'<div style="width:38px;height:38px;border-radius:50%;background:'+avBg+';display:flex;align-items:center;justify-content:center;font-family:Raleway,sans-serif;font-size:0.62rem;font-weight:700;color:'+avColor+';flex-shrink:0;">'+_initials(s.nome)+'</div>'
