@@ -3727,12 +3727,13 @@ function renderFinanceiro(){
   var risco=_vsf.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;}).length;
   var recRisco=_vsf.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
   var proj=_vsf.filter(function(s){return s.status==='em dia'||s.status==='vencendo';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
-  // Competência: pre-paid students who haven't started yet (cash received, service not yet rendered)
-  var _adiantados=_vsf.filter(function(s){return s.inicio&&s.inicio>_today&&s.status==='em dia';});
+  // Competência: pre-paid students who haven't started yet (verified by actual payment record)
+  var _temPagamento=function(sid){return pagamentos.some(function(p){return !p.deleted&&p.alunoId===sid;});};
+  var _adiantados=_vsf.filter(function(s){return s.inicio&&s.inicio>_today&&_temPagamento(s.id);});
   var _adiantTotal=_adiantados.reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
   var _recCompetencia=rec-_adiantTotal;
-  // Accrual pending: students starting in the future who haven't paid yet
-  var _futurosNaoPagos=_vsf.filter(function(s){return s.inicio&&s.inicio>_today&&s.status!=='em dia';});
+  // Accrual pending: future students with no payment record yet
+  var _futurosNaoPagos=_vsf.filter(function(s){return s.inicio&&s.inicio>_today&&!_temPagamento(s.id);});
   var _futurosTotal=_futurosNaoPagos.reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
 
   var dash=document.getElementById('fin-dash'); if(!dash)return;
@@ -3846,14 +3847,15 @@ function renderFinanceiro(){
       var planoSafe=escapeHtml(getPlanNome(s.plano)||'\u2014');
       var ren=(s.status==='atrasado'||s.status==='vencendo')?'<button class="btn btn-primary btn-sm" onclick="renovarAluno(this.dataset.sid)" data-sid="'+sid+'">Renovar</button>':'';
       var isFuturo=s.inicio&&s.inicio>_today;
+      var _sFutPago=isFuturo&&_temPagamento(s.id);
       var avBg=isFuturo?'rgba(74,127,165,0.15)':s.status==='em dia'?'rgba(39,174,96,0.15)':s.status==='atrasado'?'rgba(231,76,60,0.15)':'rgba(243,156,18,0.15)';
       var avColor=isFuturo?'var(--accent-l)':s.status==='em dia'?'var(--success)':s.status==='atrasado'?'var(--danger)':'var(--warning)';
       // Override badge for pre-start students
       var sbFin=sb;
-      if(isFuturo&&s.status==='em dia') sbFin='<span class="badge" style="background:rgba(243,156,18,0.18);color:var(--warning);">Pr\u00E9-pago</span>';
+      if(isFuturo&&_sFutPago) sbFin='<span class="badge" style="background:rgba(243,156,18,0.18);color:var(--warning);">Pr\u00E9-pago</span>';
       else if(isFuturo) sbFin='<span class="badge" style="background:rgba(74,127,165,0.12);color:var(--accent-l);">Aguardando</span>';
       var inicioTag=isFuturo?'<div style="font-size:0.62rem;color:var(--accent-l);margin-top:3px;padding:3px 8px;background:rgba(74,127,165,0.08);border-radius:3px;display:inline-block;">Inicia em '+fmtDate(s.inicio)+'</div>':'';
-      var competTag=(isFuturo&&s.status==='em dia')?'<div style="font-size:0.6rem;color:var(--warning);margin-top:2px;">Adiantamento \u00B7 Compet\u00EAncia: pr\u00F3x. m\u00EAs</div>':(isFuturo?'<div style="font-size:0.6rem;color:var(--white-dim);margin-top:2px;">A receber \u00B7 Compet\u00EAncia: pr\u00F3x. m\u00EAs</div>':'');
+      var competTag=_sFutPago?'<div style="font-size:0.6rem;color:var(--warning);margin-top:2px;">Adiantamento \u00B7 Compet\u00EAncia: pr\u00F3x. m\u00EAs</div>':(isFuturo?'<div style="font-size:0.6rem;color:var(--white-dim);margin-top:2px;">A receber \u00B7 Compet\u00EAncia: pr\u00F3x. m\u00EAs</div>':'');
       return '<div style="background:var(--card);border-radius:10px;padding:14px;margin-bottom:8px;'+(isFuturo?'border-left:3px solid var(--accent);':'')+'">'+
         '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
         +'<div style="width:38px;height:38px;border-radius:50%;background:'+avBg+';display:flex;align-items:center;justify-content:center;font-family:Raleway,sans-serif;font-size:0.62rem;font-weight:700;color:'+avColor+';flex-shrink:0;">'+_initials(s.nome)+'</div>'
