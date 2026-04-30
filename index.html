@@ -737,6 +737,29 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
   </div>
 </div>
 
+<div id="modal-alterar-agenda" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,0.7);z-index:500;align-items:flex-end;justify-content:center;">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header"><div class="modal-title">Alterar Hor&aacute;rio</div><button class="modal-close" onclick="closeModal('modal-alterar-agenda')">&#215;</button></div>
+    <input type="hidden" id="aa-sid">
+    <div style="display:flex;flex-direction:column;gap:14px;">
+      <div>
+        <label class="form-label">A partir de *</label>
+        <input type="date" id="aa-from" class="form-inp">
+        <div style="font-size:0.65rem;color:var(--white-dim);margin-top:4px;">Os hor&aacute;rios anteriores a essa data ser&atilde;o preservados no hist&oacute;rico.</div>
+      </div>
+      <div>
+        <label class="form-label">Novos dias</label>
+        <div id="aa-days-picker" style="display:grid;grid-template-columns:repeat(6,1fr);gap:5px;"></div>
+      </div>
+      <div id="aa-day-times" style="margin-top:4px;"></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:24px;">
+      <button class="btn btn-outline" style="flex:1 1 0;min-width:0;height:44px;" onclick="closeModal('modal-alterar-agenda')">Cancelar</button>
+      <button class="btn btn-primary" style="flex:1 1 0;min-width:0;height:44px;" onclick="salvarAlteracaoAgenda()">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast-msg"></div>
 
 <script type="text/javascript">
@@ -1761,7 +1784,7 @@ function buildDaysPicker() {
 function loadExcecoes(){try{var e=localStorage.getItem('gp-exc');if(e)excecoes=JSON.parse(e);}catch(e){}}
 function saveExcecoes(){ localStorage.setItem('gp-exc',JSON.stringify(excecoes)); _pushCol('gp-exc'); }
 function getExcecao(ds){if(!excecoes[ds])excecoes[ds]={removidos:[],adicionados:[]};return excecoes[ds];}
-function getAgendasParaData(dateStr){if(isFeriado(dateStr))return[];var d=new Date(dateStr+'T12:00:00'),dow=d.getDay();var exc=excecoes[dateStr]||{removidos:[],adicionados:[]};var rem=exc.removidos||[],add=exc.adicionados||[];var rec=agendas.filter(function(a){if(!a||a.deleted||!a.days.includes(dow)||rem.indexOf(a.id)!==-1)return false;var s=students.find(function(x){return x.id===a.alunoId&&!x.deleted;});if(s&&s.inicio&&s.inicio>dateStr)return false;return true;});var ext=(add).map(function(x,i){return{id:dateStr+'_extra_'+i,alunoId:x.alunoId,inicio:x.inicio,fim:x.fim,days:[dow],_extra:true,_extraIdx:i,tipo:x.tipo||'extra'};});return rec.concat(ext);}
+function getAgendasParaData(dateStr){if(isFeriado(dateStr))return[];var d=new Date(dateStr+'T12:00:00'),dow=d.getDay();var exc=excecoes[dateStr]||{removidos:[],adicionados:[]};var rem=exc.removidos||[],add=exc.adicionados||[];var rec=agendas.filter(function(a){if(!a||a.deleted||!a.days.includes(dow)||rem.indexOf(a.id)!==-1)return false;var s=students.find(function(x){return x.id===a.alunoId&&!x.deleted;});if(!s)return false;if(s.inicio&&s.inicio>dateStr)return false;if(a.validFrom&&a.validFrom>dateStr)return false;if(a.validUntil&&a.validUntil<=dateStr)return false;return true;});var ext=(add).map(function(x,i){return{id:dateStr+'_extra_'+i,alunoId:x.alunoId,inicio:x.inicio,fim:x.fim,days:[dow],_extra:true,_extraIdx:i,tipo:x.tipo||'extra'};});return rec.concat(ext);}
 function removerDeData(agId,dateStr){var exc=getExcecao(dateStr);var m=/.*_extra_(\d+)$/.exec(agId);if(m){var idx2=parseInt(m[1]);if(exc.adicionados&&exc.adicionados[idx2])exc.adicionados.splice(idx2,1);}else{if(exc.removidos.indexOf(agId)===-1)exc.removidos.push(agId);}saveExcecoes();}
 function adicionarEmData(alunoId,inicio,dateStr,tipo){var h=parseInt(inicio.split(':')[0]);var fim=String((h+1)%24).padStart(2,'0')+':00';var exc=getExcecao(dateStr);if(!exc.adicionados)exc.adicionados=[];exc.adicionados.push({alunoId:alunoId,inicio:inicio,fim:fim,tipo:tipo||'extra'});saveExcecoes();}
 
@@ -2655,6 +2678,62 @@ function renderDayRows(){
       +'<div class="dt-inputs"><div class="dt-lbl">Inicio</div><input type="time" value="'+prev+'"></div></div>';
   }).join('');
 }
+function openAlterarAgenda(sid){
+  var s=students.find(function(x){return x.id===sid&&!x.deleted;});
+  if(!s)return;
+  var sAgs=agendas.filter(function(a){return a.alunoId===sid&&!a.deleted&&!a.validUntil;});
+  if(!sAgs.length){alert('Este aluno não tem agenda ativa para alterar.');return;}
+  document.getElementById('aa-sid').value=sid;
+  var tom=new Date();tom.setDate(tom.getDate()+1);
+  document.getElementById('aa-from').value=tom.getFullYear()+'-'+String(tom.getMonth()+1).padStart(2,'0')+'-'+String(tom.getDate()).padStart(2,'0');
+  buildAaDaysPicker();
+  sAgs.forEach(function(ag){ag.days.forEach(function(d){var btn=document.querySelector('#aa-days-picker .day-btn[data-day="'+d+'"]');if(btn)btn.classList.add('selected');});});
+  renderAaDayRows();
+  sAgs.forEach(function(ag){ag.days.forEach(function(d){var row=document.querySelector('#aa-day-times .day-time-row[data-day="'+d+'"]');if(row){var inp=row.querySelector('input[type=time]');if(inp)inp.value=ag.inicio||'06:00';}});});
+  document.getElementById('modal-alterar-agenda').style.display='flex';
+}
+function buildAaDaysPicker(){
+  var picker=document.getElementById('aa-days-picker');
+  if(!picker)return;
+  var DNAMES=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  picker.innerHTML='';
+  diasPermitidos.forEach(function(dow){
+    var btn=document.createElement('button');
+    btn.type='button';btn.className='day-btn';btn.setAttribute('data-day',dow);btn.textContent=DNAMES[dow];
+    btn.onclick=function(){btn.classList.toggle('selected');renderAaDayRows();};
+    picker.appendChild(btn);
+  });
+}
+function renderAaDayRows(){
+  var ex={};
+  document.querySelectorAll('#aa-day-times .day-time-row').forEach(function(r){var ini=r.querySelector('input[type=time]');if(ini)ex[r.dataset.day]=ini.value;});
+  var sel=Array.from(document.querySelectorAll('#aa-days-picker .day-btn.selected')).map(function(b){return parseInt(b.dataset.day);});
+  var c=document.getElementById('aa-day-times');if(!c)return;
+  c.innerHTML=sel.map(function(d){var prev=ex[d]||'06:00';return '<div class="day-time-row" data-day="'+d+'"><div class="dt-day">'+DAY_NAMES[d]+'</div><div class="dt-inputs"><div class="dt-lbl">Inicio</div><input type="time" value="'+prev+'"></div></div>';}).join('');
+}
+function salvarAlteracaoAgenda(){
+  var sid=document.getElementById('aa-sid').value;
+  var fromDate=document.getElementById('aa-from').value;
+  if(!sid||!fromDate){alert('Preencha todos os campos.');return;}
+  if(fromDate<=todayStr()){alert('A data de início deve ser posterior a hoje.');return;}
+  var days=Array.from(document.querySelectorAll('#aa-days-picker .day-btn.selected')).map(function(b){return parseInt(b.dataset.day);});
+  if(!days.length){alert('Selecione pelo menos um dia.');return;}
+  var rows=document.querySelectorAll('#aa-day-times .day-time-row');
+  var times={};rows.forEach(function(r){var inp=r.querySelector('input[type=time]');if(inp)times[r.dataset.day]=inp.value;});
+  var byTime={};days.forEach(function(d){var t=times[d]||'06:00';if(!byTime[t])byTime[t]=[];byTime[t].push(d);});
+  var _now=Date.now(),_dev=_getDeviceId();
+  agendas=agendas.map(function(a){
+    if(a.alunoId!==sid||a.deleted||a.validUntil)return a;
+    return Object.assign({},a,{validUntil:fromDate,updatedAt:_now,deviceId:_dev});
+  });
+  Object.keys(byTime).forEach(function(t){
+    var h=parseInt(t.split(':')[0]);
+    agendas.push({id:_now+'_aa_'+t,alunoId:sid,days:byTime[t],inicio:t,fim:String((h+1)%24).padStart(2,'0')+':00',obs:'',validFrom:fromDate,updatedAt:_now,deviceId:_dev});
+  });
+  saveAgendas();refreshAll();
+  closeModal('modal-alterar-agenda');
+  toast('Alteração de agenda salva!');
+}
 function clearForm(){
   ['f-nome','f-tel','f-email','f-cpf','f-nasc','f-obj','f-obs','f-inicio','f-venc'].forEach(function(id){
     var el=document.getElementById(id); if(el)el.value='';
@@ -2809,14 +2888,15 @@ function saveStudent(){
     }
 
     // Sem conflitos — agora sim modifica agendas (tombstone antes de recriar)
-    if(editingId){var _now=Date.now(),_dev=_getDeviceId();agendas=agendas.map(function(a){if(a.alunoId!==editingId)return a;var t2=Object.assign({},a,{deleted:true,updatedAt:_now,deviceId:_dev});_registerDelete(t2);return t2;});}
+    // Preserva registros históricos (validUntil definido) criados por "Alterar Horário"
+    if(editingId){var _now=Date.now(),_dev=_getDeviceId();agendas=agendas.map(function(a){if(a.alunoId!==editingId||a.validUntil)return a;var t2=Object.assign({},a,{deleted:true,updatedAt:_now,deviceId:_dev});_registerDelete(t2);return t2;});}
     Object.keys(byTime).forEach(function(t){
       var h=parseInt(t.split(':')[0]);
       agendas.push({id:Date.now().toString()+'_'+t,alunoId:obj.id,days:byTime[t],inicio:t,fim:String((h+1)%24).padStart(2,'0')+':00',obs:'',updatedAt:Date.now(),deviceId:_getDeviceId()});
     });
   } else {
-    // Sem dias selecionados — tombstone agendas do aluno em edição
-    if(editingId){var _now2=Date.now(),_dev2=_getDeviceId();agendas=agendas.map(function(a){if(a.alunoId!==editingId)return a;var t3=Object.assign({},a,{deleted:true,updatedAt:_now2,deviceId:_dev2});_registerDelete(t3);return t3;});}
+    // Sem dias selecionados — tombstone agendas do aluno em edição (preserva históricas)
+    if(editingId){var _now2=Date.now(),_dev2=_getDeviceId();agendas=agendas.map(function(a){if(a.alunoId!==editingId||a.validUntil)return a;var t3=Object.assign({},a,{deleted:true,updatedAt:_now2,deviceId:_dev2});_registerDelete(t3);return t3;});}
   }
   if(editingId){var i=students.findIndex(function(x){return x.id===editingId;});if(i>=0)students[i]=obj;else students.push(obj);}
   else students.push(obj);
@@ -3020,6 +3100,14 @@ function openDetail(id){
     openTreinoAluno(s.id);
   };
   actDiv.appendChild(btnTreino);
+  var hasActiveAgenda=agendas.some(function(a){return a.alunoId===s.id&&!a.deleted&&!a.validUntil;});
+  if(hasActiveAgenda){
+    var btnAg=document.createElement('button');
+    btnAg.className='btn btn-outline';btnAg.style.cssText='flex:1;height:40px;';
+    btnAg.textContent='Alterar Horário';
+    btnAg.onclick=function(){var md=document.getElementById('modal-detail');if(md)md.style.display='none';openAlterarAgenda(s.id);};
+    actDiv.appendChild(btnAg);
+  }
   // Painel de reposições com histórico e limite mensal
   var repPanel=document.createElement('div');
   repPanel.style.cssText='margin-top:12px;background:var(--card);padding:12px 16px;';
