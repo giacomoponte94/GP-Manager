@@ -3715,6 +3715,7 @@ function renderFinanceiro(){
   if(ml)ml.textContent=mes.charAt(0).toUpperCase()+mes.slice(1);
 
   var _vsf=_visible(students);
+  var _today=todayStr();
   var total=_vsf.reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
   var rec=_vsf.filter(function(s){return s.status==='em dia';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
   var at=_vsf.filter(function(s){return s.status==='atrasado';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
@@ -3726,6 +3727,13 @@ function renderFinanceiro(){
   var risco=_vsf.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;}).length;
   var recRisco=_vsf.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
   var proj=_vsf.filter(function(s){return s.status==='em dia'||s.status==='vencendo';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
+  // Competência: pre-paid students who haven't started yet (cash received, service not yet rendered)
+  var _adiantados=_vsf.filter(function(s){return s.inicio&&s.inicio>_today&&s.status==='em dia';});
+  var _adiantTotal=_adiantados.reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
+  var _recCompetencia=rec-_adiantTotal;
+  // Accrual pending: students starting in the future who haven't paid yet
+  var _futurosNaoPagos=_vsf.filter(function(s){return s.inicio&&s.inicio>_today&&s.status!=='em dia';});
+  var _futurosTotal=_futurosNaoPagos.reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
 
   var dash=document.getElementById('fin-dash'); if(!dash)return;
   var out='';
@@ -3741,6 +3749,42 @@ function renderFinanceiro(){
   out+='<span style="font-size:0.82rem;color:var(--white);font-weight:600;text-align:right;">'+pct+'%&nbsp;<span style="color:var(--white-dim);font-weight:300;font-size:0.75rem;">'+fmt(rec)+' de '+fmt(total)+'</span></span>';
   out+='</div><div style="height:8px;background:rgba(74,127,165,0.15);border-radius:4px;overflow:hidden;">';
   out+='<div style="height:100%;width:'+pct+'%;background:var(--success);border-radius:4px;"></div></div></div>';
+  // Painel de competência (só mostra se há pré-pagamentos ou futuros pendentes)
+  if(_adiantTotal>0||_futurosTotal>0){
+    out+='<div style="background:var(--card);padding:14px 18px;margin-bottom:8px;border-radius:8px;">';
+    out+='<div style="font-family:Raleway,sans-serif;font-size:0.55rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Análise · Competência</div>';
+    out+='<div style="display:flex;gap:8px;margin-bottom:10px;">';
+    out+='<div style="flex:1;background:rgba(39,174,96,0.07);border:1px solid rgba(39,174,96,0.18);border-radius:6px;padding:10px 10px;">';
+    out+='<div style="font-size:0.55rem;color:var(--white-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">Caixa</div>';
+    out+='<div style="font-size:0.9rem;font-weight:700;color:var(--success);">'+fmt(rec)+'</div>';
+    out+='<div style="font-size:0.6rem;color:var(--white-dim);margin-top:2px;">recebido no mês</div>';
+    out+='</div>';
+    out+='<div style="flex:1;background:rgba(74,127,165,0.07);border:1px solid rgba(74,127,165,0.18);border-radius:6px;padding:10px 10px;">';
+    out+='<div style="font-size:0.55rem;color:var(--white-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">Competência</div>';
+    out+='<div style="font-size:0.9rem;font-weight:700;color:var(--accent-l);">'+fmt(_recCompetencia)+'</div>';
+    out+='<div style="font-size:0.6rem;color:var(--white-dim);margin-top:2px;">receita do mês</div>';
+    out+='</div>';
+    out+='</div>';
+    if(_adiantTotal>0){
+      out+='<div style="padding:8px 12px;background:rgba(243,156,18,0.07);border-left:3px solid var(--warning);margin-bottom:6px;border-radius:0 4px 4px 0;">';
+      out+='<div style="display:flex;justify-content:space-between;align-items:baseline;">';
+      out+='<span style="font-size:0.72rem;font-weight:600;color:var(--warning);">Adiantamento — próx. mês</span>';
+      out+='<span style="font-size:0.82rem;font-weight:700;color:var(--warning);">'+fmt(_adiantTotal)+'</span>';
+      out+='</div>';
+      out+='<div style="font-size:0.62rem;color:var(--white-dim);margin-top:3px;">'+_adiantados.map(function(s){return s.nome.split(' ')[0]+' (inicia '+fmtDate(s.inicio)+')';}).join(' · ')+'</div>';
+      out+='</div>';
+    }
+    if(_futurosTotal>0){
+      out+='<div style="padding:8px 12px;background:rgba(74,127,165,0.05);border-left:3px solid var(--border);margin-bottom:0;border-radius:0 4px 4px 0;">';
+      out+='<div style="display:flex;justify-content:space-between;align-items:baseline;">';
+      out+='<span style="font-size:0.72rem;color:var(--white-dim);">A receber — próx. mês</span>';
+      out+='<span style="font-size:0.82rem;font-weight:600;color:var(--white-dim);">'+fmt(_futurosTotal)+'</span>';
+      out+='</div>';
+      out+='<div style="font-size:0.62rem;color:var(--white-dim);margin-top:3px;">'+_futurosNaoPagos.map(function(s){return s.nome.split(' ')[0]+' (inicia '+fmtDate(s.inicio)+')';}).join(' · ')+'</div>';
+      out+='</div>';
+    }
+    out+='</div>';
+  }
   var meta=getMeta();
   if(meta>0){
     var pm=Math.min(100,Math.round(rec/meta*100));
@@ -3801,16 +3845,24 @@ function renderFinanceiro(){
       var nomeSafe=escapeHtml(s.nome);
       var planoSafe=escapeHtml(getPlanNome(s.plano)||'\u2014');
       var ren=(s.status==='atrasado'||s.status==='vencendo')?'<button class="btn btn-primary btn-sm" onclick="renovarAluno(this.dataset.sid)" data-sid="'+sid+'">Renovar</button>':'';
-      var avBg=s.status==='em dia'?'rgba(39,174,96,0.15)':s.status==='atrasado'?'rgba(231,76,60,0.15)':'rgba(243,156,18,0.15)';
-      var avColor=s.status==='em dia'?'var(--success)':s.status==='atrasado'?'var(--danger)':'var(--warning)';
-      return '<div style="background:var(--card);border-radius:10px;padding:14px;margin-bottom:8px;">'
-        +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
+      var isFuturo=s.inicio&&s.inicio>_today;
+      var avBg=isFuturo?'rgba(74,127,165,0.15)':s.status==='em dia'?'rgba(39,174,96,0.15)':s.status==='atrasado'?'rgba(231,76,60,0.15)':'rgba(243,156,18,0.15)';
+      var avColor=isFuturo?'var(--accent-l)':s.status==='em dia'?'var(--success)':s.status==='atrasado'?'var(--danger)':'var(--warning)';
+      // Override badge for pre-start students
+      var sbFin=sb;
+      if(isFuturo&&s.status==='em dia') sbFin='<span class="badge" style="background:rgba(243,156,18,0.18);color:var(--warning);">Pr\u00E9-pago</span>';
+      else if(isFuturo) sbFin='<span class="badge" style="background:rgba(74,127,165,0.12);color:var(--accent-l);">Aguardando</span>';
+      var inicioTag=isFuturo?'<div style="font-size:0.62rem;color:var(--accent-l);margin-top:3px;padding:3px 8px;background:rgba(74,127,165,0.08);border-radius:3px;display:inline-block;">Inicia em '+fmtDate(s.inicio)+'</div>':'';
+      var competTag=(isFuturo&&s.status==='em dia')?'<div style="font-size:0.6rem;color:var(--warning);margin-top:2px;">Adiantamento \u00B7 Compet\u00EAncia: pr\u00F3x. m\u00EAs</div>':(isFuturo?'<div style="font-size:0.6rem;color:var(--white-dim);margin-top:2px;">A receber \u00B7 Compet\u00EAncia: pr\u00F3x. m\u00EAs</div>':'');
+      return '<div style="background:var(--card);border-radius:10px;padding:14px;margin-bottom:8px;'+(isFuturo?'border-left:3px solid var(--accent);':'')+'">'+
+        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
         +'<div style="width:38px;height:38px;border-radius:50%;background:'+avBg+';display:flex;align-items:center;justify-content:center;font-family:Raleway,sans-serif;font-size:0.62rem;font-weight:700;color:'+avColor+';flex-shrink:0;">'+_initials(s.nome)+'</div>'
         +'<div style="flex:1;min-width:0;">'
         +'<div style="font-weight:600;font-size:0.9rem;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+nomeSafe+'</div>'
         +'<div style="font-size:0.72rem;color:var(--white-dim);margin-top:2px;">'+planoSafe+' \u00B7 '+mod+'</div>'
+        +inicioTag+competTag
         +'</div>'
-        +sb
+        +sbFin
         +'</div>'
         +'<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--border);margin-bottom:8px;">'
         +'<span style="font-size:0.88rem;font-weight:700;color:var(--white);">'+valor+'</span>'
