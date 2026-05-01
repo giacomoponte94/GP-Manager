@@ -2634,13 +2634,26 @@ function getDiffDias(vencimento){
   var v=new Date(vencimento+'T12:00:00');v.setHours(0,0,0,0);
   return Math.floor((v-hoje)/86400000);
 }
+function isMesmoMes(d,ref){
+  return d.getMonth()===ref.getMonth()&&d.getFullYear()===ref.getFullYear();
+}
 function jaPagouNoMes(sid){
-  var now=new Date(),y=now.getFullYear(),m=now.getMonth();
+  var now=new Date();
   return pagamentos.some(function(p){
     if(p.deleted||p.alunoId!==sid)return false;
     var d=new Date(p.data+'T12:00:00');
-    return d.getFullYear()===y&&d.getMonth()===m;
+    return isMesmoMes(d,now);
   });
+}
+function marcarComoPago(sid){
+  var s=students.find(function(x){return x.id===sid&&!x.deleted;});
+  if(!s)return;
+  var ts=Date.now();
+  var hoje=new Date().toISOString().split('T')[0];
+  pagamentos.push({id:ts+'_mp',alunoId:sid,data:hoje,valor:getPlanoValorTotal(s),forma:'Manual',obs:'Marcado como pago'});
+  savePagamentos();
+  renderFinanceiro();
+  toast('Pagamento registrado ✓');
 }
 function getMsgCobranca(s,diff){
   var nome=s.nome.split(' ')[0];
@@ -3787,15 +3800,34 @@ function renderFinanceiro(){
 
   var _vsf=_visible(students);
   var _today=todayStr();
+  var _fnow=new Date();
   // Exclui "aguardando" dos cálculos do mês corrente
   var _vsf_ativos=_vsf.filter(function(s){return s.status!=='aguardando';});
   var total=_vsf_ativos.reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
-  var rec=_vsf_ativos.filter(function(s){return s.status==='em dia';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
-  var at=_vsf_ativos.filter(function(s){return s.status==='atrasado';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
-  var ven=_vsf_ativos.filter(function(s){return s.status==='vencendo';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
+  // Recebido = apenas pagamentos com data no mês atual
+  var rec=pagamentos.filter(function(p){
+    if(p.deleted)return false;
+    var d=new Date(p.data+'T12:00:00');
+    return isMesmoMes(d,_fnow);
+  }).reduce(function(a,p){return a+(p.valor||0);},0);
+  // Em atraso = vencimento passado e não pagou no mês
+  var at=_vsf_ativos.filter(function(s){
+    if(!s.vencimento||!s.plano)return false;
+    var _ps=getPlano(s.plano); if(_ps&&_ps.tipo==='pacote')return false;
+    return getDiffDias(s.vencimento)<0&&!jaPagouNoMes(s.id);
+  }).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
+  // A vencer = vencimento futuro e não pagou no mês
+  var ven=_vsf_ativos.filter(function(s){
+    if(!s.vencimento||!s.plano)return false;
+    var _ps=getPlano(s.plano); if(_ps&&_ps.tipo==='pacote')return false;
+    return getDiffDias(s.vencimento)>0&&!jaPagouNoMes(s.id);
+  }).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
   var pct=total>0?Math.round(rec/total*100):0;
-  var ativos=_vsf_ativos.filter(function(s){return s.status!=='atrasado';}).length;
-  var inat=_vsf_ativos.filter(function(s){return s.status==='atrasado';}).length;
+  var ativos=_vsf_ativos.filter(function(s){return getDiffDias(s.vencimento||'9999-12-31')>=0||jaPagouNoMes(s.id);}).length;
+  var inat=_vsf_ativos.filter(function(s){
+    if(!s.vencimento)return false;
+    return getDiffDias(s.vencimento)<0&&!jaPagouNoMes(s.id);
+  }).length;
   var freq=calcFreqMedia();
   var risco=_vsf.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;}).length;
   var recRisco=_vsf.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
@@ -3903,45 +3935,67 @@ function renderFinanceiro(){
   if(!sorted.length){ ftb.innerHTML='<div class="empty-state"><p>Nenhum aluno.</p></div>'; }
   else {
     ftb.innerHTML=sorted.map(function(s){
-      var sb=s.status==='em dia'?'<span class="badge badge-ok">Em dia</span>':s.status==='atrasado'?'<span class="badge badge-late">Inativo</span>':s.status==='aguardando'?'<span class="badge badge-agrd">Aguardando</span>':'<span class="badge badge-warn">Vencendo</span>';
-      var venc=fmtDate(s.vencimento);
       var _vt=getPlanoValorTotal(s);
       var _plS=getPlano(s.plano);
       var valor=_vt>0?'R$\u00a0'+Math.round(_vt).toLocaleString('pt-BR'):'\u2014';
       if(_plS&&_plS.tipo==='pacote'&&s.qtdAulas){
-        var _vu=s.valorUnitario||s.precoAvulsa||(s.qtdAulas?_vt/s.qtdAulas:0);
-        valor='Pacote: '+s.qtdAulas+' aula'+(s.qtdAulas!==1?'s':'')+' \u00b7 Total: R$\u00a0'+Math.round(_vt).toLocaleString('pt-BR');
+        valor='Pacote: '+s.qtdAulas+' aula'+(s.qtdAulas!==1?'s':'')+' \u00B7 Total: R$\u00a0'+Math.round(_vt).toLocaleString('pt-BR');
       }
       var mod=s.modalidade==='Duo'?'<span class="badge badge-duo">Duo</span>':'<span class="badge badge-solo">Ind</span>';
-      var ns=s.status==='atrasado'?'em dia':s.status==='vencendo'?'em dia':'atrasado';
-      var bl=s.status==='em dia'?'Marcar inativo':'Marcar pago';
       var sid=escapeHtml(s.id);
       var nomeSafe=escapeHtml(s.nome);
       var planoSafe=escapeHtml(getPlanNome(s.plano)||'\u2014');
-      var ren=(s.status==='atrasado'||s.status==='vencendo')?'<button class="btn btn-primary btn-sm" onclick="renovarAluno(this.dataset.sid)" data-sid="'+sid+'">Renovar</button>':'';
       var _isAguard=s.status==='aguardando';
       var _sFutPago=_isAguard&&_temPagamento(s.id);
-      var avBg=_isAguard?'rgba(74,127,165,0.15)':s.status==='em dia'?'rgba(39,174,96,0.15)':s.status==='atrasado'?'rgba(231,76,60,0.15)':'rgba(243,156,18,0.15)';
-      var avColor=_isAguard?'var(--accent-l)':s.status==='em dia'?'var(--success)':s.status==='atrasado'?'var(--danger)':'var(--warning)';
-      var sbFin=_sFutPago?'<span class="badge badge-agrd">Pr\u00E9-pago</span>':sb;
+      var _pagouMes=!_isAguard&&jaPagouNoMes(s.id);
+      var _diff=s.vencimento?getDiffDias(s.vencimento):999;
+      var _isPacote=_plS&&_plS.tipo==='pacote';
+      // Determinar status financeiro para exibi\u00E7\u00E3o
+      var sbFin,statusLabel,avBg,avColor,leftBorder='';
+      if(_isAguard){
+        sbFin='<span class="badge badge-agrd">'+(_sFutPago?'Pr\u00E9-pago':'Aguardando')+'</span>';
+        avBg='rgba(74,127,165,0.15)';avColor='var(--accent-l)';leftBorder='border-left:3px solid var(--accent);';
+        statusLabel=_sFutPago?'<div style="font-size:0.6rem;color:var(--warning);margin-top:2px;">Adiantamento \u00B7 Compet\u00EAncia: pr\u00F3x. m\u00EAs</div>':'<div style="font-size:0.6rem;color:var(--white-dim);margin-top:2px;">A receber \u00B7 Compet\u00EAncia: pr\u00F3x. m\u00EAs</div>';
+      } else if(_isPacote||_pagouMes){
+        sbFin='<span class="badge badge-ok">Pago</span>';
+        avBg='rgba(39,174,96,0.15)';avColor='var(--success)';
+        statusLabel='<div style="font-size:0.6rem;color:var(--success);margin-top:2px;">Recebido este m\u00EAs</div>';
+      } else if(s.vencimento&&_diff<0){
+        var diasAt=Math.abs(_diff);
+        sbFin='<span class="badge badge-late">N\u00E3o pago</span>';
+        avBg='rgba(231,76,60,0.15)';avColor='var(--danger)';leftBorder='border-left:3px solid var(--danger);';
+        statusLabel='<div style="font-size:0.6rem;color:var(--danger);margin-top:2px;">Atrasado h\u00E1 '+diasAt+' dia'+(diasAt!==1?'s':'')+'</div>';
+      } else if(s.vencimento){
+        var cor5=_diff<=5?'var(--warning)':'var(--white-dim)';
+        sbFin=_diff<=5?'<span class="badge badge-warn">Vencendo</span>':'<span class="badge badge-ok">Em dia</span>';
+        avBg=_diff<=5?'rgba(243,156,18,0.15)':'rgba(39,174,96,0.15)';
+        avColor=_diff<=5?'var(--warning)':'var(--success)';
+        statusLabel='<div style="font-size:0.6rem;color:'+cor5+';margin-top:2px;">Vence em '+_diff+' dia'+(Math.abs(_diff)!==1?'s':'')+'</div>';
+      } else {
+        sbFin='<span class="badge badge-ok">Em dia</span>';
+        avBg='rgba(39,174,96,0.15)';avColor='var(--success)';statusLabel='';
+      }
       var inicioTag=_isAguard&&s.inicio?'<div style="font-size:0.62rem;color:var(--accent-l);margin-top:3px;padding:3px 8px;background:rgba(74,127,165,0.08);border-radius:3px;display:inline-block;">Inicia em '+fmtDate(s.inicio)+'</div>':'';
-      var competTag=_sFutPago?'<div style="font-size:0.6rem;color:var(--warning);margin-top:2px;">Adiantamento \u00B7 Compet\u00EAncia: pr\u00F3x. m\u00EAs</div>':(_isAguard?'<div style="font-size:0.6rem;color:var(--white-dim);margin-top:2px;">A receber \u00B7 Compet\u00EAncia: pr\u00F3x. m\u00EAs</div>':'');
-      return '<div style="background:var(--card);border-radius:10px;padding:14px;margin-bottom:8px;'+(isFuturo?'border-left:3px solid var(--accent);':'')+'">'+
+      var venc=fmtDate(s.vencimento);
+      // Bot\u00F5es
+      var btnMarcar=(!_isAguard&&!_pagouMes&&!_isPacote)?'<button class="btn btn-primary btn-sm" onclick="marcarComoPago(this.dataset.sid)" data-sid="'+sid+'">Marcar como pago</button>':'';
+      var ren=(s.status==='atrasado'||s.status==='vencendo')?'<button class="btn btn-outline btn-sm" onclick="renovarAluno(this.dataset.sid)" data-sid="'+sid+'">Renovar</button>':'';
+      return '<div style="background:var(--card);border-radius:10px;padding:14px;margin-bottom:8px;'+leftBorder+'">'+
         '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
         +'<div style="width:38px;height:38px;border-radius:50%;background:'+avBg+';display:flex;align-items:center;justify-content:center;font-family:Raleway,sans-serif;font-size:0.62rem;font-weight:700;color:'+avColor+';flex-shrink:0;">'+_initials(s.nome)+'</div>'
         +'<div style="flex:1;min-width:0;">'
         +'<div style="font-weight:600;font-size:0.9rem;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+nomeSafe+'</div>'
         +'<div style="font-size:0.72rem;color:var(--white-dim);margin-top:2px;">'+planoSafe+' \u00B7 '+mod+'</div>'
-        +inicioTag+competTag
+        +inicioTag+statusLabel
         +'</div>'
         +sbFin
         +'</div>'
         +'<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--border);margin-bottom:8px;">'
         +'<span style="font-size:0.88rem;font-weight:700;color:var(--white);">'+valor+'</span>'
-        +'<span style="font-size:0.72rem;color:var(--white-dim);">Vence '+venc+'</span>'
+        +'<span style="font-size:0.72rem;color:var(--white-dim);">'+(s.vencimento?'Vence '+venc:'')+'</span>'
         +'</div>'
         +'<div style="display:flex;gap:6px;flex-wrap:wrap;">'
-        +'<button class="btn btn-outline btn-sm" onclick="toggleStatus(this.dataset.sid,this.dataset.ns)" data-sid="'+sid+'" data-ns="'+ns+'">'+bl+'</button>'
+        +btnMarcar
         +ren
         +'<button class="btn btn-outline btn-sm" onclick="gerarRecibo(this.dataset.sid)" data-sid="'+sid+'">Recibo</button>'
         +'</div>'
@@ -4979,9 +5033,14 @@ function saveHistoricoFin() {
   localStorage.setItem('gp-hfin',JSON.stringify(historicoFin)); _pushCol('gp-hfin');
 }
 function registrarMesAtual() {
-  var key=new Date().toISOString().substring(0,7); 
-  var rec=_visible(students).filter(function(s){return s.status==='em dia';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
-  var tot=_visible(students).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
+  var key=new Date().toISOString().substring(0,7);
+  var _now=new Date();
+  var rec=pagamentos.filter(function(p){
+    if(p.deleted)return false;
+    var d=new Date(p.data+'T12:00:00');
+    return isMesmoMes(d,_now);
+  }).reduce(function(a,p){return a+(p.valor||0);},0);
+  var tot=_visible(students).filter(function(s){return s.status!=='aguardando';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
   historicoFin[key]={rec,tot,alunos:_visible(students).length};
   saveHistoricoFin();
 }
@@ -5346,23 +5405,30 @@ function renderHistoricoVisual() {
   }
 
   var out = '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:12px;">Evolu\u00E7\u00E3o dos \u00FAltimos meses</div>';
-  out += '<div style="display:flex;align-items:flex-end;gap:6px;height:80px;margin-bottom:8px;">';
+  out += '<div style="display:flex;align-items:flex-end;gap:6px;height:72px;margin-bottom:0;">';
 
   keys.forEach(function(k, i) {
     var d = historicoFin[k];
-    var hRec = Math.round((d.rec || 0) / maxVal * 72);
-    var hTot = Math.round((d.tot || 0) / maxVal * 72);
+    var hRec = Math.round((d.rec || 0) / maxVal * 64);
+    var hTot = Math.round((d.tot || 0) / maxVal * 64);
     var isLast = i === keys.length - 1;
-    out += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">';
-    out += '<div style="font-size:0.55rem;color:var(--white-dim);margin-bottom:2px;">' + fmtK(d.rec||0) + '<\/div>';
-    out += '<div style="width:100%;display:flex;gap:2px;align-items:flex-end;">';
+    out += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;">';
+    out += '<div style="width:100%;display:flex;gap:2px;align-items:flex-end;height:64px;">';
     out += '<div style="flex:1;height:'+hTot+'px;background:rgba(74,127,165,0.2);border-radius:2px 2px 0 0;"><\/div>';
     out += '<div style="flex:1;height:'+hRec+'px;background:'+(isLast?'var(--success)':'var(--accent)')+';border-radius:2px 2px 0 0;opacity:'+(isLast?'1':'0.7')+';"><\/div>';
     out += '<\/div>';
-    out += '<div style="font-size:0.55rem;color:var(--white-dim);margin-top:3px;">' + shortMes(k) + '<\/div>';
     out += '<\/div>';
   });
 
+  out += '<\/div>';
+  out += '<div style="display:flex;gap:6px;margin-top:4px;margin-bottom:8px;">';
+  keys.forEach(function(k) {
+    var d = historicoFin[k];
+    out += '<div style="flex:1;text-align:center;">';
+    out += '<div style="font-size:0.52rem;color:var(--success);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + fmtK(d.rec||0) + '<\/div>';
+    out += '<div style="font-size:0.55rem;color:var(--white-dim);">' + shortMes(k) + '<\/div>';
+    out += '<\/div>';
+  });
   out += '<\/div>';
 
   
