@@ -2361,7 +2361,7 @@ function renderTable(){
     var fotoSafe=safeImageSrc(s.foto);
     var avInner=fotoSafe?'<img src="'+fotoSafe+'" alt="">':ini;
     var stClass=s.status==='em dia'?'st-ok':s.status==='atrasado'?'st-late':s.status==='aguardando'?'st-agrd':'st-warn';
-    var sb=s.status==='em dia'?'<span class="badge badge-ok">&#10003; Em dia</span>':s.status==='atrasado'?'<span class="badge badge-late">&#8226; Inativo</span>':s.status==='aguardando'?'<span class="badge badge-agrd">&#9711; Aguardando</span>':'<span class="badge badge-warn">&#9888; Vencendo</span>';
+    var sb=s.status==='em dia'?'<button class="badge badge-ok" style="cursor:pointer;border:none;" onclick="openPagamento(\''+sid+'\')">&#10003; Em dia</button>':s.status==='atrasado'?'<button class="badge badge-late" style="cursor:pointer;border:none;" onclick="openPagamento(\''+sid+'\')">&#8226; Inativo</button>':s.status==='aguardando'?'<span class="badge badge-agrd">&#9711; Aguardando</span>':'<button class="badge badge-warn" style="cursor:pointer;border:none;" onclick="openPagamento(\''+sid+'\')">&#9888; Vencendo</button>';
     var aulas=getAulasDoMes(s.id); var atag=aulas.direito>0?'<span style="font-size:0.62rem;color:var(--white-dim);margin-left:4px;">'+aulas.feitas+'/'+aulas.direito+'</span>':'';
     var hoje2=new Date();hoje2.setHours(0,0,0,0);
     var vd=s.vencimento?new Date(s.vencimento+'T12:00:00'):null;
