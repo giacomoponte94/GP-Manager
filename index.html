@@ -772,6 +772,16 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
   </div>
 </div>
 
+<div id="modal-fin-detalhe" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:500;align-items:center;justify-content:center;padding:16px;" onclick="if(event.target===this)closeModal('modal-fin-detalhe')">
+  <div class="modal" style="max-width:480px;width:100%;max-height:80vh;display:flex;flex-direction:column;">
+    <div class="modal-header">
+      <div class="modal-title" id="fin-det-titulo">Detalhe</div>
+      <button class="modal-close" onclick="closeModal('modal-fin-detalhe')">&#215;</button>
+    </div>
+    <div id="fin-det-body" style="overflow-y:auto;flex:1;padding:0 4px 12px;"></div>
+  </div>
+</div>
+
 <div id="toast-msg"></div>
 
 <script type="text/javascript">
@@ -3908,9 +3918,9 @@ function renderFinanceiro(){
   var out='';
   
   out+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">';
-  out+='<div class="stat-card" style="border-top:2px solid var(--success);padding:14px 12px;border-radius:10px;"><div class="stat-num" style="color:var(--success);font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(rec)+'</div><div class="stat-lbl">Recebido</div></div>';
-  out+='<div class="stat-card" style="border-top:2px solid var(--warning);padding:14px 12px;border-radius:10px;"><div class="stat-num" style="color:var(--warning);font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(ven)+'</div><div class="stat-lbl">A vencer</div></div>';
-  out+='<div class="stat-card danger" style="border-top:2px solid var(--danger);padding:14px 12px;border-radius:10px;"><div class="stat-num" style="font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(at)+'</div><div class="stat-lbl">Em atraso</div></div>';
+  out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\"recebido\")" style="cursor:pointer;border-top:2px solid var(--success);padding:14px 12px;border-radius:10px;"><div class="stat-num" style="color:var(--success);font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(rec)+'</div><div class="stat-lbl">Recebido</div></div>';
+  out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\"avencer\")" style="cursor:pointer;border-top:2px solid var(--warning);padding:14px 12px;border-radius:10px;"><div class="stat-num" style="color:var(--warning);font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(ven)+'</div><div class="stat-lbl">A vencer</div></div>';
+  out+='<div class="stat-card danger" onclick="abrirDetalheFinanceiro(\"atraso\")" style="cursor:pointer;border-top:2px solid var(--danger);padding:14px 12px;border-radius:10px;"><div class="stat-num" style="font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(at)+'</div><div class="stat-lbl">Em atraso</div></div>';
   out+='</div>';
   out+='<div style="background:var(--card);padding:14px 18px;margin-bottom:8px;border-radius:8px;">';
   out+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px;">';
@@ -3975,16 +3985,16 @@ function renderFinanceiro(){
   }
   
   out+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
-  out+='<div class="stat-card"><div class="stat-num" style="font-size:1rem;">'+ativos+'</div><div class="stat-lbl">Ativos</div></div>';
-  out+='<div class="stat-card danger"><div class="stat-num" style="font-size:1rem;">'+inat+'</div><div class="stat-lbl">Inadimplentes</div></div>';
+  out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\"ativos\")" style="cursor:pointer;"><div class="stat-num" style="font-size:1rem;">'+ativos+'</div><div class="stat-lbl">Ativos</div></div>';
+  out+='<div class="stat-card danger" onclick="abrirDetalheFinanceiro(\"inadimplentes\")" style="cursor:pointer;"><div class="stat-num" style="font-size:1rem;">'+inat+'</div><div class="stat-lbl">Inadimplentes</div></div>';
   out+='</div>';
   out+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
-  out+='<div class="stat-card"><div class="stat-num" style="font-size:1rem;">'+freq+'%</div><div class="stat-lbl">Freq. media</div></div>';
-  out+='<div class="stat-card'+(risco>0?' warning':'')+'"><div class="stat-num" style="font-size:1rem;">'+risco+'</div><div class="stat-lbl">Em risco</div></div>';
+  out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\"freq\")" style="cursor:pointer;"><div class="stat-num" style="font-size:1rem;">'+freq+'%</div><div class="stat-lbl">Freq. media</div></div>';
+  out+='<div class="stat-card'+(risco>0?' warning':'')+'" onclick="abrirDetalheFinanceiro(\'risco\')" style="cursor:pointer;"><div class="stat-num" style="font-size:1rem;">'+risco+'</div><div class="stat-lbl">Em risco</div></div>';
   out+='</div>';
   out+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
-  out+='<div class="stat-card" style="border-top:2px solid var(--accent);"><div class="stat-num" style="font-size:0.9rem;color:var(--accent-l);">'+fmt(proj)+'</div><div class="stat-lbl">Projecao prox mes</div></div>';
-  out+='<div class="stat-card'+(recRisco>0?' danger':'')+'"><div class="stat-num" style="font-size:0.9rem;">'+fmt(recRisco)+'</div><div class="stat-lbl">Receita em risco</div></div>';
+  out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\"proj\")" style="cursor:pointer;border-top:2px solid var(--accent);"><div class="stat-num" style="font-size:0.9rem;color:var(--accent-l);">'+fmt(proj)+'</div><div class="stat-lbl">Projecao prox mes</div></div>';
+  out+='<div class="stat-card'+(recRisco>0?' danger':'')+'" onclick="abrirDetalheFinanceiro(\'recreco\')" style="cursor:pointer;"><div class="stat-num" style="font-size:0.9rem;">'+fmt(recRisco)+'</div><div class="stat-lbl">Receita em risco</div></div>';
   out+='</div>';
   dash.innerHTML=out;
 
@@ -4070,6 +4080,109 @@ function renderFinanceiro(){
       +'</div>';
     }).join('');
   }
+}
+
+function abrirDetalheFinanceiro(tipo){
+  var titulos={recebido:'Recebido este mês',avencer:'A vencer',atraso:'Em atraso',ativos:'Ativos',inadimplentes:'Inadimplentes',freq:'Frequência por aluno',risco:'Em risco de abandono',proj:'Projeção próximo mês',recreco:'Receita em risco'};
+  var titulo=titulos[tipo]||tipo;
+  var _now=new Date();
+  var _vsf=_visible(students);
+  var _vsf_ativos=_vsf.filter(function(s){return s.status!=='aguardando';});
+  var rows=[];
+  function _row(nome,sub,valor,cor){
+    var v=valor!=null?'<span style="font-size:0.82rem;font-weight:700;color:'+(cor||'var(--white)')+';">'+fmt(valor)+'</span>':'';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);">'
+      +'<div><div style="font-size:0.85rem;font-weight:600;color:var(--white);">'+escapeHtml(nome)+'</div>'+(sub?'<div style="font-size:0.7rem;color:var(--white-dim);margin-top:1px;">'+sub+'</div>':'')+'</div>'+v+'</div>';
+  }
+  if(tipo==='recebido'){
+    var pags=pagamentos.filter(function(p){
+      if(p.deleted)return false;
+      var d=new Date(p.data+'T12:00:00');
+      return isMesmoMes(d,_now);
+    }).sort(function(a,b){return b.data.localeCompare(a.data);});
+    if(!pags.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Nenhum pagamento registrado este mês.</div>');}
+    pags.forEach(function(p){
+      var s=students.find(function(x){return x.id===p.alunoId&&!x.deleted;});
+      var nome=s?s.nome:(p.alunoId||'?');
+      rows.push(_row(nome,fmtDate(p.data)+' · '+(p.forma||''),p.valor,'var(--success)'));
+    });
+  } else if(tipo==='avencer'){
+    var lista=_vsf_ativos.filter(function(s){
+      if(!s.vencimento||!s.plano)return false;
+      var _ps=getPlano(s.plano); if(_ps&&_ps.tipo==='pacote')return false;
+      if(s.status==='atrasado')return false;
+      return getDiffDias(s.vencimento)>0&&!jaPagouNoMes(s.id);
+    }).sort(function(a,b){return a.vencimento.localeCompare(b.vencimento);});
+    if(!lista.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Nenhum aluno a vencer.</div>');}
+    lista.forEach(function(s){
+      var diff=getDiffDias(s.vencimento);
+      rows.push(_row(s.nome,'Vence em '+diff+' dia'+(diff!==1?'s':'')+' · '+fmtDate(s.vencimento),getPlanoValorTotal(s),'var(--warning)'));
+    });
+  } else if(tipo==='atraso'){
+    var lista=_vsf_ativos.filter(function(s){
+      if(!s.plano)return false;
+      var _ps=getPlano(s.plano); if(_ps&&_ps.tipo==='pacote')return false;
+      if(jaPagouNoMes(s.id))return false;
+      return s.status==='atrasado'||(s.vencimento&&getDiffDias(s.vencimento)<0);
+    }).sort(function(a,b){return (a.vencimento||'').localeCompare(b.vencimento||'');});
+    if(!lista.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Nenhum aluno em atraso.</div>');}
+    lista.forEach(function(s){
+      var diff=getDiffDias(s.vencimento||'');
+      var sub=s.vencimento?(diff<0?'Atrasado há '+Math.abs(diff)+' dia'+(Math.abs(diff)!==1?'s':''):'Inadimplente'):'Sem vencimento';
+      rows.push(_row(s.nome,sub,getPlanoValorTotal(s),'var(--danger)'));
+    });
+  } else if(tipo==='ativos'){
+    var lista=_vsf_ativos.filter(function(s){
+      if(jaPagouNoMes(s.id))return true;
+      if(s.status==='atrasado')return false;
+      return getDiffDias(s.vencimento||'9999-12-31')>=0;
+    }).sort(function(a,b){return a.nome.localeCompare(b.nome,'pt-BR');});
+    if(!lista.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Nenhum aluno ativo.</div>');}
+    lista.forEach(function(s){
+      var sub=jaPagouNoMes(s.id)?'Pagou este mês':(s.vencimento?'Vence '+fmtDate(s.vencimento):'');
+      rows.push(_row(s.nome,sub,null));
+    });
+  } else if(tipo==='inadimplentes'){
+    var lista=_vsf_ativos.filter(function(s){
+      if(!s.plano)return false;
+      var _ps=getPlano(s.plano); if(_ps&&_ps.tipo==='pacote')return false;
+      if(jaPagouNoMes(s.id))return false;
+      return s.status==='atrasado'||(s.vencimento&&getDiffDias(s.vencimento)<0);
+    }).sort(function(a,b){return (a.vencimento||'').localeCompare(b.vencimento||'');});
+    if(!lista.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Nenhum inadimplente.</div>');}
+    lista.forEach(function(s){
+      var diff=getDiffDias(s.vencimento||'');
+      var sub=s.vencimento?(diff<0?'Atrasado há '+Math.abs(diff)+' dia'+(Math.abs(diff)!==1?'s':''):''):'';
+      rows.push(_row(s.nome,sub,null,'var(--danger)'));
+    });
+  } else if(tipo==='freq'){
+    var lista=_vsf.map(function(s){var d=getAulasDoMes(s.id);return{s:s,d:d};}).filter(function(x){return x.d.direito>0;}).sort(function(a,b){return (b.d.feitas/b.d.direito)-(a.d.feitas/a.d.direito);});
+    if(!lista.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Sem dados de frequência.</div>');}
+    lista.forEach(function(x){
+      var pct=Math.round(x.d.feitas/x.d.direito*100);
+      var cor=pct>=80?'var(--success)':pct>=50?'var(--warning)':'var(--danger)';
+      rows.push(_row(x.s.nome,x.d.feitas+' de '+x.d.direito+' aulas',null,cor)
+        .replace('</div></div>','<span style="font-size:0.85rem;font-weight:700;color:'+cor+';">'+pct+'%</span></div></div>'));
+    });
+  } else if(tipo==='risco'||tipo==='recreco'){
+    var lista=_vsf.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;}).sort(function(a,b){return getMissedSessionsStreak(b.id)-getMissedSessionsStreak(a.id);});
+    if(!lista.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Nenhum aluno em risco.</div>');}
+    lista.forEach(function(s){
+      var st=getMissedSessionsStreak(s.id);
+      var val=tipo==='recreco'?getPlanoValorTotal(s):null;
+      rows.push(_row(s.nome,st+' falta'+(st!==1?'s':'')+' seguida'+(st!==1?'s':''),val,'var(--warning)'));
+    });
+  } else if(tipo==='proj'){
+    var lista=_vsf.filter(function(s){return s.status==='em dia'||s.status==='vencendo';}).sort(function(a,b){return a.nome.localeCompare(b.nome,'pt-BR');});
+    if(!lista.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Nenhum aluno previsto.</div>');}
+    lista.forEach(function(s){
+      rows.push(_row(s.nome,(s.vencimento?'Vence '+fmtDate(s.vencimento):''),getPlanoValorTotal(s),'var(--accent-l)'));
+    });
+  }
+  var el=document.getElementById('modal-fin-detalhe');
+  document.getElementById('fin-det-titulo').textContent=titulo;
+  document.getElementById('fin-det-body').innerHTML=rows.join('');
+  el.style.display='flex';
 }
 
 function calcFreqMedia(){
