@@ -762,6 +762,16 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
   </div>
 </div>
 
+<div id="modal-cobranca" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,0.7);z-index:500;align-items:flex-end;justify-content:center;">
+  <div class="modal" style="max-width:480px;max-height:85vh;display:flex;flex-direction:column;">
+    <div class="modal-header">
+      <div><div class="modal-title">Cobranças do período</div><div id="cobr-count" style="font-size:0.65rem;color:var(--white-dim);margin-top:2px;"></div></div>
+      <button class="modal-close" onclick="closeModal('modal-cobranca')">&#215;</button>
+    </div>
+    <div id="cobr-body" style="overflow-y:auto;flex:1;padding-bottom:8px;"></div>
+  </div>
+</div>
+
 <div id="toast-msg"></div>
 
 <script type="text/javascript">
@@ -2619,19 +2629,74 @@ function renderNotifs(){
       +ct+'</div>';
   }).join('');
 }
-function cobrarInadimplentes(){
-  var inad=_visible(students).filter(function(s){return s.status==='atrasado'&&s.telefone;});
-  if(!inad.length){alert('Nenhum inadimplente com telefone.');return;}
-  inad.forEach(function(s){
-    var ph=waPhone(s); if(!ph)return;
-    var diasAtraso=s.vencimento?Math.abs(Math.ceil((new Date(s.vencimento+'T12:00:00')-new Date())/86400000)):3;
-    var dataVenc=s.vencimento?new Date(s.vencimento+'T12:00:00').toLocaleDateString('pt-BR'):'';
-    var msgInad='Oi, '+s.nome.split(' ')[0]+', tudo bem?\n\nNotei que seu plano *'+getPlanNome(s.plano)+'* venceu há '+diasAtraso+' dia'+(diasAtraso!==1?'s':'')+(dataVenc?', em *'+dataVenc+'*':'')+', e ainda não identifiquei o pagamento por aqui.\n\nSei que o dia a dia é corrido, mas não quero que você perca seus horários nem o ritmo dos treinos que você vem mantendo. Vamos resolver isso hoje ainda? 😊\n\n*Valor:* R$ '+getPlanoValorTotal(s).toLocaleString('pt-BR',{minimumFractionDigits:2})+(chavePix?'\n*Chave Pix:* '+chavePix:'')+'\n\nQualquer dificuldade, me chama que a gente conversa. 🤝';
-    window.open('https://wa.me/'+ph+'?text='+encodeURIComponent(msgInad),'_blank');
-    if(!historicoCob[s.id])historicoCob[s.id]=[];
-    historicoCob[s.id].push({data:new Date().toISOString(),tipo:'manual'});
-    saveHistCob();
+function getDiffDias(vencimento){
+  var hoje=new Date();hoje.setHours(0,0,0,0);
+  var v=new Date(vencimento+'T12:00:00');v.setHours(0,0,0,0);
+  return Math.floor((v-hoje)/86400000);
+}
+function jaPagouNoMes(sid){
+  var now=new Date(),y=now.getFullYear(),m=now.getMonth();
+  return pagamentos.some(function(p){
+    if(p.deleted||p.alunoId!==sid)return false;
+    var d=new Date(p.data+'T12:00:00');
+    return d.getFullYear()===y&&d.getMonth()===m;
   });
+}
+function getMsgCobranca(s,diff){
+  var nome=s.nome.split(' ')[0];
+  var plano=getPlanNome(s.plano)||'—';
+  var valor=getPlanoValorTotal(s).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  var venc=s.vencimento?new Date(s.vencimento+'T12:00:00').toLocaleDateString('pt-BR'):'--';
+  var tmpl={
+    5:'Oi [NOME]! Passando pra te lembrar que o pagamento do seu plano vence daqui 5 dias. Vamos garantir seu horário na agenda e manter sua rotina em dia 💪\n📋 Plano: [Plano]\n💰 Valor: R$ [VALOR]\n📅 Vencimento: [DD/MM/AAAA]',
+    3:'Oi [NOME]! Seu pagamento vence em 3 dias. Me chama se precisar de qualquer coisa pra mantermos tudo alinhado! 😊\n📋 Plano: [Plano]\n💰 Valor: R$ [VALOR]\n📅 Vencimento: [DD/MM/AAAA]',
+    1:'Oi [NOME]! Só passando pra te lembrar que seu pagamento vence amanhã. Assim garantimos seu horário e continuidade dos treinos 💪\n📋 Plano: [Plano]\n💰 Valor: R$ [VALOR]\n📅 Vencimento: [DD/MM/AAAA]',
+    0:'Oi [NOME]! Hoje é o vencimento do seu plano. Se puder já acertar, evitamos qualquer bloqueio na agenda e seguimos normalmente 🙏\n📋 Plano: [Plano]\n💰 Valor: R$ [VALOR]\n📅 Vencimento: [DD/MM/AAAA]',
+    '-1':'Oi [NOME]! Vi que o pagamento de ontem ainda não caiu. Consegue me dar um retorno pra gente manter sua agenda ativa? 😊\n📋 Plano: [Plano]\n💰 Valor: R$ [VALOR]\n📅 Vencimento: [DD/MM/AAAA]',
+    '-3':'Oi [NOME]! Seu pagamento está em aberto há 3 dias. Preciso da sua confirmação pra manter seu horário reservado na agenda 💪\n📋 Plano: [Plano]\n💰 Valor: R$ [VALOR]\n📅 Vencimento: [DD/MM/AAAA]',
+    '-5':'Oi [NOME]! Seu pagamento está em aberto há 5 dias. Hoje preciso de um retorno pra evitar o bloqueio do seu plano e liberação do horário na agenda 🙏\n📋 Plano: [Plano]\n💰 Valor: R$ [VALOR]\n📅 Vencimento: [DD/MM/AAAA]'
+  };
+  var t=tmpl[String(diff)];
+  if(!t)return null;
+  return t.replace(/\[NOME\]/g,nome).replace(/\[Plano\]/g,plano).replace(/\[VALOR\]/g,valor).replace(/\[DD\/MM\/AAAA\]/g,venc)+(chavePix?'\n🔑 Pix: '+chavePix:'');
+}
+function cobrarInadimplentes(){
+  var DIFFS=[5,3,1,0,-1,-3,-5];
+  var alvos=_visible(students).filter(function(s){
+    if(s.status==='aguardando'||!s.vencimento||!s.plano)return false;
+    if(jaPagouNoMes(s.id))return false;
+    var d=getDiffDias(s.vencimento);
+    return DIFFS.indexOf(d)!==-1;
+  }).sort(function(a,b){return getDiffDias(a.vencimento)-getDiffDias(b.vencimento);});
+  if(!alvos.length){alert('Nenhum aluno no período de cobrança (janela de ±5 dias do vencimento).');return;}
+  var rows=alvos.map(function(s,i){
+    var diff=getDiffDias(s.vencimento);
+    var msg=getMsgCobranca(s,diff)||'';
+    var ph=waPhone(s);
+    var label=diff>0?'D-'+diff:diff===0?'Hoje':'D+'+Math.abs(diff);
+    var lColor=diff>0?'var(--warning)':diff===0?'var(--accent-l)':'var(--danger)';
+    var safeMsg=msg.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n');
+    var waBtn=ph?'<a href="https://wa.me/'+ph+'?text='+encodeURIComponent(msg)+'" target="_blank" class="btn btn-outline btn-sm" style="color:#25D366;border-color:rgba(37,211,102,0.3);">WhatsApp</a>':'';
+    return '<div style="background:var(--dark);border-radius:8px;padding:14px;margin-bottom:10px;border-left:3px solid '+lColor+';">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
+      +'<div><span style="font-weight:700;color:var(--white);">'+escapeHtml(s.nome.split(' ')[0])+'</span>'
+      +' <span style="font-size:0.7rem;color:'+lColor+';font-family:Raleway,sans-serif;font-weight:700;">'+label+'</span></div>'
+      +'<div style="display:flex;gap:6px;">'
+      +'<button class="btn btn-primary btn-sm" onclick="(function(){var t=document.getElementById(\'cobr-msg-'+i+'\');if(navigator.clipboard)navigator.clipboard.writeText(t.value).then(function(){toast(\'Copiado!\');});else{t.select();document.execCommand(\'copy\');toast(\'Copiado!\');}})()">Copiar</button>'
+      +waBtn
+      +'</div></div>'
+      +'<textarea id="cobr-msg-'+i+'" readonly style="width:100%;background:var(--card);border:1px solid var(--border);color:var(--white-dim);border-radius:4px;padding:10px;font-size:0.72rem;line-height:1.5;resize:none;height:100px;font-family:inherit;outline:none;">'+escapeHtml(msg)+'</textarea>'
+      +'</div>';
+  }).join('');
+  var modal=document.getElementById('modal-cobranca');
+  document.getElementById('cobr-body').innerHTML=rows;
+  document.getElementById('cobr-count').textContent=alvos.length+' aluno'+(alvos.length!==1?'s':'');
+  modal.style.display='flex';
+  alvos.forEach(function(s){
+    if(!historicoCob[s.id])historicoCob[s.id]=[];
+    historicoCob[s.id].push({data:new Date().toISOString(),tipo:'cobranca_periodo'});
+  });
+  saveHistCob();
 }
 
 function showAgendaSection(){
@@ -5877,32 +5942,39 @@ function renderDashboard() {
       : 'Dia sem aulas';
   }
 
-  // Vencimentos próximos (3 dias)
-  var hoje2 = new Date(); hoje2.setHours(0,0,0,0);
+  // Vencimentos próximos (0-3 dias), excluindo já pagos e aguardando
   var vencProx = _visible(students).filter(function(s){
-    if(!s.vencimento) return false;
-    var v = new Date(s.vencimento+'T12:00:00'); v.setHours(0,0,0,0);
-    var diff = Math.ceil((v-hoje2)/86400000);
-    return diff>=0 && diff<=3;
-  }).sort(function(a,b){ return new Date(a.vencimento)-new Date(b.vencimento); });
+    if(s.status==='aguardando'||!s.vencimento||!s.plano)return false;
+    if(jaPagouNoMes(s.id))return false;
+    var diff=getDiffDias(s.vencimento);
+    return diff>=0&&diff<=3;
+  }).sort(function(a,b){return getDiffDias(a.vencimento)-getDiffDias(b.vencimento);});
 
   var vencEl = document.getElementById('dash-venc');
   if(vencEl){
     if(vencProx.length){
       var vrows = vencProx.map(function(s){
-        var v = new Date(s.vencimento+'T12:00:00'); v.setHours(0,0,0,0);
-        var diff = Math.ceil((v-hoje2)/86400000);
-        var label = diff===0?'Hoje!':diff===1?'Amanhã':'Em '+diff+' dias';
-        return '<div class="dash-row notif-danger" style="cursor:pointer;margin-bottom:4px;" onclick="openDetail(\''+s.id+'\')">'
-          +'<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">'
-          +'<div class="dash-avatar" style="background:rgba(231,76,60,0.12);">'+_initials(s.nome)+'</div>'
-          +'<div style="min-width:0;"><div class="dash-row-name">'+s.nome+'</div>'
-          +'<div class="dash-row-sub">Vence: '+fmtDate(s.vencimento)+'</div></div></div>'
-          +'<span class="badge badge-late">'+label+'</span>'
+        var diff=getDiffDias(s.vencimento);
+        var label=diff===0?'vence hoje':diff===1?'vence amanhã':'vence em '+diff+' dias';
+        var lColor=diff===0?'var(--danger)':diff===1?'var(--warning)':'var(--white-dim)';
+        var ph=waPhone(s);
+        var msg=getMsgCobranca(s,diff);
+        var waBtn=ph&&msg?'<a href="https://wa.me/'+ph+'?text='+encodeURIComponent(msg)+'" target="_blank" style="background:none;border:1px solid rgba(37,211,102,0.3);color:#25D366;border-radius:4px;font-size:0.58rem;padding:4px 8px;cursor:pointer;text-decoration:none;font-family:Raleway,sans-serif;font-weight:600;letter-spacing:0.08em;display:inline-flex;align-items:center;white-space:nowrap;">Cobrar</a>':'';
+        var val=getPlanoValorTotal(s);
+        return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">'
+          +'<div style="flex:1;min-width:0;cursor:pointer;" onclick="openDetail(\''+s.id+'\')">'
+          +'<div style="font-size:0.85rem;font-weight:600;color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escapeHtml(s.nome)+'</div>'
+          +'<div style="font-size:0.65rem;color:'+lColor+';margin-top:1px;">'+label+(val>0?' · R$ '+Math.round(val).toLocaleString('pt-BR'):'')+'</div>'
+          +'</div>'
+          +waBtn
           +'</div>';
       }).join('');
-      vencEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:8px;border-bottom:1px solid var(--border);margin-bottom:12px;">'
-        +'<div class="dash-section-title" style="margin-bottom:0;color:var(--danger);">⚠ Vencimentos em 3 dias ('+vencProx.length+')</div></div>'+vrows;
+      vencEl.innerHTML = '<div style="background:var(--card);border-radius:10px;padding:14px;margin-bottom:8px;">'
+        +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'
+        +'<div class="dash-section-title" style="margin-bottom:0;">📅 Próximos vencimentos</div>'
+        +'<span style="font-size:0.65rem;color:var(--white-dim);">'+vencProx.length+' aluno'+(vencProx.length!==1?'s':'')+'</span>'
+        +'</div>'
+        +vrows+'</div>';
     } else {
       vencEl.innerHTML = '';
     }
