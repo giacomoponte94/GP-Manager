@@ -2361,6 +2361,7 @@ function renderTable(){
     var fotoSafe=safeImageSrc(s.foto);
     var avInner=fotoSafe?'<img src="'+fotoSafe+'" alt="">':ini;
     var stClass=s.status==='em dia'?'st-ok':s.status==='atrasado'?'st-late':s.status==='aguardando'?'st-agrd':'st-warn';
+    var sid=escapeHtml(s.id);
     var sb=s.status==='em dia'?'<button class="badge badge-ok" style="cursor:pointer;border:none;" onclick="openPagamento(\''+sid+'\')">&#10003; Em dia</button>':s.status==='atrasado'?'<button class="badge badge-late" style="cursor:pointer;border:none;" onclick="openPagamento(\''+sid+'\')">&#8226; Inativo</button>':s.status==='aguardando'?'<span class="badge badge-agrd">&#9711; Aguardando</span>':'<button class="badge badge-warn" style="cursor:pointer;border:none;" onclick="openPagamento(\''+sid+'\')">&#9888; Vencendo</button>';
     var aulas=getAulasDoMes(s.id); var atag=aulas.direito>0?'<span style="font-size:0.62rem;color:var(--white-dim);margin-left:4px;">'+aulas.feitas+'/'+aulas.direito+'</span>':'';
     var hoje2=new Date();hoje2.setHours(0,0,0,0);
@@ -2375,7 +2376,6 @@ function renderTable(){
     var subParts=[getPlanNome(s.plano)||'',s.modalidade||'',_vSrch>0?'R$ '+Math.round(_vSrch).toLocaleString('pt-BR'):'',s.vencimento?'Vence '+fmtDate(s.vencimento):''];
     var sub=subParts.filter(Boolean).join(' · ');
     sub=escapeHtml(fixMojibake(sub));
-    var sid=escapeHtml(s.id);
     return '<div class="st-card st-row '+stClass+'" data-id="'+sid+'">'
       +'<div class="st-card-av">'+avInner+'</div>'
       +'<div class="st-card-body">'
