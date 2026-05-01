@@ -3865,23 +3865,31 @@ function renderFinanceiro(){
     var d=new Date(p.data+'T12:00:00');
     return isMesmoMes(d,_fnow);
   }).reduce(function(a,p){return a+(p.valor||0);},0);
-  // Em atraso = vencimento passado e não pagou no mês
+  // Em atraso = status manual 'atrasado' OU vencimento passado, sem pagamento no mês
   var at=_vsf_ativos.filter(function(s){
-    if(!s.vencimento||!s.plano)return false;
+    if(!s.plano)return false;
     var _ps=getPlano(s.plano); if(_ps&&_ps.tipo==='pacote')return false;
-    return getDiffDias(s.vencimento)<0&&!jaPagouNoMes(s.id);
+    if(jaPagouNoMes(s.id))return false;
+    return s.status==='atrasado'||(s.vencimento&&getDiffDias(s.vencimento)<0);
   }).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
-  // A vencer = vencimento futuro e não pagou no mês
+  // A vencer = vencimento futuro, não marcado atrasado manualmente, e não pagou
   var ven=_vsf_ativos.filter(function(s){
     if(!s.vencimento||!s.plano)return false;
     var _ps=getPlano(s.plano); if(_ps&&_ps.tipo==='pacote')return false;
+    if(s.status==='atrasado')return false;
     return getDiffDias(s.vencimento)>0&&!jaPagouNoMes(s.id);
   }).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
   var pct=total>0?Math.round(rec/total*100):0;
-  var ativos=_vsf_ativos.filter(function(s){return getDiffDias(s.vencimento||'9999-12-31')>=0||jaPagouNoMes(s.id);}).length;
+  var ativos=_vsf_ativos.filter(function(s){
+    if(jaPagouNoMes(s.id))return true;
+    if(s.status==='atrasado')return false;
+    return getDiffDias(s.vencimento||'9999-12-31')>=0;
+  }).length;
   var inat=_vsf_ativos.filter(function(s){
-    if(!s.vencimento)return false;
-    return getDiffDias(s.vencimento)<0&&!jaPagouNoMes(s.id);
+    if(!s.plano)return false;
+    var _ps=getPlano(s.plano); if(_ps&&_ps.tipo==='pacote')return false;
+    if(jaPagouNoMes(s.id))return false;
+    return s.status==='atrasado'||(s.vencimento&&getDiffDias(s.vencimento)<0);
   }).length;
   var freq=calcFreqMedia();
   var risco=_vsf.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;}).length;
@@ -4015,6 +4023,11 @@ function renderFinanceiro(){
         sbFin='<span class="badge badge-ok">Pago</span>';
         avBg='rgba(39,174,96,0.15)';avColor='var(--success)';
         statusLabel='<div style="font-size:0.6rem;color:var(--success);margin-top:2px;">Recebido este m\u00EAs</div>';
+      } else if(s.status==='atrasado'){
+        var diasAt2=_diff<0?Math.abs(_diff):0;
+        sbFin='<span class="badge badge-late">N\u00E3o pago</span>';
+        avBg='rgba(231,76,60,0.15)';avColor='var(--danger)';leftBorder='border-left:3px solid var(--danger);';
+        statusLabel='<div style="font-size:0.6rem;color:var(--danger);margin-top:2px;">'+(diasAt2>0?'Atrasado h\u00E1 '+diasAt2+' dia'+(diasAt2!==1?'s':''):'Inadimplente')+'</div>';
       } else if(s.vencimento&&_diff<0){
         var diasAt=Math.abs(_diff);
         sbFin='<span class="badge badge-late">N\u00E3o pago</span>';
