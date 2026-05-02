@@ -3918,9 +3918,9 @@ function renderFinanceiro(){
   var out='';
   
   out+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">';
-  out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\"recebido\")" style="cursor:pointer;border-top:2px solid var(--success);padding:14px 12px;border-radius:10px;"><div class="stat-num" style="color:var(--success);font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(rec)+'</div><div class="stat-lbl">Recebido</div></div>';
-  out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\"avencer\")" style="cursor:pointer;border-top:2px solid var(--warning);padding:14px 12px;border-radius:10px;"><div class="stat-num" style="color:var(--warning);font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(ven)+'</div><div class="stat-lbl">A vencer</div></div>';
-  out+='<div class="stat-card danger" onclick="abrirDetalheFinanceiro(\"atraso\")" style="cursor:pointer;border-top:2px solid var(--danger);padding:14px 12px;border-radius:10px;"><div class="stat-num" style="font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(at)+'</div><div class="stat-lbl">Em atraso</div></div>';
+  out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\'recebido\')" style="cursor:pointer;border-top:2px solid var(--success);padding:14px 12px;border-radius:10px;"><div class="stat-num" style="color:var(--success);font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(rec)+'</div><div class="stat-lbl">Recebido</div></div>';
+  out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\'avencer\')" style="cursor:pointer;border-top:2px solid var(--warning);padding:14px 12px;border-radius:10px;"><div class="stat-num" style="color:var(--warning);font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(ven)+'</div><div class="stat-lbl">A vencer</div></div>';
+  out+='<div class="stat-card danger" onclick="abrirDetalheFinanceiro(\'atraso\')" style="cursor:pointer;border-top:2px solid var(--danger);padding:14px 12px;border-radius:10px;"><div class="stat-num" style="font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(at)+'</div><div class="stat-lbl">Em atraso</div></div>';
   out+='</div>';
   out+='<div style="background:var(--card);padding:14px 18px;margin-bottom:8px;border-radius:8px;">';
   out+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px;">';
@@ -3985,15 +3985,15 @@ function renderFinanceiro(){
   }
   
   out+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
-  out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\"ativos\")" style="cursor:pointer;"><div class="stat-num" style="font-size:1rem;">'+ativos+'</div><div class="stat-lbl">Ativos</div></div>';
-  out+='<div class="stat-card danger" onclick="abrirDetalheFinanceiro(\"inadimplentes\")" style="cursor:pointer;"><div class="stat-num" style="font-size:1rem;">'+inat+'</div><div class="stat-lbl">Inadimplentes</div></div>';
+  out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\'ativos\')" style="cursor:pointer;"><div class="stat-num" style="font-size:1rem;">'+ativos+'</div><div class="stat-lbl">Ativos</div></div>';
+  out+='<div class="stat-card danger" onclick="abrirDetalheFinanceiro(\'inadimplentes\')" style="cursor:pointer;"><div class="stat-num" style="font-size:1rem;">'+inat+'</div><div class="stat-lbl">Inadimplentes</div></div>';
   out+='</div>';
   out+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
-  out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\"freq\")" style="cursor:pointer;"><div class="stat-num" style="font-size:1rem;">'+freq+'%</div><div class="stat-lbl">Freq. media</div></div>';
+  out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\'freq\')" style="cursor:pointer;"><div class="stat-num" style="font-size:1rem;">'+freq+'%</div><div class="stat-lbl">Freq. media</div></div>';
   out+='<div class="stat-card'+(risco>0?' warning':'')+'" onclick="abrirDetalheFinanceiro(\'risco\')" style="cursor:pointer;"><div class="stat-num" style="font-size:1rem;">'+risco+'</div><div class="stat-lbl">Em risco</div></div>';
   out+='</div>';
   out+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
-  out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\"proj\")" style="cursor:pointer;border-top:2px solid var(--accent);"><div class="stat-num" style="font-size:0.9rem;color:var(--accent-l);">'+fmt(proj)+'</div><div class="stat-lbl">Projecao prox mes</div></div>';
+  out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\'proj\')" style="cursor:pointer;border-top:2px solid var(--accent);"><div class="stat-num" style="font-size:0.9rem;color:var(--accent-l);">'+fmt(proj)+'</div><div class="stat-lbl">Projecao prox mes</div></div>';
   out+='<div class="stat-card'+(recRisco>0?' danger':'')+'" onclick="abrirDetalheFinanceiro(\'recreco\')" style="cursor:pointer;"><div class="stat-num" style="font-size:0.9rem;">'+fmt(recRisco)+'</div><div class="stat-lbl">Receita em risco</div></div>';
   out+='</div>';
   dash.innerHTML=out;
@@ -4083,7 +4083,7 @@ function renderFinanceiro(){
 }
 
 function abrirDetalheFinanceiro(tipo){
-  var titulos={recebido:'Recebido este mês',avencer:'A vencer',atraso:'Em atraso',ativos:'Ativos',inadimplentes:'Inadimplentes',freq:'Frequência por aluno',risco:'Em risco de abandono',proj:'Projeção próximo mês',recreco:'Receita em risco'};
+  var titulos={recebido:'Recebido este mês',avencer:'A vencer',atraso:'Em atraso',ativos:'Ativos',inadimplentes:'Inadimplentes',freq:'Frequência por aluno',risco:'Em risco de abandono',proj:'Projeção próximo mês',recreco:'Receita em risco',otimista:'Cenário Otimista (todos pagam)',simAtual:'Cenário Atual (em dia)',pessimista:'Cenário Pessimista (sem ausentes)'};
   var titulo=titulos[tipo]||tipo;
   var _now=new Date();
   var _vsf=_visible(students);
@@ -4177,6 +4177,36 @@ function abrirDetalheFinanceiro(tipo){
     if(!lista.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Nenhum aluno previsto.</div>');}
     lista.forEach(function(s){
       rows.push(_row(s.nome,(s.vencimento?'Vence '+fmtDate(s.vencimento):''),getPlanoValorTotal(s),'var(--accent-l)'));
+    });
+  } else if(tipo==='otimista'){
+    // Otimista = todos os ativos + inadimplentes pagam
+    var lista=_vsf.slice().sort(function(a,b){return a.nome.localeCompare(b.nome,'pt-BR');});
+    rows.push('<div style="padding:10px 12px;font-size:0.72rem;color:var(--white-dim);border-bottom:1px solid var(--border);">Cenário: todos os alunos pagam no próximo mês.</div>');
+    lista.forEach(function(s){
+      var sub=s.status==='atrasado'?'Inadimplente — incluído na projeção':(s.vencimento?'Vence '+fmtDate(s.vencimento):'');
+      var cor=s.status==='atrasado'?'var(--warning)':'var(--success)';
+      rows.push(_row(s.nome,sub,getPlanoValorTotal(s),cor));
+    });
+  } else if(tipo==='simAtual'){
+    // Atual = apenas os ativos (status != atrasado)
+    var lista=_vsf.filter(function(s){return s.status!=='atrasado';}).sort(function(a,b){return a.nome.localeCompare(b.nome,'pt-BR');});
+    rows.push('<div style="padding:10px 12px;font-size:0.72rem;color:var(--white-dim);border-bottom:1px solid var(--border);">Cenário: apenas alunos em dia / sem atraso.</div>');
+    if(!lista.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Nenhum aluno ativo.</div>');}
+    lista.forEach(function(s){
+      rows.push(_row(s.nome,(s.vencimento?'Vence '+fmtDate(s.vencimento):''),getPlanoValorTotal(s),'var(--accent-l)'));
+    });
+  } else if(tipo==='pessimista'){
+    // Pessimista = em dia, descontando ausentes
+    var ausentes=_vsf.filter(function(s){var d=getDaysAbsent(s.id);return d!==null&&d>=7&&s.status!=='atrasado';});
+    var ausenteIds=ausentes.map(function(s){return s.id;});
+    var lista=_vsf.filter(function(s){return s.status==='em dia'&&ausenteIds.indexOf(s.id)===-1;}).sort(function(a,b){return a.nome.localeCompare(b.nome,'pt-BR');});
+    rows.push('<div style="padding:10px 12px;font-size:0.72rem;color:var(--white-dim);border-bottom:1px solid var(--border);">Cenário: alunos em dia, excluindo os ausentes há mais de 7 dias.</div>');
+    if(ausentes.length){
+      rows.push('<div style="padding:8px 12px;font-size:0.72rem;color:var(--danger);border-bottom:1px solid var(--border);">Excluídos (ausentes): '+ausentes.map(function(s){return s.nome.split(' ')[0];}).join(', ')+'</div>');
+    }
+    if(!lista.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Nenhum aluno restante.</div>');}
+    lista.forEach(function(s){
+      rows.push(_row(s.nome,(s.vencimento?'Vence '+fmtDate(s.vencimento):''),getPlanoValorTotal(s),'var(--success)'));
     });
   }
   var el=document.getElementById('modal-fin-detalhe');
@@ -5048,9 +5078,9 @@ function renderSimulacao() {
   var out='';
   out+='<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Simulacao de cenarios</div>';
   out+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px;margin-bottom:12px;">';
-  out+='<div class="stat-card" style="border-top:2px solid var(--success);"><div class="stat-num" style="font-size:0.9rem;color:var(--success);">'+fmtV(sim.otimista)+'</div><div class="stat-lbl">Otimista</div><div style="font-size:0.6rem;color:var(--white-dim);margin-top:2px;">todos pagam</div></div>';
-  out+='<div class="stat-card" style="border-top:2px solid var(--accent);"><div class="stat-num" style="font-size:0.9rem;">'+fmtV(sim.recAtual)+'</div><div class="stat-lbl">Atual</div><div style="font-size:0.6rem;color:var(--white-dim);margin-top:2px;">cenario presente</div></div>';
-  out+='<div class="stat-card danger" style="border-top:2px solid var(--danger);"><div class="stat-num" style="font-size:0.9rem;">'+fmtV(sim.pessimista)+'</div><div class="stat-lbl">Pessimista</div><div style="font-size:0.6rem;color:var(--white-dim);margin-top:2px;">sem ausentes</div></div>';
+  out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\'otimista\')" style="cursor:pointer;border-top:2px solid var(--success);"><div class="stat-num" style="font-size:0.9rem;color:var(--success);">'+fmtV(sim.otimista)+'</div><div class="stat-lbl">Otimista</div><div style="font-size:0.6rem;color:var(--white-dim);margin-top:2px;">todos pagam</div></div>';
+  out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\'simAtual\')" style="cursor:pointer;border-top:2px solid var(--accent);"><div class="stat-num" style="font-size:0.9rem;">'+fmtV(sim.recAtual)+'</div><div class="stat-lbl">Atual</div><div style="font-size:0.6rem;color:var(--white-dim);margin-top:2px;">cenario presente</div></div>';
+  out+='<div class="stat-card danger" onclick="abrirDetalheFinanceiro(\'pessimista\')" style="cursor:pointer;border-top:2px solid var(--danger);"><div class="stat-num" style="font-size:0.9rem;">'+fmtV(sim.pessimista)+'</div><div class="stat-lbl">Pessimista</div><div style="font-size:0.6rem;color:var(--white-dim);margin-top:2px;">sem ausentes</div></div>';
   out+='</div>';
 
   out+='<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Indicadores de impacto</div>';
