@@ -1,0 +1,262 @@
+================================================================================
+  PERSONAL PRO — RELATÓRIO TÉCNICO PARA AUDITORIA
+  Data de geração: Maio 2026
+  Repositório: github.com/giacomoponte94/gp-manager
+================================================================================
+
+1. VISÃO GERAL
+──────────────
+Personal Pro é um Progressive Web App (PWA) para gestão de personal trainers.
+Funciona 100% no navegador, sem instalação nativa. O código-fonte completo está
+contido em um único arquivo: index.html (~374 KB, ~6.600 linhas).
+
+URL de produção: https://giacomoponte94.github.io/Personal-Pro/
+Hospedagem: GitHub Pages (estático, sem backend próprio)
+Banco de dados: Firebase Realtime Database (Google)
+Autenticação: Firebase Authentication (e-mail + senha)
+
+
+2. STACK TECNOLÓGICA
+────────────────────
+• HTML5 / CSS3 / JavaScript (ES5 compatível, sem transpilação)
+• Firebase SDK v9 (compat mode) — carregado via CDN:
+    - firebase/app
+    - firebase/auth
+    - firebase/database
+• Google Fonts (Raleway) — carregado via CDN
+• Sem frameworks JS (sem React, Vue, Angular)
+• Sem dependências npm / node_modules
+• Sem Service Worker ativo
+
+
+3. ARQUITETURA
+──────────────
+Single-file application: todo o CSS, HTML e JavaScript está inline no
+index.html. Não há build step, bundler ou compilação.
+
+Estrutura lógica do arquivo:
+  ├── <style> — estilos globais, temas claro/escuro, componentes
+  ├── <body>  — markup estático dos modais e tabs
+  └── <script>
+        ├── Constantes e variáveis globais (dados em memória)
+        ├── Firebase config e inicialização
+        ├── Funções de persistência (save*, load*)
+        ├── Funções de renderização (render*)
+        ├── Funções de negócio (calc*, get*, compute*)
+        └── Inicialização (initApp, startCloudSync)
+
+Padrão de dados: todos os dados do usuário ficam em:
+  Firebase RTDB: /users/{uid}/{coleção}
+  localStorage:  espelho local (para funcionamento offline)
+
+Sincronização: push imediato ao Firebase a cada alteração; pull ao carregar.
+
+
+4. AUTENTICAÇÃO E SEGURANÇA
+────────────────────────────
+• Login obrigatório via Firebase Auth (e-mail + senha)
+• Dados isolados por UID: cada personal acessa apenas /users/{seu_uid}/
+• Sem JWT customizado; tokens gerenciados pelo SDK do Firebase
+• Sem CORS customizado (apenas regras do Firebase)
+• Sem HTTPS próprio — depende do GitHub Pages (certificado automático)
+• Chave de API do Firebase exposta no front-end (padrão para Firebase web):
+    apiKey: "AIzaSyCrNWzOuOkfHQqJT_OEkZHFD4nsarQ-N74"
+    projectId: "gp-manager-8e604"
+    databaseURL: "https://gp-manager-8e604-default-rtdb.firebaseio.com"
+  ⚠ NOTA: a apiKey do Firebase web NÃO é um segredo — é identificador público.
+    A segurança é garantida pelas Firebase Security Rules no console do Firebase.
+• Sem armazenamento de senhas no front-end
+• Validação de inputs: escapeHtml() aplicada em todos os valores exibidos no DOM
+• Sem eval() ou execução dinâmica de código externo
+
+
+5. MODELO DE DADOS
+──────────────────
+Coleções armazenadas em /users/{uid}/:
+
+  alunos[]
+    id, nome, email, telefone, plano, modalidade (IND/DUO),
+    status (em dia | atrasado | vencendo | aguardando),
+    statusManual, vencimento, inicio, foto (URL), notas, deleted
+
+  pagamentos[]
+    id, alunoId, data (YYYY-MM-DD), valor, forma, obs, deleted, deletedAt
+
+  agendas[]
+    id, alunoId, days[], inicio (HH:MM), fim (HH:MM),
+    obs, validFrom, updatedAt, deviceId
+
+  presencas{}
+    chave: "{alunoId}_{YYYY-MM-DD}" → {status, ts, deviceId}
+
+  planos[]
+    id, nome, tipo (fixo|pacote), diasSemana, precoInd, precoExt,
+    labelExt, deleted
+
+  despesas[]
+    id, descricao, valor, data, categoria, deleted
+
+  excecoes{}
+    chave: YYYY-MM-DD → {bloqueado, motivo, adicionados[], removidos[]}
+
+  licencas[]
+    id, alunoId, inicio, fim, motivo
+
+  reposicoes[]
+    id, alunoId, data, hora, obs, usada
+
+  treinosData{}
+    chave: alunoId → {divisoes[], exercicios{}, ultimaDiv}
+
+  treinosLog[]
+    id, alunoId, divisao, data, cargas{}
+
+  historicoFin{}
+    chave: YYYY-MM → {rec, tot, alunos}
+
+  horariosConfig{}
+    chave: hora (inteiro 0-23) → dias[] (0=Dom...6=Sáb)
+
+  feriadosCustom{}
+    chave: YYYY-MM-DD → nome
+
+  diasPermitidos[]   — dias da semana permitidos (0-6)
+  reciboHeader       — string
+  reciboCorpo        — string com variáveis {nome}{plano}{valor}{data}{vencimento}
+  reciboRodape       — string
+  chavePix           — string
+
+
+6. FUNCIONALIDADES IMPLEMENTADAS
+──────────────────────────────────
+
+6.1 GESTÃO DE ALUNOS
+  • Cadastro completo: nome, telefone, e-mail, plano, modalidade, data início,
+    vencimento, foto de perfil (URL ou upload base64)
+  • Status automático calculado em tempo real:
+      - "Aguardando início" → início > hoje
+      - "Em dia"           → vencimento ≥ hoje e não atrasado manualmente
+      - "Vencendo"         → vencimento próximo (configurável)
+      - "Inadimplente"     → vencimento passado OU toggle manual
+  • Toggle rápido de status via badge clicável na lista
+  • Busca e filtro por nome, status, plano
+  • Exclusão lógica (soft delete, campo deleted=true)
+  • Ficha individual: presença, histórico de pagamentos, treino, notas, recibos
+
+6.2 AGENDA / CALENDÁRIO
+  • Visualização semanal (grade horário × dia) e diária
+  • Horários de atendimento configuráveis livremente (qualquer hora 00:00–23:00)
+  • Dias de atendimento configuráveis (Dom–Sáb)
+  • Agendamento recorrente por dias da semana com validFrom (vigência)
+  • Troca de horário: nova agenda a partir de data futura preservando histórico
+  • Exceções por data: bloqueios, aulas extras, remoções pontuais
+  • Feriados fixos (nacionais) + feriados personalizados cadastráveis
+  • Licenças de aluno (período sem aulas sem impacto no vencimento)
+  • Reposições: agendamento e controle de uso
+  • Modo rápido: marcar presença/falta de múltiplos alunos em lote
+
+6.3 PRESENÇA
+  • Registro de presença, falta ou licença por aluno × data
+  • Contagem de aulas no período de competência do plano
+    (vencimento − 1 mês → vencimento, respeitando data de início)
+  • Indicador X/Y aulas na ficha e na lista
+  • Streak de faltas consecutivas (risco de abandono)
+  • Relatório de mais faltosos do mês
+
+6.4 FINANCEIRO
+  • Modelo de análise alternável: Caixa × Competência
+  • Caixa: receita = pagamentos efetivamente recebidos no mês
+  • Competência: receita = soma dos planos de todos os alunos ativos do mês
+  • Cards clicáveis com modal de detalhe (quais alunos compõem cada número):
+      - Recebido / A vencer / Em atraso
+      - Ativos / Inadimplentes
+      - Freq. média / Em risco
+      - Projeção próx. mês / Receita em risco
+  • "Marcar como pago" por aluno com data editável no histórico
+  • Excluir pagamento incorreto (soft delete)
+  • Histórico de pagamentos por aluno (últimos 5, expansível)
+  • Barra de progresso receita recebida vs. total potencial
+  • Meta mensal com acompanhamento percentual
+  • Painel de competência (adiantamentos + alunos futuros)
+  • Registro de despesas por categoria
+  • Relatório mensal com resumo de receita, aulas, inadimplência
+  • Simulação de cenários (Otimista / Atual / Pessimista) com detalhe clicável
+  • Comparativo mensal (mês anterior vs. atual)
+  • Histórico visual em barras (últimos meses)
+  • Projeção de receita próximo mês
+
+6.5 COBRANÇA
+  • Botão "Cobrar inadimplentes" com geração de mensagem contextual WhatsApp
+  • Mensagens adaptadas por situação: recém-vencido, muito atrasado, lembrete
+  • Envio individual por aluno ou em lote
+
+6.6 TREINOS
+  • Editor de treino por divisão (A, B, C... personalizável)
+  • Biblioteca de exercícios por divisão
+  • Registro de cargas por treino com histórico
+  • Log de treinos realizados com data
+
+6.7 COMPROVANTE DE PAGAMENTO
+  • Geração de recibo em texto formatado
+  • Variáveis: {nome} {plano} {valor} {data} {vencimento}
+  • Data do comprovante = data do último pagamento registrado (não a data atual)
+  • Cabeçalho, corpo e rodapé customizáveis nas configurações
+  • Envio direto pelo WhatsApp ou cópia para área de transferência
+
+6.8 CONFIGURAÇÕES
+  • Planos de atendimento: nome, tipo (mensal/avulso), dias/semana, preços
+  • Dias de atendimento (quais dias da semana)
+  • Horários de atendimento livres: adicionar/remover qualquer hora 00:00–23:00
+  • Feriados personalizados com data e nome
+  • Customização do comprovante de pagamento
+  • Chave Pix
+  • Tema claro / escuro
+
+6.9 BACKUP E SINCRONIZAÇÃO
+  • Sincronização em tempo real via Firebase Realtime Database
+  • Backup automático local (localStorage, 3 snapshots rotacionais)
+  • Exportação manual (JSON) com todos os dados
+  • Importação de backup JSON com validação
+  • Histórico de sincronização com timestamps e tamanho
+
+6.10 NOTIFICAÇÕES INTERNAS
+  • Painel de ações recomendadas (alunos ausentes, inadimplentes, vencendo)
+  • Badge de notificação no menu com contagem de pendências
+  • Mensagens de cobrança sugeridas por contexto
+
+
+7. PONTOS DE ATENÇÃO PARA AUDITORIA
+──────────────────────────────────────
+① Firebase API Key visível no código-fonte (comportamento esperado para Firebase
+  web SDK — a segurança depende das Security Rules configuradas no console).
+  Recomendação: verificar se as Rules estão restritas por UID autenticado.
+
+② Sem Content Security Policy (CSP) definido — scripts e estilos inline.
+
+③ Fotos de alunos podem ser armazenadas como base64 no Firebase RTDB, podendo
+  crescer o banco. Recomendável migrar para Firebase Storage em produção.
+
+④ Sem rate limiting de autenticação além do que o Firebase oferece nativamente.
+
+⑤ Export JSON inclui todos os dados do usuário sem criptografia adicional.
+
+⑥ Sem logs de auditoria de ações do usuário (quem excluiu o quê e quando).
+  Exclusões usam soft delete (deleted=true), mas sem registro de autoria.
+
+⑦ Código único em index.html facilita auditoria completa mas dificulta
+  manutenção de longo prazo. Recomendável modularizar antes de escalar.
+
+
+8. MÉTRICAS DO CÓDIGO
+──────────────────────
+  Linhas totais:        ~6.644
+  Funções JavaScript:   ~150 funções nomeadas
+  Commits no repositório: 50+
+  Tamanho do arquivo:   ~374 KB
+  Dependências externas: Firebase SDK, Google Fonts (ambas via CDN)
+
+
+================================================================================
+  Arquivo gerado para fins de auditoria técnica.
+  Código-fonte completo: index.html no repositório acima.
+================================================================================
