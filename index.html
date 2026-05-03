@@ -4286,7 +4286,8 @@ function abrirMeta(){
 
 function gerarRecibo(id){
   var s=students.find(function(x){return x.id===id&&!x.deleted;}); if(!s)return;
-  var hoje=new Date().toLocaleDateString('pt-BR');
+  var _ultPag=pagamentos.filter(function(p){return !p.deleted&&p.alunoId===id;}).sort(function(a,b){return b.data.localeCompare(a.data);});
+  var hoje=_ultPag.length?new Date(_ultPag[0].data+'T12:00:00').toLocaleDateString('pt-BR'):new Date().toLocaleDateString('pt-BR');
   var sep='----------------------------';
   var lines2=[];
   if(reciboHeader)lines2.push(reciboHeader);
