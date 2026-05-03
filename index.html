@@ -3441,7 +3441,7 @@ function openDetail(id){
   var btnTreino=document.createElement('button');
   btnTreino.className='btn btn-outline';
   btnTreino.style.cssText='flex:1;height:40px;';
-  btnTreino.textContent='\uDCCB Treino';
+  btnTreino.textContent='\uD83D\uDCCB Treino';
   btnTreino.onclick=function(){cancelarCadastro();
   var md=document.getElementById('modal-detail');if(md)md.style.display='none';openTreinoAluno(s.id);};
   actDiv2.appendChild(btnTreino);
@@ -4857,7 +4857,7 @@ function renderTreinoEditor(sid) {
 
   if(!t.divisoes.length) {
     out='<div style="text-align:center;padding:24px;color:var(--white-dim);">'
-      +'<div style="font-size:2rem;margin-bottom:8px;">\uDCCB</div>'
+      +'<div style="font-size:2rem;margin-bottom:8px;">\uD83D\uDCCB</div>'
       +'<p style="font-size:0.85rem;">Nenhuma divisao cadastrada.</p></div>';
   } else {
     t.divisoes.forEach(function(div,di) {
@@ -5156,7 +5156,7 @@ function renderSimulacao() {
   if(freq.anterior>0) {
     var cor=freq.diff>=0?'var(--success)':'var(--danger)';
     out+='<div style="display:flex;justify-content:space-between;align-items:center;background:var(--card);border:1px solid var(--border);padding:10px 14px;">'
-      +'<span style="font-size:0.78rem;color:var(--white-dim);">\uDCC9 Frequencia mes anterior vs atual</span>'
+      +'<span style="font-size:0.78rem;color:var(--white-dim);">\uD83D\uDCC9 Frequencia mes anterior vs atual</span>'
       +'<span style="font-size:0.88rem;font-weight:700;color:'+cor+';">'+(freq.diff>=0?'+':'')+freq.diff+'%</span></div>';
   }
   out+='</div>';
@@ -5205,7 +5205,7 @@ function getPrioridadeAcao() {
         titulo:'Reengajar: '+x.s.nome,
         detalhe:'Ausente ha '+dias+' dias \u00B7 R$ '+Math.round(getPlanoValorTotal(x.s)).toLocaleString('pt-BR')+' em risco',
         cor:'var(--warning)',
-        icon:'\uDC4B',
+        icon:'\uD83D\uDC4B',
         cta:ph?{lbl:'Enviar mensagem',fn:'reengajarAluno("'+x.s.id+'")'}:null
       });
     });
@@ -5262,7 +5262,7 @@ function renovarComMensagem(sid) {
   renovarAluno(sid);
   var ph=waPhone(s); if(!ph)return;
   var msgs=[
-    'Oi '+s.nome.split(' ')[0]+'! Seu plano foi renovado. Continuamos firmes nos treinos! \uDCAA',
+    'Oi '+s.nome.split(' ')[0]+'! Seu plano foi renovado. Continuamos firmes nos treinos! \uD83D\uDCAA',
     'Oi '+s.nome.split(' ')[0]+'! Plano renovado. Tenho apenas mais 1 hor\u00E1rio dispon\u00EDvel no seu dia. Ja ta garantido pra voce!',
     'Oi '+s.nome.split(' ')[0]+'! Renovacao confirmada! Cada treino e um investimento na sua saude. Ate la! '
   ];
@@ -5275,7 +5275,7 @@ function renderAutomacao() {
   var acoes=getPrioridadeAcao();
   if(!acoes.length){panel.innerHTML='';return;}
 
-  var out='<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">\uDD16 Acoes recomendadas agora</div>';
+  var out='<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">\uD83D\uDD16 Acoes recomendadas agora</div>';
   acoes.slice(0,6).forEach(function(a){
     var ctaHtml='';
     if(a.cta) ctaHtml='<button class="btn btn-outline btn-sm" style="font-size:0.58rem;height:28px;white-space:nowrap;" onclick="'+a.cta.fn+'">'+a.cta.lbl+'</button>';
