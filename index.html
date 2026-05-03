@@ -123,8 +123,7 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
 .cal-slot-cell{position:relative;height:52px;border-bottom:1px solid rgba(74,127,165,0.08);border-right:1px solid rgba(74,127,165,0.06);background:var(--card);cursor:pointer;}
 .cal-slot-cell.today-col{background:#0d2340;}
 .cal-slot-cell:hover,.day-slot-content:hover{background:rgba(74,127,165,0.08);}
-.slot-bloqueado{background:repeating-linear-gradient(45deg,rgba(74,127,165,0.04),rgba(74,127,165,0.04) 4px,rgba(74,127,165,0.10) 4px,rgba(74,127,165,0.10) 8px);cursor:default;}
-.slot-bloqueado .cal-event{opacity:1!important;}
+.slot-bloqueado{background:repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(0,0,0,0.08) 4px,rgba(0,0,0,0.08) 8px);cursor:default;opacity:0.4;}
 .cal-event{position:absolute;top:2px;right:2px;bottom:2px;left:2px;padding:3px 4px;font-size:0.58rem;font-weight:600;overflow:hidden;cursor:pointer;border-left:2px solid;border-radius:2px;}
 .cal-event.status-ok{background:rgba(46,204,113,0.15);border-color:var(--success);color:var(--success);}
 .cal-event.status-late{background:rgba(231,76,60,0.15);border-color:var(--danger);color:var(--danger);}
