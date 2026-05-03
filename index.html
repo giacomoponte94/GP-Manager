@@ -3517,9 +3517,9 @@ function renderWeek(){
     hdr.onclick=function(){currentDay=new Date(dCopy);setView('dia');};
     grid.appendChild(hdr);
   });
-  HOURS.forEach(function(h){
+  Object.keys(horariosConfig).map(Number).sort(function(a,b){return a-b;}).forEach(function(h){
     var cfg=horariosConfig[h];
-    var hasAnyDay=cfg&&days.some(function(d){return cfg.indexOf(d.getDay())!==-1;});
+    var hasAnyDay=cfg&&cfg.length>0&&days.some(function(d){return cfg.indexOf(d.getDay())!==-1;});
     if(!hasAnyDay) return;
     var tl=document.createElement('div');tl.className='cal-time-label';
     tl.textContent=String(h).padStart(2,'0')+':00';
@@ -3564,7 +3564,7 @@ function renderDay(){
   if(feriadoNome){
     tl.innerHTML='<div style="background:rgba(243,156,18,0.08);border-left:3px solid var(--warning);padding:10px 16px;margin-bottom:12px;font-size:0.8rem;color:var(--warning);">&#127956; Feriado: '+feriadoNome+' — agenda fechada</div>';
   }
-  HOURS.filter(function(h){ return isHoraPermitida(h,dow); }).forEach(function(h){
+  Object.keys(horariosConfig).map(Number).sort(function(a,b){return a-b;}).filter(function(h){ return isHoraPermitida(h,dow); }).forEach(function(h){
     var slot=document.createElement('div');slot.className='day-slot'+(feriadoNome?' feriado-col':'');
     var timeDiv=document.createElement('div');timeDiv.className='day-time';
     timeDiv.textContent=String(h).padStart(2,'0')+':00';
@@ -4445,7 +4445,7 @@ function renderConfiguracoes() {
   out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Hor\u00E1rios de atendimento</div>';
   out += '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:14px;">Defina quais hor\u00E1rios est\u00E3o dispon\u00EDveis e em quais dias:</div>';
   var DNAMES7H = ['Dom','Seg','Ter','Qua','Qui','Sex','S\u00E1b'];
-  var configuredHours = HOURS.filter(function(h){ return horariosConfig[h] && horariosConfig[h].length > 0; });
+  var configuredHours = Object.keys(horariosConfig).map(Number).sort(function(a,b){return a-b;}).filter(function(h){ return horariosConfig[h] && horariosConfig[h].length > 0; });
   configuredHours.forEach(function(h){
     var diasH = horariosConfig[h] || [];
     out += '<div class="hcfg-row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;background:var(--card);padding:10px 12px;border-radius:8px;">';
@@ -4465,16 +4465,12 @@ function renderConfiguracoes() {
     out += '<button class="hcfg-del-btn" data-h="'+h+'" style="background:none;border:1px solid var(--danger);color:var(--danger);width:26px;height:26px;border-radius:4px;cursor:pointer;flex-shrink:0;">\u2715</button>';
     out += '</div>';
   });
-  // Add hour row
-  var usedHours = configuredHours;
-  var availHoursToAdd = HOURS.filter(function(h){ return usedHours.indexOf(h) === -1; });
-  out += '<div style="display:flex;gap:8px;margin-top:8px;">';
-  out += '<select id="hcfg-add-sel" class="filter-select" style="flex:1;margin:0;padding:10px 12px;">';
-  out += '<option value="">Selecionar hor\u00E1rio...</option>';
-  availHoursToAdd.forEach(function(h){ out += '<option value="'+h+'">'+String(h).padStart(2,'0')+':00</option>'; });
-  out += '</select>';
+  // Add hour row — free time input (any hour 00-23)
+  out += '<div style="display:flex;gap:8px;margin-top:8px;align-items:center;">';
+  out += '<input type="time" id="hcfg-add-inp" step="3600" placeholder="HH:MM" style="flex:1;margin:0;padding:10px 12px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.9rem;height:42px;box-sizing:border-box;">';
   out += '<button class="btn btn-outline" style="height:42px;padding:0 16px;white-space:nowrap;" onclick="adicionarHorarioCfg()">+ Adicionar</button>';
   out += '</div>';
+  out += '<div style="font-size:0.65rem;color:var(--white-dim);margin-top:6px;">Digite qualquer hor\u00e1rio (ex: 22:00, 06:30)</div>';
   out += '</div>';
 
 
@@ -6534,12 +6530,14 @@ function adicionarFeriadoCfg() {
 }
 
 function adicionarHorarioCfg() {
-  var sel = document.getElementById('hcfg-add-sel');
-  if (!sel || !sel.value) return;
-  var h = parseInt(sel.value);
-  if (!horariosConfig[h]) {
-    horariosConfig[h] = diasPermitidos.slice();
-  }
+  var inp = document.getElementById('hcfg-add-inp');
+  if (!inp || !inp.value) { toast('Selecione um horário'); return; }
+  var parts = inp.value.split(':');
+  var h = parseInt(parts[0]);
+  if (isNaN(h) || h < 0 || h > 23) { toast('Horário inválido'); return; }
+  if (horariosConfig[h] !== undefined) { toast('Horário já adicionado'); return; }
+  horariosConfig[h] = diasPermitidos.slice();
+  inp.value = '';
   saveHorariosConfig();
   renderConfiguracoes();
   renderCalendar();
