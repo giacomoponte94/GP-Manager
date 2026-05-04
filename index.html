@@ -1769,6 +1769,41 @@ function removeLicenca(sid, licId) {
 var diasPermitidos = [1,2,3,4,5,6];
 var horariosConfig = {}; // { hour: [dow, dow, ...] }  e.g. { 5:[1,4], 6:[1,2,3,4,5,6] }
 var chavePix = '';
+function getCfgAvisoDias(){ return parseInt(localStorage.getItem('gp-aviso-dias'))||5; }
+function getCfgMaxSlot()  { return parseInt(localStorage.getItem('gp-max-slot'))||1; }
+function getCfgAulaDur()  { return parseInt(localStorage.getItem('gp-aula-dur'))||60; }
+function getCfgPerfil()   { try{return JSON.parse(localStorage.getItem('gp-perfil'))||{};}catch(e){return {};} }
+function saveCfgPerfil(p) { localStorage.setItem('gp-perfil',JSON.stringify(p)); }
+var _cfgAba = 'planos';
+function setCfgAba(aba){ _cfgAba=aba; renderConfiguracoes(); }
+function salvarAvisoDias(){
+  var v=parseInt(document.getElementById('cfg-aviso-dias').value);
+  if(isNaN(v)||v<1||v>30){ toast('Valor inválido (1–30)'); return; }
+  localStorage.setItem('gp-aviso-dias',v);
+  toast('Salvo!'); renderConfiguracoes();
+}
+function salvarMetaCfg(){
+  var v=parseFloat(document.getElementById('cfg-meta-inp').value);
+  if(isNaN(v)||v<0){ toast('Valor inválido'); return; }
+  localStorage.setItem('gp-meta',v);
+  toast('Meta salva!'); renderFinanceiro(); renderConfiguracoes();
+}
+function salvarPerfil(){
+  var p={
+    nome: (document.getElementById('cfg-pf-nome')||{}).value||'',
+    telefone: (document.getElementById('cfg-pf-telefone')||{}).value||'',
+    instagram: (document.getElementById('cfg-pf-instagram')||{}).value||'',
+    cref: (document.getElementById('cfg-pf-cref')||{}).value||''
+  };
+  saveCfgPerfil(p);
+  toast('Perfil salvo!');
+}
+function limparDadosLocais(){
+  if(!confirm('Limpar cache local? Os dados na nuvem não serão afetados.')) return;
+  ['gp-aviso-dias','gp-max-slot','gp-aula-dur','gp-perfil','gp-fin-modo','gp-meta','gp-pix','gp-recibo-header','gp-recibo-rodape','gp-recibo-corpo'].forEach(function(k){ localStorage.removeItem(k); });
+  toast('Dados locais limpos. Recarregando…');
+  setTimeout(function(){ location.reload(); }, 1200);
+}
 function loadChavePix(){ try{ chavePix=localStorage.getItem('gp-pix')||''; }catch(e){} }
 function saveChavePix(){ try{ localStorage.setItem('gp-pix',chavePix); }catch(e){} }
 
@@ -2322,7 +2357,7 @@ function computeStatus(s) {
   var venc=new Date(s.vencimento+'T12:00:00');
   var diff=Math.ceil((venc-hoje)/(1000*60*60*24));
   if(diff<0)  return 'atrasado';
-  if(diff<=5) return 'vencendo';
+  if(diff<=getCfgAvisoDias()) return 'vencendo';
   return 'em dia';
 }
 function refreshAll(){
@@ -3028,7 +3063,7 @@ function saveStudent(){
         var ocupados=agsRef.filter(function(a){
           return a.days.includes(d) && parseInt(a.inicio.split(':')[0])===h;
         });
-        if(ocupados.length>=2){
+        if(ocupados.length>=getCfgMaxSlot()+1){
           var nomes=ocupados.map(function(a){var s=students.find(function(x){return x.id===a.alunoId&&!x.deleted;});return s?s.nome.split(' ')[0]:'?';});
           conflitos.push(DAY_NAMES[d]+' '+t+' \u2014 hor\u00e1rio lotado ('+nomes.join(' + ')+')');
         } else if(ocupados.length===1 && obj.modalidade!=='Duo'){
@@ -4105,10 +4140,10 @@ function renderFinanceiro(){
         avBg='rgba(231,76,60,0.15)';avColor='var(--danger)';leftBorder='border-left:3px solid var(--danger);';
         statusLabel='<div style="font-size:0.6rem;color:var(--danger);margin-top:2px;">Atrasado h\u00E1 '+diasAt+' dia'+(diasAt!==1?'s':'')+'</div>';
       } else if(s.vencimento){
-        var cor5=_diff<=5?'var(--warning)':'var(--white-dim)';
-        sbFin=_diff<=5?'<span class="badge badge-warn">Vencendo</span>':'<span class="badge badge-ok">Em dia</span>';
-        avBg=_diff<=5?'rgba(243,156,18,0.15)':'rgba(39,174,96,0.15)';
-        avColor=_diff<=5?'var(--warning)':'var(--success)';
+        var cor5=_diff<=getCfgAvisoDias()?'var(--warning)':'var(--white-dim)';
+        sbFin=_diff<=getCfgAvisoDias()?'<span class="badge badge-warn">Vencendo</span>':'<span class="badge badge-ok">Em dia</span>';
+        avBg=_diff<=getCfgAvisoDias()?'rgba(243,156,18,0.15)':'rgba(39,174,96,0.15)';
+        avColor=_diff<=getCfgAvisoDias()?'var(--warning)':'var(--success)';
         statusLabel='<div style="font-size:0.6rem;color:'+cor5+';margin-top:2px;">Vence em '+_diff+' dia'+(Math.abs(_diff)!==1?'s':'')+'</div>';
       } else {
         sbFin='<span class="badge badge-ok">Em dia</span>';
@@ -4427,199 +4462,282 @@ function renderConfiguracoes() {
   var body = document.getElementById('config-body');
   var out = '';
 
-  out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Seus planos</div>';
+  // --- Tab navigation ---
+  var tabs = [
+    {id:'planos',   icon:'📋', label:'Planos'},
+    {id:'agenda',   icon:'📅', label:'Agenda'},
+    {id:'financeiro',icon:'💰',label:'Financeiro'},
+    {id:'perfil',   icon:'👤', label:'Perfil'},
+    {id:'dados',    icon:'💾', label:'Dados'},
+  ];
+  out += '<div style="display:flex;gap:4px;margin-bottom:18px;background:var(--dark);border-radius:8px;padding:4px;">';
+  tabs.forEach(function(t){
+    var active = _cfgAba === t.id;
+    out += '<button onclick="setCfgAba(\''+t.id+'\')" style="flex:1;padding:7px 2px;border:none;border-radius:6px;font-size:0.55rem;font-family:Raleway,sans-serif;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;cursor:pointer;transition:background 0.15s;display:flex;flex-direction:column;align-items:center;gap:2px;'
+      +(active?'background:var(--accent);color:#fff;':'background:none;color:var(--white-dim);')+'\">'
+      +'<span style="font-size:0.9rem;">'+t.icon+'</span>'
+      +'<span>'+t.label+'</span></button>';
+  });
+  out += '</div>';
 
-  _visible(PLANOS).forEach(function(p, idx) {
-    var tipoLabel = p.tipo==='pacote' ? '\uD83D\uDCE6 Aula Avulsa' : '\uD83D\uDCC5 Mensal';
-    var tipoColor = p.tipo==='pacote' ? 'var(--warning)' : 'var(--accent-l)';
-    var borderCol = p.tipo==='pacote' ? 'var(--warning)' : 'var(--accent)';
-    out += '<div class="plano-card" data-idx="'+idx+'" style="background:var(--card);padding:14px 16px;margin-bottom:8px;border-left:3px solid '+borderCol+';border-radius:0 8px 8px 0;cursor:pointer;" onclick="editarPlano('+idx+')">';
-    out += '<div style="display:flex;justify-content:space-between;align-items:center;">';
-    out += '<div>';
-    out += '<div style="font-weight:600;font-size:0.9rem;color:var(--white);">'+p.nome+'</div>';
-    out += '<div style="font-size:0.72rem;margin-top:3px;color:'+tipoColor+';">'+tipoLabel;
-    if(p.tipo !== 'pacote') out += ' \u00B7 '+p.diasSemana+'x/sem';
-    out += '</div>';
-    out += '<div style="font-size:0.72rem;color:var(--white-dim);margin-top:2px;">Individual: R$ '+p.precoInd;
-    if(p.precoExt) out += ' &nbsp; '+(p.labelExt||'Duo')+': R$ '+p.precoExt;
-    out += '</div>';
-    out += '</div>';
-    out += '<div style="display:flex;gap:6px;">';
-    out += '<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();excluirPlano('+idx+')" style="color:var(--danger);border-color:var(--danger);">\u2715</button>';
-    out += '</div>';
+  // ====== PLANOS ======
+  if(_cfgAba === 'planos'){
+    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Seus planos</div>';
+    _visible(PLANOS).forEach(function(p, idx) {
+      var tipoLabel = p.tipo==='pacote' ? '📦 Aula Avulsa' : '📅 Mensal';
+      var tipoColor = p.tipo==='pacote' ? 'var(--warning)' : 'var(--accent-l)';
+      var borderCol = p.tipo==='pacote' ? 'var(--warning)' : 'var(--accent)';
+      out += '<div class="plano-card" data-idx="'+idx+'" style="background:var(--card);padding:14px 16px;margin-bottom:8px;border-left:3px solid '+borderCol+';border-radius:0 8px 8px 0;cursor:pointer;" onclick="editarPlano('+idx+')">';
+      out += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+      out += '<div><div style="font-weight:600;font-size:0.9rem;color:var(--white);">'+p.nome+'</div>';
+      out += '<div style="font-size:0.72rem;margin-top:3px;color:'+tipoColor+';">'+tipoLabel;
+      if(p.tipo !== 'pacote') out += ' · '+p.diasSemana+'x/sem';
+      out += '</div>';
+      out += '<div style="font-size:0.72rem;color:var(--white-dim);margin-top:2px;">Individual: R$ '+p.precoInd;
+      if(p.precoExt) out += ' &nbsp; '+(p.labelExt||'Duo')+': R$ '+p.precoExt;
+      out += '</div></div>';
+      out += '<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();excluirPlano('+idx+')" style="color:var(--danger);border-color:var(--danger);">✕</button>';
+      out += '</div></div>';
+    });
+    out += '<button class="btn btn-outline" style="width:100%;height:40px;margin-top:8px;" onclick="novoPlanocfg()">+ Novo plano</button>';
+
+    out += '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">';
+    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:12px;">Alertas</div>';
+    out += '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:8px;">Quantos dias antes do vencimento mostrar o aviso “Vencendo”:</div>';
+    out += '<div style="display:flex;gap:8px;align-items:center;">';
+    out += '<input type="number" id="cfg-aviso-dias" min="1" max="30" value="'+getCfgAvisoDias()+'" style="width:70px;margin:0;padding:10px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.9rem;text-align:center;">';
+    out += '<span style="font-size:0.78rem;color:var(--white-dim);">dias antes</span>';
+    out += '<button class="btn btn-primary btn-sm" style="margin-left:auto;" onclick="salvarAvisoDias()">Salvar</button>';
     out += '</div></div>';
-  });
+  }
 
-  out += '<button class="btn btn-outline" style="width:100%;height:40px;margin-top:8px;" onclick="novoPlanocfg()">+ Novo plano</button>';
-
-  
-  out += '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">';
-  out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Dias de atendimento</div>';
-  out += '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:12px;">Selecione os dias em que voc\u00ea aceita agendamentos:</div>';
-  var DNAMES7 = ['Dom','Seg','Ter','Qua','Qui','Sex','S\u00e1b'];
-  out += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px;">';
-  [0,1,2,3,4,5,6].forEach(function(d) {
-    var sel = diasPermitidos.indexOf(d) !== -1;
-    out += '<button class="cfg-dia-btn" data-dow="'+d+'" style="'
-      + 'height:48px;border:1px solid '+(sel?'var(--accent)':'var(--border)')+';'
-      + 'background:'+(sel?'var(--accent)':'none')+';'
-      + 'color:'+(sel?'#fff':'var(--white-dim)')+';'
-      + 'font-family:Raleway,sans-serif;font-size:0.55rem;font-weight:700;'
-      + 'letter-spacing:0.08em;text-transform:uppercase;cursor:pointer;border-radius:4px;">'
-      + DNAMES7[d]+'</button>';
-  });
-  out += '</div></div>';
-
-  // Horários de atendimento
-  out += '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">';
-  out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Hor\u00E1rios de atendimento</div>';
-  out += '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:14px;">Defina quais hor\u00E1rios est\u00E3o dispon\u00EDveis e em quais dias:</div>';
-  var DNAMES7H = ['Dom','Seg','Ter','Qua','Qui','Sex','S\u00E1b'];
-  var configuredHours = Object.keys(horariosConfig).map(Number).sort(function(a,b){return a-b;}).filter(function(h){ return horariosConfig[h] && horariosConfig[h].length > 0; });
-  configuredHours.forEach(function(h){
-    var diasH = horariosConfig[h] || [];
-    out += '<div class="hcfg-row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;background:var(--card);padding:10px 12px;border-radius:8px;">';
-    out += '<span style="font-family:Raleway,sans-serif;font-weight:700;font-size:0.82rem;color:var(--white);min-width:42px;">'+String(h).padStart(2,'0')+':00</span>';
-    out += '<div style="display:flex;gap:4px;flex-wrap:wrap;flex:1;">';
-    [0,1,2,3,4,5,6].forEach(function(d){
-      var sel = diasH.indexOf(d) !== -1;
-      out += '<button class="hcfg-day-btn" data-h="'+h+'" data-d="'+d+'" style="'
-        +'height:28px;width:32px;border:1px solid '+(sel?'var(--accent)':'var(--border)')+';'
-        +'background:'+(sel?'var(--accent)':'none')+';'
-        +'color:'+(sel?'#fff':'var(--white-dim)')+';'
-        +'font-family:Raleway,sans-serif;font-size:0.5rem;font-weight:700;'
-        +'letter-spacing:0.05em;text-transform:uppercase;cursor:pointer;border-radius:3px;">'
-        +DNAMES7H[d]+'</button>';
+  // ====== AGENDA ======
+  if(_cfgAba === 'agenda'){
+    var DNAMES7 = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Dias de atendimento</div>';
+    out += '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:12px;">Dias em que você aceita agendamentos:</div>';
+    out += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:20px;">';
+    [0,1,2,3,4,5,6].forEach(function(d) {
+      var sel = diasPermitidos.indexOf(d) !== -1;
+      out += '<button class="cfg-dia-btn" data-dow="'+d+'" style="'
+        + 'height:48px;border:1px solid '+(sel?'var(--accent)':'var(--border)')+';'
+        + 'background:'+(sel?'var(--accent)':'none')+';color:'+(sel?'#fff':'var(--white-dim)')+';'
+        + 'font-family:Raleway,sans-serif;font-size:0.55rem;font-weight:700;'
+        + 'letter-spacing:0.08em;text-transform:uppercase;cursor:pointer;border-radius:4px;">'
+        + DNAMES7[d]+'</button>';
     });
     out += '</div>';
-    out += '<button class="hcfg-del-btn" data-h="'+h+'" style="background:none;border:1px solid var(--danger);color:var(--danger);width:26px;height:26px;border-radius:4px;cursor:pointer;flex-shrink:0;">\u2715</button>';
-    out += '</div>';
-  });
-  // Add hour row — free time input (any hour 00-23)
-  out += '<div style="display:flex;gap:8px;margin-top:8px;align-items:center;">';
-  out += '<input type="time" id="hcfg-add-inp" step="3600" placeholder="HH:MM" style="flex:1;margin:0;padding:10px 12px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.9rem;height:42px;box-sizing:border-box;">';
-  out += '<button class="btn btn-outline" style="height:42px;padding:0 16px;white-space:nowrap;" onclick="adicionarHorarioCfg()">+ Adicionar</button>';
-  out += '</div>';
-  out += '<div style="font-size:0.65rem;color:var(--white-dim);margin-top:6px;">Digite qualquer hor\u00e1rio (ex: 22:00, 06:30)</div>';
-  out += '</div>';
 
-
-  out += '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">';
-  out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:12px;"> Feriados personalizados</div>';
-  var ferKeys = Object.keys(feriadosCustom).sort();
-  if (ferKeys.length) {
-    ferKeys.forEach(function(k){
-      var dt = new Date(k+'T12:00:00').toLocaleDateString('pt-BR');
-      out += '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:var(--card);border-radius:8px;margin-bottom:6px;">';
-      out += '<div><div style="font-size:0.85rem;color:var(--white);">'+feriadosCustom[k]+'</div>';
-      out += '<div style="font-size:0.68rem;color:var(--white-dim);">'+dt+'</div></div>';
-      out += '<button class="btn btn-danger btn-sm del-fer-btn" data-k="'+k+'">\u2715</button>';
+    out += '<div style="padding-top:16px;border-top:1px solid var(--border);margin-bottom:20px;">';
+    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Horários de atendimento</div>';
+    out += '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:14px;">Defina os horários disponíveis e em quais dias:</div>';
+    var DNAMES7H = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+    var configuredHours = Object.keys(horariosConfig).map(Number).sort(function(a,b){return a-b;}).filter(function(h){ return horariosConfig[h] && horariosConfig[h].length > 0; });
+    configuredHours.forEach(function(h){
+      var diasH = horariosConfig[h] || [];
+      out += '<div class="hcfg-row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;background:var(--card);padding:10px 12px;border-radius:8px;">';
+      out += '<span style="font-family:Raleway,sans-serif;font-weight:700;font-size:0.82rem;color:var(--white);min-width:42px;">'+String(h).padStart(2,'0')+':00</span>';
+      out += '<div style="display:flex;gap:4px;flex-wrap:wrap;flex:1;">';
+      [0,1,2,3,4,5,6].forEach(function(d){
+        var sel = diasH.indexOf(d) !== -1;
+        out += '<button class="hcfg-day-btn" data-h="'+h+'" data-d="'+d+'" style="'
+          +'height:28px;width:32px;border:1px solid '+(sel?'var(--accent)':'var(--border)')+';'
+          +'background:'+(sel?'var(--accent)':'none')+';color:'+(sel?'#fff':'var(--white-dim)')+';'
+          +'font-family:Raleway,sans-serif;font-size:0.5rem;font-weight:700;'
+          +'letter-spacing:0.05em;text-transform:uppercase;cursor:pointer;border-radius:3px;">'
+          +DNAMES7H[d]+'</button>';
+      });
+      out += '</div>';
+      out += '<button class="hcfg-del-btn" data-h="'+h+'" style="background:none;border:1px solid var(--danger);color:var(--danger);width:26px;height:26px;border-radius:4px;cursor:pointer;flex-shrink:0;">✕</button>';
       out += '</div>';
     });
-  } else {
-    out += '<p style="font-size:0.78rem;color:var(--white-dim);margin-bottom:12px;">Nenhum feriado personalizado.</p>';
+    out += '<div style="display:flex;gap:8px;margin-top:8px;align-items:center;">';
+    out += '<input type="time" id="hcfg-add-inp" step="3600" placeholder="HH:MM" style="flex:1;margin:0;padding:10px 12px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.9rem;height:42px;box-sizing:border-box;">';
+    out += '<button class="btn btn-outline" style="height:42px;padding:0 16px;white-space:nowrap;" onclick="adicionarHorarioCfg()">+ Adicionar</button>';
+    out += '</div>';
+    out += '<div style="font-size:0.65rem;color:var(--white-dim);margin-top:6px;">Digite qualquer horário (ex: 22:00, 06:30)</div>';
+    out += '</div>';
+
+    out += '<div style="padding-top:16px;border-top:1px solid var(--border);margin-bottom:20px;">';
+    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:12px;">Regras de agendamento</div>';
+    out += '<div style="display:flex;flex-direction:column;gap:12px;">';
+    // Duration
+    out += '<div><div style="font-size:0.72rem;color:var(--white-dim);margin-bottom:6px;">Duração padrão da aula</div>';
+    out += '<div style="display:flex;gap:6px;">';
+    [30,45,60,90].forEach(function(m){
+      var sel = getCfgAulaDur()===m;
+      out += '<button class="cfg-dur-btn" data-min="'+m+'" style="flex:1;height:36px;border:1px solid '+(sel?'var(--accent)':'var(--border)')+';background:'+(sel?'var(--accent)':'none')+';color:'+(sel?'#fff':'var(--white-dim)')+';border-radius:4px;font-size:0.8rem;cursor:pointer;">'+m+'min</button>';
+    });
+    out += '</div></div>';
+    // Max per slot
+    out += '<div><div style="font-size:0.72rem;color:var(--white-dim);margin-bottom:6px;">Máx. alunos por horário</div>';
+    out += '<div style="display:flex;gap:6px;">';
+    [1,2,3,4].forEach(function(n){
+      var sel = getCfgMaxSlot()===n;
+      out += '<button class="cfg-slot-btn" data-max="'+n+'" style="flex:1;height:36px;border:1px solid '+(sel?'var(--accent)':'var(--border)')+';background:'+(sel?'var(--accent)':'none')+';color:'+(sel?'#fff':'var(--white-dim)')+';border-radius:4px;font-size:0.8rem;cursor:pointer;">'+n+(n===4?'+':'')+'</button>';
+    });
+    out += '</div></div>';
+    out += '</div></div>';
+
+    out += '<div style="padding-top:16px;border-top:1px solid var(--border);">';
+    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:12px;">Feriados personalizados</div>';
+    var ferKeys = Object.keys(feriadosCustom).sort();
+    if(ferKeys.length){
+      ferKeys.forEach(function(k){
+        var dt = new Date(k+'T12:00:00').toLocaleDateString('pt-BR');
+        out += '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:var(--card);border-radius:8px;margin-bottom:6px;">';
+        out += '<div><div style="font-size:0.85rem;color:var(--white);">'+feriadosCustom[k]+'</div>';
+        out += '<div style="font-size:0.68rem;color:var(--white-dim);">'+dt+'</div></div>';
+        out += '<button class="btn btn-danger btn-sm del-fer-btn" data-k="'+k+'">✕</button>';
+        out += '</div>';
+      });
+    } else {
+      out += '<p style="font-size:0.78rem;color:var(--white-dim);margin-bottom:12px;">Nenhum feriado personalizado.</p>';
+    }
+    out += '<div style="display:flex;gap:8px;margin-top:8px;">';
+    out += '<input type="date" id="cfg-fer-data" style="flex:1;margin-bottom:0;padding:10px;">';
+    out += '<input type="text" id="cfg-fer-nome" placeholder="Nome do feriado" style="flex:2;margin-bottom:0;padding:10px;">';
+    out += '</div>';
+    out += '<button class="btn btn-outline" style="width:100%;height:38px;margin-top:8px;" onclick="adicionarFeriadoCfg()">+ Adicionar feriado</button>';
+    out += '</div>';
   }
-  out += '<div style="display:flex;gap:8px;margin-top:8px;">';
-  out += '<input type="date" id="cfg-fer-data" style="flex:1;margin-bottom:0;padding:10px;">';
-  out += '<input type="text" id="cfg-fer-nome" placeholder="Nome do feriado" style="flex:2;margin-bottom:0;padding:10px;">';
-  out += '</div>';
-  out += '<button class="btn btn-outline" style="width:100%;height:38px;margin-top:8px;" onclick="adicionarFeriadoCfg()">+ Adicionar feriado</button>';
-  out += '</div>';
 
-  // Recibo
-  out += '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">';
-  out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Comprovante de pagamento</div>';
-  out += '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:12px;">Personalize o cabe\u00E7alho e rodap\u00E9 do comprovante gerado para os alunos:</div>';
-  out += '<div style="display:flex;flex-direction:column;gap:8px;">';
-  out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">Cabe\u00E7alho (nome / apresenta\u00E7\u00E3o)</div>';
-  out += '<input type="text" id="cfg-recibo-header" placeholder="Ex: Jo\u00E3o Silva - Personal Trainer" value="'+escapeHTML(reciboHeader)+'" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;"></div>';
-  out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">Corpo do comprovante</div>';
-  out += '<div style="font-size:0.65rem;color:rgba(74,127,165,0.7);margin-bottom:6px;">Vari\u00E1veis: <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{nome}</code> <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{plano}</code> <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{valor}</code> <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{data}</code> <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{vencimento}</code></div>';
-  out += '<textarea id="cfg-recibo-corpo" rows="6" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;font-family:monospace;resize:vertical;line-height:1.5;">'+escapeHTML(reciboCorpo)+'</textarea></div>';
-  out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">Rodap\u00E9 (instagram / contato)</div>';
-  out += '<input type="text" id="cfg-recibo-rodape" placeholder="Ex: @seuperfil" value="'+escapeHTML(reciboRodape)+'" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;"></div>';
-  out += '<button class="btn btn-primary" style="height:42px;" onclick="salvarReciboConfig()">Salvar comprovante</button>';
-  out += '</div></div>';
+  // ====== FINANCEIRO ======
+  if(_cfgAba === 'financeiro'){
+    // Meta mensal
+    var meta = getMeta();
+    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Meta mensal</div>';
+    out += '<div style="display:flex;gap:8px;margin-bottom:20px;">';
+    out += '<input type="number" id="cfg-meta-inp" min="0" placeholder="R$ 0,00" value="'+(meta||'')+'" style="flex:1;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.9rem;">';
+    out += '<button class="btn btn-primary" style="height:42px;padding:0 16px;white-space:nowrap;" onclick="salvarMetaCfg()">Salvar</button>';
+    out += '</div>';
 
-  // Chave Pix
-  out += '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">';
-  out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Dados para cobran\u00E7a</div>';
-  out += '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:8px;">Chave Pix exibida nas mensagens de cobran\u00E7a:</div>';
-  out += '<div style="display:flex;gap:8px;">';
-  out += '<input type="text" id="cfg-pix-input" placeholder="CPF, e-mail, telefone ou chave aleat\u00F3ria" value="'+chavePix+'" style="flex:1;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;">';
-  out += '<button class="btn btn-primary" style="height:42px;padding:0 16px;white-space:nowrap;" onclick="salvarChavePix()">Salvar</button>';
-  out += '</div></div>';
+    // Modelo padrão
+    var modoPadrao = getFinModo();
+    out += '<div style="padding-top:16px;border-top:1px solid var(--border);margin-bottom:20px;">';
+    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Modelo padrão de análise</div>';
+    out += '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:10px;">Define qual modelo abre por padrão na aba Financeiro:</div>';
+    out += '<div style="display:flex;background:var(--card);border-radius:8px;padding:3px;gap:2px;">';
+    out += '<button onclick="setFinModo(\'caixa\');renderConfiguracoes();" style="flex:1;padding:9px 0;border-radius:6px;border:none;font-size:0.75rem;font-weight:600;cursor:pointer;'+(modoPadrao==='caixa'?'background:var(--accent);color:#fff;':'background:none;color:var(--white-dim);')+'">Caixa</button>';
+    out += '<button onclick="setFinModo(\'competencia\');renderConfiguracoes();" style="flex:1;padding:9px 0;border-radius:6px;border:none;font-size:0.75rem;font-weight:600;cursor:pointer;'+(modoPadrao==='competencia'?'background:var(--accent);color:#fff;':'background:none;color:var(--white-dim);')+'">Competência</button>';
+    out += '</div></div>';
+
+    // Pix
+    out += '<div style="padding-top:16px;border-top:1px solid var(--border);margin-bottom:20px;">';
+    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Dados para cobrança</div>';
+    out += '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:8px;">Chave Pix exibida nas mensagens de cobrança:</div>';
+    out += '<div style="display:flex;gap:8px;">';
+    out += '<input type="text" id="cfg-pix-input" placeholder="CPF, e-mail, telefone ou chave aleatória" value="'+chavePix+'" style="flex:1;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;">';
+    out += '<button class="btn btn-primary" style="height:42px;padding:0 16px;white-space:nowrap;" onclick="salvarChavePix()">Salvar</button>';
+    out += '</div></div>';
+
+    // Comprovante
+    out += '<div style="padding-top:16px;border-top:1px solid var(--border);">';
+    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Comprovante de pagamento</div>';
+    out += '<div style="display:flex;flex-direction:column;gap:8px;">';
+    out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">Cabeçalho (nome / apresentação)</div>';
+    out += '<input type="text" id="cfg-recibo-header" placeholder="Ex: João Silva - Personal Trainer" value="'+escapeHTML(reciboHeader)+'" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;"></div>';
+    out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">Corpo do comprovante</div>';
+    out += '<div style="font-size:0.65rem;color:rgba(74,127,165,0.7);margin-bottom:6px;">Variáveis: <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{nome}</code> <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{plano}</code> <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{valor}</code> <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{data}</code> <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{vencimento}</code></div>';
+    out += '<textarea id="cfg-recibo-corpo" rows="6" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;font-family:monospace;resize:vertical;line-height:1.5;">'+escapeHTML(reciboCorpo)+'</textarea></div>';
+    out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">Rodapé (instagram / contato)</div>';
+    out += '<input type="text" id="cfg-recibo-rodape" placeholder="Ex: @seuperfil" value="'+escapeHTML(reciboRodape)+'" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;"></div>';
+    out += '<button class="btn btn-primary" style="height:42px;" onclick="salvarReciboConfig()">Salvar comprovante</button>';
+    out += '</div></div>';
+  }
+
+  // ====== PERFIL ======
+  if(_cfgAba === 'perfil'){
+    var pf = getCfgPerfil();
+    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Seu perfil profissional</div>';
+    out += '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:16px;">Essas informações aparecem no comprovante e nas mensagens geradas pelo app.</div>';
+    out += '<div style="display:flex;flex-direction:column;gap:10px;">';
+    out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">Nome / Nome do negócio</div>';
+    out += '<input type="text" id="cfg-pf-nome" placeholder="Ex: João Silva - Personal Trainer" value="'+escapeHTML(pf.nome||'')+'" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;"></div>';
+    out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">WhatsApp / Telefone</div>';
+    out += '<input type="tel" id="cfg-pf-telefone" placeholder="Ex: 85999999999" value="'+escapeHTML(pf.telefone||'')+'" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;"></div>';
+    out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">Instagram</div>';
+    out += '<input type="text" id="cfg-pf-instagram" placeholder="Ex: @seuperfil" value="'+escapeHTML(pf.instagram||'')+'" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;"></div>';
+    out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">CREF (opcional)</div>';
+    out += '<input type="text" id="cfg-pf-cref" placeholder="Ex: 000000-G/CE" value="'+escapeHTML(pf.cref||'')+'" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;"></div>';
+    out += '<button class="btn btn-primary" style="height:42px;" onclick="salvarPerfil()">Salvar perfil</button>';
+    out += '</div>';
+  }
+
+  // ====== DADOS ======
+  if(_cfgAba === 'dados'){
+    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Export / Import</div>';
+    out += '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">';
+    out += '<button class="btn btn-outline" style="height:42px;" onclick="exportarDados()">⬇ Exportar todos os dados (JSON)</button>';
+    out += '<button class="btn btn-outline" style="height:42px;" onclick="importarDados()">⬆ Importar backup (JSON)</button>';
+    out += '</div>';
+
+    out += '<div style="padding-top:16px;border-top:1px solid var(--border);margin-bottom:20px;">';
+    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Histórico de backups</div>';
+    out += '<div id="cfg-backup-hist-wrap">';
+    try{
+      var list=JSON.parse(localStorage.getItem('gp-auto-bk-list')||'[]');
+      if(list.length){
+        list.forEach(function(k,i){
+          var bk=JSON.parse(localStorage.getItem(k)||'{}');
+          var ts=bk.ts?new Date(bk.ts).toLocaleString('pt-BR'):'--';
+          var sz=bk.size?Math.round(bk.size/1024)+'KB':'--';
+          out += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--card);border-radius:8px;margin-bottom:6px;">';
+          out += '<div><div style="font-size:0.8rem;color:var(--white);">Backup '+(i+1)+'</div><div style="font-size:0.65rem;color:var(--white-dim);">'+ts+' &middot; '+sz+'</div></div>';
+          out += '<button class="btn btn-outline btn-sm" onclick="restaurarAutoBackup(\''+k+'\')">Restaurar</button>';
+          out += '</div>';
+        });
+      } else {
+        out += '<p style="font-size:0.78rem;color:var(--white-dim);">Nenhum backup automático.</p>';
+      }
+    }catch(e){
+      out += '<p style="font-size:0.78rem;color:var(--white-dim);">Nenhum backup.</p>';
+    }
+    out += '</div></div>';
+
+    out += '<div style="padding-top:16px;border-top:1px solid var(--border);">';
+    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--danger);margin-bottom:10px;">Zona de risco</div>';
+    out += '<button class="btn btn-outline" style="width:100%;height:42px;color:var(--danger);border-color:var(--danger);" onclick="limparDadosLocais()">Limpar dados locais (manter nuvem)</button>';
+    out += '<div style="font-size:0.65rem;color:var(--white-dim);margin-top:6px;">Remove o cache local. Os dados do Firebase serão baixados novamente ao recarregar.</div>';
+    out += '</div>';
+  }
 
   body.innerHTML = out;
 
-  // Horários config - day toggle buttons
+  // --- Event listeners ---
   body.querySelectorAll('.hcfg-day-btn').forEach(function(btn){
     btn.onclick = function(){
       var h = parseInt(btn.getAttribute('data-h'));
       var d = parseInt(btn.getAttribute('data-d'));
-      if (!horariosConfig[h]) horariosConfig[h] = [];
+      if(!horariosConfig[h]) horariosConfig[h] = [];
       var idx = horariosConfig[h].indexOf(d);
-      if (idx !== -1) {
-        if (horariosConfig[h].length > 1) {
-          horariosConfig[h].splice(idx, 1);
-          btn.style.borderColor = 'var(--border)';
-          btn.style.background = 'none';
-          btn.style.color = 'var(--white-dim)';
-        }
+      if(idx !== -1){
+        if(horariosConfig[h].length > 1){ horariosConfig[h].splice(idx, 1); btn.style.borderColor='var(--border)'; btn.style.background='none'; btn.style.color='var(--white-dim)'; }
       } else {
-        horariosConfig[h].push(d);
-        horariosConfig[h].sort(function(a,b){return a-b;});
-        btn.style.borderColor = 'var(--accent)';
-        btn.style.background = 'var(--accent)';
-        btn.style.color = '#fff';
+        horariosConfig[h].push(d); horariosConfig[h].sort(function(a,b){return a-b;}); btn.style.borderColor='var(--accent)'; btn.style.background='var(--accent)'; btn.style.color='#fff';
       }
-      saveHorariosConfig();
-      renderCalendar();
+      saveHorariosConfig(); renderCalendar();
     };
   });
-
-  // Horários config - delete hour buttons
   body.querySelectorAll('.hcfg-del-btn').forEach(function(btn){
-    btn.onclick = function(){
-      var h = parseInt(btn.getAttribute('data-h'));
-      delete horariosConfig[h];
-      saveHorariosConfig();
-      renderConfiguracoes();
-      renderCalendar();
-    };
+    btn.onclick = function(){ var h=parseInt(btn.getAttribute('data-h')); delete horariosConfig[h]; saveHorariosConfig(); renderConfiguracoes(); renderCalendar(); };
   });
-
-
   body.querySelectorAll('.cfg-dia-btn').forEach(function(btn){
-    btn.onclick = function() {
-      var dow = parseInt(btn.getAttribute('data-dow'));
-      var idx3 = diasPermitidos.indexOf(dow);
-      if (idx3 !== -1) {
-        if (diasPermitidos.length > 1) {
-          diasPermitidos.splice(idx3, 1);
-          btn.style.borderColor = 'var(--border)';
-          btn.style.background = 'none';
-          btn.style.color = 'var(--white-dim)';
-        }
-      } else {
-        diasPermitidos.push(dow);
-        diasPermitidos.sort(function(a,b){return a-b;});
-        btn.style.borderColor = 'var(--accent)';
-        btn.style.background = 'var(--accent)';
-        btn.style.color = '#fff';
-      }
+    btn.onclick = function(){
+      var dow=parseInt(btn.getAttribute('data-dow')); var idx3=diasPermitidos.indexOf(dow);
+      if(idx3!==-1){ if(diasPermitidos.length>1){ diasPermitidos.splice(idx3,1); btn.style.borderColor='var(--border)'; btn.style.background='none'; btn.style.color='var(--white-dim)'; } }
+      else { diasPermitidos.push(dow); diasPermitidos.sort(function(a,b){return a-b;}); btn.style.borderColor='var(--accent)'; btn.style.background='var(--accent)'; btn.style.color='#fff'; }
       saveDiasPermitidos();
     };
   });
-
-  
   body.querySelectorAll('.del-fer-btn').forEach(function(btn){
-    btn.onclick = function(){
-      delete feriadosCustom[btn.getAttribute('data-k')];
-      try{localStorage.setItem('gp-fe',JSON.stringify(feriadosCustom));}catch(e){}
-      renderConfiguracoes();
-      renderCalendar();
-    };
+    btn.onclick = function(){ delete feriadosCustom[btn.getAttribute('data-k')]; try{localStorage.setItem('gp-fe',JSON.stringify(feriadosCustom));}catch(e){} renderConfiguracoes(); renderCalendar(); };
+  });
+  body.querySelectorAll('.cfg-dur-btn').forEach(function(btn){
+    btn.onclick = function(){ var m=parseInt(btn.getAttribute('data-min')); localStorage.setItem('gp-aula-dur',m); toast('Duração padrão: '+m+'min ✓'); renderConfiguracoes(); };
+  });
+  body.querySelectorAll('.cfg-slot-btn').forEach(function(btn){
+    btn.onclick = function(){ var n=parseInt(btn.getAttribute('data-max')); localStorage.setItem('gp-max-slot',n); toast('Máx. por horário: '+n+' ✓'); renderConfiguracoes(); };
   });
 }
 
