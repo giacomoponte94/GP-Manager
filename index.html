@@ -3218,6 +3218,57 @@ function openDetail(id){
         +'<div style="font-size:0.82rem;color:var(--white);margin-top:2px;">'+escapeHtml(e.nota)+'</div></div>';}).join('')
       +'</div>';
   }
+  // Historico de presencas
+  var _allPres=Object.keys(presencas).filter(function(k){
+    return k.indexOf(s.id+'_')===0 && !presencas[k].deleted && (presencas[k].status==='presente'||presencas[k].status==='faltou');
+  }).map(function(k){
+    return {date:k.replace(s.id+'_',''), status:presencas[k].status};
+  }).sort(function(a,b){return b.date.localeCompare(a.date);});
+  var histPresencasHtml='';
+  if(_allPres.length){
+    var _byMonth={};
+    _allPres.forEach(function(e){
+      var ym=e.date.slice(0,7);
+      if(!_byMonth[ym]) _byMonth[ym]=[];
+      _byMonth[ym].push(e);
+    });
+    var _monthKeys=Object.keys(_byMonth).sort(function(a,b){return b.localeCompare(a);});
+    var _monthNames=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    histPresencasHtml='<div style="background:var(--card);padding:14px 16px;margin-top:12px;">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'
+      +'<span style="font-family:Raleway,sans-serif;font-size:0.58rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--accent-l);">Histórico de presenças</span>'
+      +'<span style="font-size:0.72rem;color:var(--white-dim);">'+_allPres.length+' registro'+((_allPres.length!==1)?'s':'')+'</span>'
+      +'</div>';
+    _monthKeys.forEach(function(ym){
+      var parts=ym.split('-');
+      var label=_monthNames[parseInt(parts[1],10)-1]+' '+parts[0];
+      var entries=_byMonth[ym];
+      var pres=entries.filter(function(e){return e.status==='presente';}).length;
+      var falt=entries.filter(function(e){return e.status==='faltou';}).length;
+      histPresencasHtml+='<div style="margin-bottom:12px;">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:5px;border-bottom:1px solid var(--border);margin-bottom:6px;">'
+        +'<span style="font-size:0.7rem;font-weight:700;color:var(--white);">'+label+'</span>'
+        +'<span style="font-size:0.68rem;color:var(--white-dim);">'
+        +(pres>0?'<span style="color:var(--success);">✔ '+pres+'</span>':'')
+        +(pres>0&&falt>0?' &nbsp;':'')
+        +(falt>0?'<span style="color:var(--danger);">✘ '+falt+'</span>':'')
+        +'</span></div>'
+        +'<div style="display:flex;flex-direction:column;gap:4px;">'
+        +entries.map(function(e){
+          var isPres=e.status==='presente';
+          var dStr=fmtDate(e.date);
+          var dayOfWeek=['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][new Date(e.date+'T12:00:00').getDay()];
+          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;">'
+            +'<span style="font-size:0.76rem;color:var(--white-dim);">'+dayOfWeek+', '+dStr+'</span>'
+            +'<span style="font-size:0.68rem;font-weight:600;padding:2px 8px;border-radius:10px;'
+            +(isPres?'background:rgba(39,174,96,0.15);color:var(--success);':'background:rgba(231,76,60,0.15);color:var(--danger);')
+            +'">'+( isPres?'✔ Presente':'✘ Faltou')+'</span>'
+            +'</div>';
+        }).join('')
+        +'</div></div>';
+    });
+    histPresencasHtml+='</div>';
+  }
   var ph=waPhone(s); var nome1=cleanText(s.nome.split(' ')[0], 40);
   var waHtml='';
   if(ph){
@@ -3260,7 +3311,7 @@ function openDetail(id){
     +'<div class="detail-item"><div class="detail-item-label">Telefone</div><div class="detail-item-value">'+escapeHtml(s.telefone||'\u2014')+'</div></div>'
     +(s.obs?'<div class="detail-item" style="grid-column:1/-1"><div class="detail-item-label">Obs saude</div><div class="detail-item-value">'+escapeHtml(s.obs)+'</div></div>':'')
     +'</div>'
-    +notasHtml+waHtml
+    +notasHtml+histPresencasHtml+waHtml
     +'<div id="det-actions" style="display:flex;gap:10px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);"></div>';
   var actDiv=document.getElementById('det-actions');
   if(s.status==='vencendo'||s.status==='atrasado'){
