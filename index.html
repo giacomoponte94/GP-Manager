@@ -6273,6 +6273,7 @@ function getAlunosHoje(){
     if(seen[slot.alunoId]) return;
     var s = students.find(function(x){ return x.id===slot.alunoId && !x.deleted; });
     if(!s) return;
+    if(isEmLicenca(s.id, ds)) return;
     seen[slot.alunoId] = true;
     result.push({ student:s, slot:slot, status: _presStatus(presencas[presKey(s.id,ds)])||'sem registro' });
   });
@@ -6288,6 +6289,7 @@ function getFaltaramOntem(){
     if(seen[slot.alunoId]) return;
     var s = students.find(function(x){ return x.id===slot.alunoId && !x.deleted; });
     if(!s) return;
+    if(isEmLicenca(s.id, ys)) return;
     seen[slot.alunoId] = true;
     if(_presStatus(presencas[presKey(s.id,ys)])==='presente') return;
     result.push({ student:s, slot:slot });
