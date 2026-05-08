@@ -1237,10 +1237,10 @@ function _startSync(){
     } else {
       console.log('[GP Sync] Já em sincronia — nenhuma ação');
     }
-    _setSyncStatus('ok'); _initialized=true; _registerCollectionListeners();
+    _setSyncStatus('ok'); _initialized=true; _lastSuccessfulSync=Date.now(); _registerCollectionListeners(); _registerSyncWatchers();
   }).catch(function(e){
     console.warn('[GP Sync] Erro startup:',e); _setSyncStatus('err',e);
-    _initialized=true; _registerCollectionListeners();
+    _initialized=true; _registerCollectionListeners(); _registerSyncWatchers();
   });
 }
 
@@ -1251,7 +1251,7 @@ function forceSyncFromCloud(){
     if(!Object.keys(allCols).length){ _pushAllCols(); toast('Nuvem vazia \u2014 dados locais enviados.'); return; }
     Object.keys(_COL_MAP).forEach(function(lsKey){ var col=_COL_MAP[lsKey]; if(allCols[col]) _applyCol(col,lsKey,allCols[col],true); });
     try{ loadAll(); }catch(e){} try{ refreshAll(); }catch(e){} try{ renderCalendar(); }catch(e){} try{ renderFinanceiro(); }catch(e){}
-    _setSyncStatus('ok'); toast('Dados atualizados da nuvem!');
+    _lastSuccessfulSync=Date.now(); _setSyncStatus('ok'); toast('Dados atualizados da nuvem!');
   }).catch(function(e){ _setSyncStatus('err',e); toast('Erro ao buscar dados.'); });
 }
 
@@ -1326,32 +1326,81 @@ function _flushIfPending(){
 }
 
 var _hiddenAt = 0;
-// Após 5 min oculto, força pull completo ignorando timestamps (WebSocket pode ter caído)
+var _lastSuccessfulSync = 0;
+var _disconnectedAt = 0;
 var _FORCE_RESYNC_MS = 5 * 60 * 1000;
 
+// Fetch completo do servidor, ignorando timestamps locais
+function _fetchAll(reason){
+  if(!_colsRef) return;
+  console.log('[GP Sync] fetchAll:', reason);
+  _colsRef.once('value').then(function(snap){
+    var allCols=snap.val()||{};
+    Object.keys(_COL_MAP).forEach(function(lsKey){
+      var col=_COL_MAP[lsKey]; var cd=allCols[col]; if(!cd) return;
+      _applyCol(col,lsKey,cd,true);
+    });
+    try{loadAll();}catch(e){} try{refreshAll();}catch(e){}
+    try{renderDashboard();}catch(e){} try{renderCalendar();}catch(e){} try{renderFinanceiro();}catch(e){}
+    _lastSuccessfulSync=Date.now();
+    _setSyncStatus('ok');
+    console.log('[GP Sync] fetchAll OK:', reason);
+  }).catch(function(e){ console.warn('[GP Sync] fetchAll erro:',reason,e); });
+}
+
+// Força reconexão WebSocket e depois faz pull completo
+function _doForceResync(reason){
+  if(!_initialized||!_colsRef) return;
+  console.log('[GP Sync] doForceResync:', reason);
+  _setSyncStatus('up');
+  try{ firebase.database().goOffline(); }catch(e){}
+  setTimeout(function(){
+    try{ firebase.database().goOnline(); }catch(e){}
+    // Aguarda conexão real (até 4s) antes de buscar
+    var done=false;
+    var connRef=firebase.database().ref('.info/connected');
+    var timer=setTimeout(function(){
+      if(done) return; done=true; connRef.off('value',onConn); _fetchAll(reason);
+    }, 4000);
+    function onConn(snap){
+      if(snap.val()!==true||done) return;
+      done=true; clearTimeout(timer); connRef.off('value',onConn); _fetchAll(reason);
+    }
+    connRef.on('value',onConn);
+  }, 600);
+}
+
+// Registra watchdogs de sincronização — chamado uma vez após inicialização
+function _registerSyncWatchers(){
+  // 1. Detecta reconexão real do Firebase
+  var _wasConn=null;
+  firebase.database().ref('.info/connected').on('value',function(snap){
+    var isConn=snap.val()===true;
+    if(!isConn){
+      _disconnectedAt=Date.now();
+    } else if(_wasConn===false && _disconnectedAt && _initialized){
+      var gap=Date.now()-_disconnectedAt;
+      _disconnectedAt=0;
+      if(gap>30000){ setTimeout(function(){ _fetchAll('reconexao-'+Math.round(gap/1000)+'s'); },400); }
+    }
+    _wasConn=isConn;
+  });
+  // 2. Verificação periódica a cada 2 min — captura aba nunca oculta + WebSocket zumbi
+  setInterval(function(){
+    if(!_initialized||document.visibilityState==='hidden') return;
+    var age=Date.now()-_lastSuccessfulSync;
+    if(age>_FORCE_RESYNC_MS){ _doForceResync('periodico-'+Math.round(age/60000)+'min'); }
+  }, 2*60*1000);
+}
+
 function _onAppForeground(){
-  var wasHiddenMs = _hiddenAt ? (Date.now() - _hiddenAt) : 0;
-  var forceResync = wasHiddenMs > _FORCE_RESYNC_MS;
-  _hiddenAt = 0;
+  var wasHiddenMs=_hiddenAt?(Date.now()-_hiddenAt):0;
+  var syncAge=_lastSuccessfulSync?(Date.now()-_lastSuccessfulSync):999999999;
+  var forceResync=wasHiddenMs>_FORCE_RESYNC_MS||syncAge>_FORCE_RESYNC_MS;
+  _hiddenAt=0;
 
   if(forceResync){
-    // Reconecta WebSocket — força ciclo off/on para limpar conexão morta
-    try{ firebase.database().goOffline(); }catch(e){}
-    setTimeout(function(){
-      try{ firebase.database().goOnline(); }catch(e){}
-      if(!_initialized) return;
-      console.log('[GP Sync] Foreground forçado após '+Math.round(wasHiddenMs/60000)+'min — pull completo');
-      _colsRef.once('value').then(function(snap){
-        var allCols=snap.val()||{};
-        Object.keys(_COL_MAP).forEach(function(lsKey){
-          var col=_COL_MAP[lsKey]; var cd=allCols[col]; if(!cd) return;
-          _applyCol(col,lsKey,cd,true);
-        });
-        try{ loadAll(); }catch(e){} try{ refreshAll(); }catch(e){}
-        try{ renderDashboard(); }catch(e){} try{ renderCalendar(); }catch(e){} try{ renderFinanceiro(); }catch(e){}
-        _setSyncStatus('ok');
-      }).catch(function(e){ console.warn('[GP Sync] Resync erro:',e); });
-    }, 800);
+    _doForceResync('foreground-'+Math.round(Math.max(wasHiddenMs,syncAge)/60000)+'min');
     return;
   }
 
@@ -1369,9 +1418,10 @@ function _onAppForeground(){
       }
     });
     if(anyNewer){
-      try{ loadAll(); }catch(e){} try{ refreshAll(); }catch(e){} try{ renderCalendar(); }catch(e){} try{ renderFinanceiro(); }catch(e){}
-      _setSyncStatus('ok'); console.log('[GP Sync] Foreground: coleções atualizadas');
-    } else { console.log('[GP Sync] Foreground: local atualizado'); }
+      try{loadAll();}catch(e){} try{refreshAll();}catch(e){} try{renderCalendar();}catch(e){} try{renderFinanceiro();}catch(e){}
+      _setSyncStatus('ok'); console.log('[GP Sync] Foreground: atualizado');
+    }
+    _lastSuccessfulSync=Date.now();
   }).catch(function(e){ console.warn('[GP Sync] Foreground erro:',e); });
 }
 window.addEventListener('beforeunload', _flushIfPending);
