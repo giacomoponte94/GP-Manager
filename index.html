@@ -976,10 +976,18 @@ function _getTs(i){
   return 0;
 }
 
-// Mescla dois itens: preserva campos locais exclusivos, cloud vence em conflitos de chave.
+// Mescla dois itens: cloud vence em conflitos de chave; campos exclusivos de cada lado são preservados.
+// Strings vazias/null no cloud NÃO sobrescrevem valores preenchidos localmente.
 function _mergeItem(existing, item){
   var result=Object.assign({},existing);
-  Object.keys(item).forEach(function(k){ result[k]=item[k]; });
+  Object.keys(item).forEach(function(k){
+    var cv=item[k]; var lv=result[k];
+    // Prefer the non-empty value: if cloud field is null/empty but local has data, keep local
+    if(cv===null||cv===undefined||cv===''){
+      if(lv!==null&&lv!==undefined&&lv!=='') return; // keep local
+    }
+    result[k]=cv;
+  });
   return result;
 }
 
@@ -1010,7 +1018,8 @@ function _mergeById(localArr, cloudArr, getId){
       var lTs=_getTs(existing);
       if(cTs>lTs){
         map[id]=_mergeItem(existing,item);
-      } else if(cTs===lTs && (item.deviceId||'')>(existing.deviceId||'')){
+      } else if(cTs===lTs){
+        // Timestamps iguais (ex: ambos null/0): une campos de ambos — cloud preenche o que local não tem
         map[id]=_mergeItem(existing,item);
       }
       // local wins when lTs > cTs — no change needed
@@ -1782,6 +1791,7 @@ function addLicenca(sid, inicio, fim) {
     var v = new Date(s.vencimento + 'T12:00:00');
     v.setDate(v.getDate() + dias);
     s.vencimento = v.toISOString().split('T')[0];
+    s.updatedAt = Date.now(); s.deviceId = _getDeviceId();
     save();
     toast('Licença de '+dias+'d adicionada. Vencimento atualizado para '+fmtDate(s.vencimento)+'.');
   }
@@ -2430,6 +2440,7 @@ function renovarAluno(id){
   var hoje=new Date();hoje.setHours(0,0,0,0); if(base<hoje)base=new Date(hoje);
   base.setMonth(base.getMonth()+1);
   s.vencimento=base.toISOString().split('T')[0]; s.status='em dia'; s.statusManual=null;
+  s.updatedAt=Date.now(); s.deviceId=_getDeviceId();
   save(); refreshAll(); renderFinanceiro();
   toast(s.nome.split(' ')[0]+' renovado ate '+fmtDate(s.vencimento));
 }
@@ -3088,7 +3099,9 @@ function saveStudent(){
     precoAvulsa:parseFloat(document.getElementById('f-preco-avulsa')&&document.getElementById('f-preco-avulsa').value)||null,
     valorUnitario:_saveValorUnitario,
     valorTotal:_saveValorTotal,
-    criadoEm:editingId?(students.find(function(x){return x.id===editingId&&!x.deleted;})||{}).criadoEm:new Date().toISOString()
+    criadoEm:editingId?(students.find(function(x){return x.id===editingId&&!x.deleted;})||{}).criadoEm:new Date().toISOString(),
+    updatedAt:Date.now(),
+    deviceId:_getDeviceId()
   });
   var days=Array.from(document.querySelectorAll('#f-days-picker .day-btn.selected')).map(function(b){return parseInt(b.dataset.day);});
   if(days.length){
