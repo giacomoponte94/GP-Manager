@@ -2797,6 +2797,38 @@ function jaPagouNoMes(sid){
     return isMesmoMes(d,now);
   });
 }
+
+// Regime de competência: agrupa receita pelo mês do vencimento do plano
+// Pagamento pertence à competência do mês em que o plano vence (não em que foi pago)
+function getRecCompetencia(){
+  var now=new Date();
+  var yr=now.getFullYear(), mo=now.getMonth();
+  var result={total:0,recebido:0,pendente:0,pagRows:[],pendRows:[],totalRows:[]};
+  _visible(students).filter(function(s){return s.status!=='aguardando';}).forEach(function(s){
+    if(!s.vencimento||!s.plano)return;
+    var _ps=getPlano(s.plano); if(_ps&&_ps.tipo==='pacote')return;
+    var v=new Date(s.vencimento+'T12:00:00');
+    if(v.getFullYear()!==yr||v.getMonth()!==mo)return; // vencimento não é neste mês
+    var valor=getPlanoValorTotal(s);
+    result.total+=valor;
+    result.totalRows.push(s);
+    // Pagamento deste ciclo: o mais recente recebido até o vencimento, dentro de 45 dias antes
+    var pag=pagamentos.filter(function(p){
+      if(p.deleted||p.alunoId!==s.id)return false;
+      if(p.data>s.vencimento)return false; // não contar pagamentos após vencimento (próximo ciclo)
+      var daysToVenc=(new Date(s.vencimento+'T12:00:00')-new Date(p.data+'T12:00:00'))/86400000;
+      return daysToVenc<=45;
+    }).sort(function(a,b){return b.data.localeCompare(a.data);})[0];
+    if(pag){
+      result.recebido+=(pag.valor||0);
+      result.pagRows.push({student:s,pag:pag});
+    } else {
+      result.pendente+=valor;
+      result.pendRows.push(s);
+    }
+  });
+  return result;
+}
 function marcarComoPago(sid){
   var s=students.find(function(x){return x.id===sid&&!x.deleted;});
   if(!s)return;
@@ -4125,19 +4157,21 @@ function renderFinanceiro(){
     out+='<div style="height:100%;width:'+pct+'%;background:var(--success);border-radius:4px;"></div></div></div>';
   } else {
     // === COMPETÊNCIA ===
-    var _pctComp=total>0?Math.round(rec/total*100):0;
+    // Receita do mês = planos cujo vencimento cai neste mês (independente de quando foram pagos)
+    var _crc=getRecCompetencia();
+    var _pctComp=_crc.total>0?Math.round(_crc.recebido/_crc.total*100):0;
     out+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">';
-    out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\'comp_total\')" style="cursor:pointer;border-top:2px solid var(--accent);padding:14px 12px;border-radius:10px;"><div class="stat-num" style="color:var(--accent-l);font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(total)+'</div><div class="stat-lbl">Receita do mês</div></div>';
-    out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\'recebido\')" style="cursor:pointer;border-top:2px solid var(--success);padding:14px 12px;border-radius:10px;"><div class="stat-num" style="color:var(--success);font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(rec)+'</div><div class="stat-lbl">Já recebido</div></div>';
-    out+='<div class="stat-card'+(_pendente>0?' warning':'')+'" onclick="abrirDetalheFinanceiro(\'comp_pendente\')" style="cursor:pointer;border-top:2px solid '+(_pendente>0?'var(--warning)':'var(--success)')+';padding:14px 12px;border-radius:10px;"><div class="stat-num" style="color:'+(_pendente>0?'var(--warning)':'var(--success)')+';font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(_pendente)+'</div><div class="stat-lbl">Pendente</div></div>';
+    out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\'comp_total\')" style="cursor:pointer;border-top:2px solid var(--accent);padding:14px 12px;border-radius:10px;"><div class="stat-num" style="color:var(--accent-l);font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(_crc.total)+'</div><div class="stat-lbl">Receita do mês</div></div>';
+    out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\'recebido\')" style="cursor:pointer;border-top:2px solid var(--success);padding:14px 12px;border-radius:10px;"><div class="stat-num" style="color:var(--success);font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(_crc.recebido)+'</div><div class="stat-lbl">Já recebido</div></div>';
+    out+='<div class="stat-card'+(_crc.pendente>0?' warning':'')+'" onclick="abrirDetalheFinanceiro(\'comp_pendente\')" style="cursor:pointer;border-top:2px solid '+(_crc.pendente>0?'var(--warning)':'var(--success)')+';padding:14px 12px;border-radius:10px;"><div class="stat-num" style="color:'+(_crc.pendente>0?'var(--warning)':'var(--success)')+';font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(_crc.pendente)+'</div><div class="stat-lbl">Pendente</div></div>';
     out+='</div>';
     out+='<div style="background:var(--card);padding:14px 18px;margin-bottom:8px;border-radius:8px;">';
     out+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px;">';
     out+='<span style="font-family:Raleway,sans-serif;font-size:0.58rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--accent-l);white-space:nowrap;flex-shrink:0;">Recebido da competência</span>';
-    out+='<span style="font-size:0.82rem;color:var(--white);font-weight:600;text-align:right;">'+_pctComp+'%&nbsp;<span style="color:var(--white-dim);font-weight:300;font-size:0.75rem;">'+fmt(rec)+' de '+fmt(total)+'</span></span>';
+    out+='<span style="font-size:0.82rem;color:var(--white);font-weight:600;text-align:right;">'+_pctComp+'%&nbsp;<span style="color:var(--white-dim);font-weight:300;font-size:0.75rem;">'+fmt(_crc.recebido)+' de '+fmt(_crc.total)+'</span></span>';
     out+='</div><div style="height:8px;background:rgba(74,127,165,0.15);border-radius:4px;overflow:hidden;">';
     out+='<div style="height:100%;width:'+_pctComp+'%;background:var(--success);border-radius:4px;"></div></div>';
-    out+='<div style="font-size:0.68rem;color:var(--white-dim);margin-top:6px;">Competência = receita gerada no mês, independente do recebimento</div>';
+    out+='<div style="font-size:0.68rem;color:var(--white-dim);margin-top:6px;">Pagamentos cujo plano vence neste mês — independente da data de recebimento</div>';
     out+='</div>';
   }
   // Painel de competência (só mostra no modo caixa e apenas se há pré-pagamentos ou futuros pendentes)
@@ -4310,17 +4344,30 @@ function abrirDetalheFinanceiro(tipo){
       +'<div><div style="font-size:0.85rem;font-weight:600;color:var(--white);">'+escapeHtml(nome)+'</div>'+(sub?'<div style="font-size:0.7rem;color:var(--white-dim);margin-top:1px;">'+sub+'</div>':'')+'</div>'+v+'</div>';
   }
   if(tipo==='recebido'){
-    var pags=pagamentos.filter(function(p){
-      if(p.deleted)return false;
-      var d=new Date(p.data+'T12:00:00');
-      return isMesmoMes(d,_now);
-    }).sort(function(a,b){return b.data.localeCompare(a.data);});
-    if(!pags.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Nenhum pagamento registrado este mês.</div>');}
-    pags.forEach(function(p){
-      var s=students.find(function(x){return x.id===p.alunoId&&!x.deleted;});
-      var nome=s?s.nome:(p.alunoId||'?');
-      rows.push(_row(nome,fmtDate(p.data)+' · '+(p.forma||''),p.valor,'var(--success)'));
-    });
+    if(getFinModo()==='competencia'){
+      // Competência: pagamentos dos planos cujo vencimento é neste mês
+      var _crcD=getRecCompetencia();
+      titulo='Recebido (competência)';
+      rows.push('<div style="padding:10px 12px;font-size:0.72rem;color:var(--white-dim);border-bottom:1px solid var(--border);">Pagamentos referentes a planos com vencimento neste mês.</div>');
+      if(!_crcD.pagRows.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Nenhum pagamento desta competência.</div>');}
+      _crcD.pagRows.forEach(function(r){
+        var sub=fmtDate(r.pag.data)+' · '+(r.pag.forma||'')+' · vence '+fmtDate(r.student.vencimento);
+        rows.push(_row(r.student.nome,sub,r.pag.valor,'var(--success)'));
+      });
+    } else {
+      // Caixa: pagamentos cuja DATA está neste mês
+      var pags=pagamentos.filter(function(p){
+        if(p.deleted)return false;
+        var d=new Date(p.data+'T12:00:00');
+        return isMesmoMes(d,_now);
+      }).sort(function(a,b){return b.data.localeCompare(a.data);});
+      if(!pags.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Nenhum pagamento registrado este mês.</div>');}
+      pags.forEach(function(p){
+        var s=students.find(function(x){return x.id===p.alunoId&&!x.deleted;});
+        var nome=s?s.nome:(p.alunoId||'?');
+        rows.push(_row(nome,fmtDate(p.data)+' · '+(p.forma||''),p.valor,'var(--success)'));
+      });
+    }
   } else if(tipo==='avencer'){
     var lista=_vsf_ativos.filter(function(s){
       if(!s.vencimento||!s.plano)return false;
@@ -4424,25 +4471,25 @@ function abrirDetalheFinanceiro(tipo){
       rows.push(_row(s.nome,(s.vencimento?'Vence '+fmtDate(s.vencimento):''),getPlanoValorTotal(s),'var(--success)'));
     });
   } else if(tipo==='comp_total'){
-    // Competência: todos os alunos ativos (não aguardando) — receita gerada no mês
-    var lista=_vsf_ativos.slice().sort(function(a,b){return a.nome.localeCompare(b.nome,'pt-BR');});
-    rows.push('<div style="padding:10px 12px;font-size:0.72rem;color:var(--white-dim);border-bottom:1px solid var(--border);">Receita gerada no mês pela competência dos planos ativos.</div>');
-    if(!lista.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Nenhum aluno ativo.</div>');}
-    lista.forEach(function(s){
-      var pago=jaPagouNoMes(s.id);
-      var sub=(pago?'Pago':s.status==='atrasado'?'Inadimplente':'Pendente')+(s.vencimento?' · '+fmtDate(s.vencimento):'');
-      var cor=pago?'var(--success)':s.status==='atrasado'?'var(--danger)':'var(--warning)';
+    // Competência: planos com vencimento neste mês
+    var _crcT=getRecCompetencia();
+    rows.push('<div style="padding:10px 12px;font-size:0.72rem;color:var(--white-dim);border-bottom:1px solid var(--border);">Planos cujo vencimento é neste mês — pagos ou pendentes.</div>');
+    if(!_crcT.totalRows.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Nenhum plano vence este mês.</div>');}
+    _crcT.totalRows.sort(function(a,b){return (a.vencimento||'').localeCompare(b.vencimento||'');}).forEach(function(s){
+      var pagou=_crcT.pagRows.some(function(r){return r.student.id===s.id;});
+      var sub=(pagou?'✔ Pago':'⏳ Pendente')+' · vence '+fmtDate(s.vencimento);
+      var cor=pagou?'var(--success)':'var(--warning)';
       rows.push(_row(s.nome,sub,getPlanoValorTotal(s),cor));
     });
   } else if(tipo==='comp_pendente'){
-    // Competência: alunos que ainda não pagaram
-    var lista=_vsf_ativos.filter(function(s){return !jaPagouNoMes(s.id);}).sort(function(a,b){return (a.vencimento||'').localeCompare(b.vencimento||'');});
-    rows.push('<div style="padding:10px 12px;font-size:0.72rem;color:var(--white-dim);border-bottom:1px solid var(--border);">Receita gerada mas ainda não recebida este mês.</div>');
-    if(!lista.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Todos os alunos já pagaram!</div>');}
-    lista.forEach(function(s){
+    // Competência: planos com vencimento neste mês sem pagamento do ciclo
+    var _crcP=getRecCompetencia();
+    rows.push('<div style="padding:10px 12px;font-size:0.72rem;color:var(--white-dim);border-bottom:1px solid var(--border);">Planos com vencimento neste mês sem pagamento registrado no ciclo.</div>');
+    if(!_crcP.pendRows.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Todos os planos deste mês foram pagos!</div>');}
+    _crcP.pendRows.sort(function(a,b){return (a.vencimento||'').localeCompare(b.vencimento||'');}).forEach(function(s){
       var diff=getDiffDias(s.vencimento||'');
-      var sub=s.vencimento?(diff<0?'Atrasado há '+Math.abs(diff)+' dia'+(Math.abs(diff)!==1?'s':''):'Vence em '+diff+' dia'+(diff!==1?'s':'')):'';
-      var cor=s.status==='atrasado'||(s.vencimento&&diff<0)?'var(--danger)':'var(--warning)';
+      var sub='Vence '+fmtDate(s.vencimento)+(diff<0?' · Atrasado há '+Math.abs(diff)+'d':'');
+      var cor=diff<0?'var(--danger)':'var(--warning)';
       rows.push(_row(s.nome,sub,getPlanoValorTotal(s),cor));
     });
   }
