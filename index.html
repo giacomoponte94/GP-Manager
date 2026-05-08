@@ -2637,13 +2637,15 @@ function renderPaineis(){
     return parseInt(p[1])===(hoje.getMonth()+1)&&parseInt(p[2])===hoje.getDate();
   });
   var aRen=_vs.filter(function(s){
-    if(!s.vencimento)return false;
+    if(!s.vencimento) return false;
+    if(isEmLicenca(s.id, ds)) return false;
     var v=new Date(s.vencimento+'T12:00:00');v.setHours(0,0,0,0);
     var t=new Date();t.setHours(0,0,0,0);
     var d=Math.ceil((v-t)/86400000);
     return d>=0&&d<=7;
   }).sort(function(a,b){return new Date(a.vencimento)-new Date(b.vencimento);});
   var ausentes=_vs.filter(function(s){
+    if(isEmLicenca(s.id, ds)) return false;
     var d=getDaysAbsent(s.id);return d!==null&&d>=7&&s.status!=='atrasado';
   }).sort(function(a,b){return (getDaysAbsent(b.id)||0)-(getDaysAbsent(a.id)||0);});
 
@@ -5424,8 +5426,9 @@ function renderSimulacao() {
 
 function getPrioridadeAcao() {
   var acoes=[];
+  var ds=todayStr();
 
-  _visible(students).filter(function(s){return s.status==='atrasado';})
+  _visible(students).filter(function(s){return !isEmLicenca(s.id,ds)&&s.status==='atrasado';})
     .sort(function(a,b){return getPlanoValorTotal(b)-getPlanoValorTotal(a);})
     .forEach(function(s){
       var ph=waPhone(s);
@@ -5440,10 +5443,11 @@ function getPrioridadeAcao() {
     });
 
   _visible(students).filter(function(s){
+    if(isEmLicenca(s.id,ds)) return false;
     var d=getDaysAbsent(s.id);
     return d!==null&&d>=7&&s.status!=='atrasado';
   }).map(function(s){
-    return {s,score:getPlanoValorTotal(s)*(getDaysAbsent(s.id)||0)};
+    return {s:s,score:getPlanoValorTotal(s)*(getDaysAbsent(s.id)||0)};
   }).sort(function(a,b){return b.score-a.score;})
     .slice(0,3)
     .forEach(function(x){
@@ -5461,7 +5465,7 @@ function getPrioridadeAcao() {
 
   var hoje=new Date();hoje.setHours(0,0,0,0);
   _visible(students).filter(function(s){
-    if(!s.vencimento)return false;
+    if(!s.vencimento||isEmLicenca(s.id,ds)) return false;
     var v=new Date(s.vencimento+'T12:00:00');v.setHours(0,0,0,0);
     var d=Math.ceil((v-hoje)/86400000);
     return d>=0&&d<=7;
