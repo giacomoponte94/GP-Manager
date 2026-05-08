@@ -2450,8 +2450,21 @@ function getAulasDoMes(sid){
     var now=new Date(),y=now.getFullYear(),m=now.getMonth();
     periodoInicio=new Date(y,m,1); periodoFim=new Date(y,m+1,0,23,59,59);
   }
-  // Direito = alocação mensal FIXA (spw * 4 semanas), sem desconto de feriados ou licenças
-  var dir=spw*4;
+  // Direito = contagem real dos dias de treino no período, excluindo feriados (licença não deduz — o vencimento já compensa)
+  var sAgs=agendas.filter(function(a){return !a.deleted&&a.alunoId===sid;});
+  var dowsAluno=[];
+  sAgs.forEach(function(a){a.days.forEach(function(dw){if(dowsAluno.indexOf(dw)===-1)dowsAluno.push(dw);});});
+  var dir=0;
+  if(dowsAluno.length&&periodoInicio&&periodoFim){
+    var dc=new Date(periodoInicio);
+    while(dc<=periodoFim){
+      if(dowsAluno.indexOf(dc.getDay())!==-1&&!isHoliday(dc)) dir++;
+      dc.setDate(dc.getDate()+1);
+    }
+  } else {
+    var _pd=Math.round((periodoFim-periodoInicio)/86400000)+1;
+    dir=Math.round(spw*_pd/7);
+  }
   // Presencas contam a partir do início real do aluno dentro do período de competência
   var presencaInicio=new Date(periodoInicio);
   if(s.inicio){var si=new Date(s.inicio+'T00:00:00');if(si>presencaInicio)presencaInicio=si;}
