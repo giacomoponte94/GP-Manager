@@ -1685,7 +1685,7 @@ function addLicenca(sid, inicio, fim) {
   // Validate: max 7 days
   var iniD = new Date(inicio + 'T00:00:00'), fimD = new Date(fim + 'T00:00:00');
   var dias = Math.round((fimD - iniD) / 86400000) + 1;
-  if(dias < 1 || dias > 7) { toast('Licença deve ser de 1 a 7 dias corridos.'); return false; }
+  if(dias < 1 || dias > 30) { toast('Licença deve ser de 1 a 30 dias corridos.'); return false; }
   if(iniD > fimD) { toast('Data inicial deve ser anterior à final.'); return false; }
   // Check overlap with existing active licença
   var lics = getLicencasAluno(sid);
@@ -1703,6 +1703,7 @@ function addLicenca(sid, inicio, fim) {
     var v = new Date(s.vencimento + 'T12:00:00');
     v.setDate(v.getDate() + dias);
     s.vencimento = v.toISOString().split('T')[0];
+    s.updatedAt = Date.now(); s.deviceId = _getDeviceId();
     save();
     toast('Licença de '+dias+'d adicionada. Vencimento atualizado para '+fmtDate(s.vencimento)+'.');
   }
@@ -1726,6 +1727,7 @@ function removeLicenca(sid, licId) {
       var v = new Date(s.vencimento + 'T12:00:00');
       v.setDate(v.getDate() - dias);
       s.vencimento = v.toISOString().split('T')[0];
+      s.updatedAt = Date.now(); s.deviceId = _getDeviceId();
       save();
     }
   }
