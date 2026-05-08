@@ -976,18 +976,10 @@ function _getTs(i){
   return 0;
 }
 
-// Mescla dois itens: cloud vence em conflitos de chave; campos exclusivos de cada lado são preservados.
-// Strings vazias/null no cloud NÃO sobrescrevem valores preenchidos localmente.
+// Mescla dois itens: preserva campos locais exclusivos, cloud vence em conflitos de chave.
 function _mergeItem(existing, item){
   var result=Object.assign({},existing);
-  Object.keys(item).forEach(function(k){
-    var cv=item[k]; var lv=result[k];
-    // Prefer the non-empty value: if cloud field is null/empty but local has data, keep local
-    if(cv===null||cv===undefined||cv===''){
-      if(lv!==null&&lv!==undefined&&lv!=='') return; // keep local
-    }
-    result[k]=cv;
-  });
+  Object.keys(item).forEach(function(k){ result[k]=item[k]; });
   return result;
 }
 
@@ -1018,8 +1010,7 @@ function _mergeById(localArr, cloudArr, getId){
       var lTs=_getTs(existing);
       if(cTs>lTs){
         map[id]=_mergeItem(existing,item);
-      } else if(cTs===lTs){
-        // Timestamps iguais (ex: ambos null/0): une campos de ambos — cloud preenche o que local não tem
+      } else if(cTs===lTs && (item.deviceId||'')>(existing.deviceId||'')){
         map[id]=_mergeItem(existing,item);
       }
       // local wins when lTs > cTs — no change needed
@@ -1246,10 +1237,10 @@ function _startSync(){
     } else {
       console.log('[GP Sync] Já em sincronia — nenhuma ação');
     }
-    _setSyncStatus('ok'); _initialized=true; _lastSuccessfulSync=Date.now(); _registerCollectionListeners(); _registerSyncWatchers();
+    _setSyncStatus('ok'); _initialized=true; _registerCollectionListeners();
   }).catch(function(e){
     console.warn('[GP Sync] Erro startup:',e); _setSyncStatus('err',e);
-    _initialized=true; _registerCollectionListeners(); _registerSyncWatchers();
+    _initialized=true; _registerCollectionListeners();
   });
 }
 
@@ -1260,7 +1251,7 @@ function forceSyncFromCloud(){
     if(!Object.keys(allCols).length){ _pushAllCols(); toast('Nuvem vazia \u2014 dados locais enviados.'); return; }
     Object.keys(_COL_MAP).forEach(function(lsKey){ var col=_COL_MAP[lsKey]; if(allCols[col]) _applyCol(col,lsKey,allCols[col],true); });
     try{ loadAll(); }catch(e){} try{ refreshAll(); }catch(e){} try{ renderCalendar(); }catch(e){} try{ renderFinanceiro(); }catch(e){}
-    _lastSuccessfulSync=Date.now(); _setSyncStatus('ok'); toast('Dados atualizados da nuvem!');
+    _setSyncStatus('ok'); toast('Dados atualizados da nuvem!');
   }).catch(function(e){ _setSyncStatus('err',e); toast('Erro ao buscar dados.'); });
 }
 
@@ -1334,85 +1325,7 @@ function _flushIfPending(){
   try{ localStorage.removeItem('gp-dirty'); }catch(e){}
 }
 
-var _hiddenAt = 0;
-var _lastSuccessfulSync = 0;
-var _disconnectedAt = 0;
-var _FORCE_RESYNC_MS = 5 * 60 * 1000;
-
-// Fetch completo do servidor, ignorando timestamps locais
-function _fetchAll(reason){
-  if(!_colsRef) return;
-  console.log('[GP Sync] fetchAll:', reason);
-  _colsRef.once('value').then(function(snap){
-    var allCols=snap.val()||{};
-    Object.keys(_COL_MAP).forEach(function(lsKey){
-      var col=_COL_MAP[lsKey]; var cd=allCols[col]; if(!cd) return;
-      _applyCol(col,lsKey,cd,true);
-    });
-    try{loadAll();}catch(e){} try{refreshAll();}catch(e){}
-    try{renderDashboard();}catch(e){} try{renderCalendar();}catch(e){} try{renderFinanceiro();}catch(e){}
-    _lastSuccessfulSync=Date.now();
-    _setSyncStatus('ok');
-    console.log('[GP Sync] fetchAll OK:', reason);
-  }).catch(function(e){ console.warn('[GP Sync] fetchAll erro:',reason,e); });
-}
-
-// Força reconexão WebSocket e depois faz pull completo
-function _doForceResync(reason){
-  if(!_initialized||!_colsRef) return;
-  console.log('[GP Sync] doForceResync:', reason);
-  _setSyncStatus('up');
-  try{ firebase.database().goOffline(); }catch(e){}
-  setTimeout(function(){
-    try{ firebase.database().goOnline(); }catch(e){}
-    // Aguarda conexão real (até 4s) antes de buscar
-    var done=false;
-    var connRef=firebase.database().ref('.info/connected');
-    var timer=setTimeout(function(){
-      if(done) return; done=true; connRef.off('value',onConn); _fetchAll(reason);
-    }, 4000);
-    function onConn(snap){
-      if(snap.val()!==true||done) return;
-      done=true; clearTimeout(timer); connRef.off('value',onConn); _fetchAll(reason);
-    }
-    connRef.on('value',onConn);
-  }, 600);
-}
-
-// Registra watchdogs de sincronização — chamado uma vez após inicialização
-function _registerSyncWatchers(){
-  // 1. Detecta reconexão real do Firebase
-  var _wasConn=null;
-  firebase.database().ref('.info/connected').on('value',function(snap){
-    var isConn=snap.val()===true;
-    if(!isConn){
-      _disconnectedAt=Date.now();
-    } else if(_wasConn===false && _disconnectedAt && _initialized){
-      var gap=Date.now()-_disconnectedAt;
-      _disconnectedAt=0;
-      if(gap>30000){ setTimeout(function(){ _fetchAll('reconexao-'+Math.round(gap/1000)+'s'); },400); }
-    }
-    _wasConn=isConn;
-  });
-  // 2. Verificação periódica a cada 2 min — captura aba nunca oculta + WebSocket zumbi
-  setInterval(function(){
-    if(!_initialized||document.visibilityState==='hidden') return;
-    var age=Date.now()-_lastSuccessfulSync;
-    if(age>_FORCE_RESYNC_MS){ _doForceResync('periodico-'+Math.round(age/60000)+'min'); }
-  }, 2*60*1000);
-}
-
 function _onAppForeground(){
-  var wasHiddenMs=_hiddenAt?(Date.now()-_hiddenAt):0;
-  var syncAge=_lastSuccessfulSync?(Date.now()-_lastSuccessfulSync):999999999;
-  var forceResync=wasHiddenMs>_FORCE_RESYNC_MS||syncAge>_FORCE_RESYNC_MS;
-  _hiddenAt=0;
-
-  if(forceResync){
-    _doForceResync('foreground-'+Math.round(Math.max(wasHiddenMs,syncAge)/60000)+'min');
-    return;
-  }
-
   try{ firebase.database().goOnline(); }catch(e){}
   if(!_initialized) return;
   var dirty=false; try{ dirty=localStorage.getItem('gp-dirty')==='1'; }catch(e){}
@@ -1427,17 +1340,16 @@ function _onAppForeground(){
       }
     });
     if(anyNewer){
-      try{loadAll();}catch(e){} try{refreshAll();}catch(e){} try{renderCalendar();}catch(e){} try{renderFinanceiro();}catch(e){}
-      _setSyncStatus('ok'); console.log('[GP Sync] Foreground: atualizado');
-    }
-    _lastSuccessfulSync=Date.now();
+      try{ loadAll(); }catch(e){} try{ refreshAll(); }catch(e){} try{ renderCalendar(); }catch(e){} try{ renderFinanceiro(); }catch(e){}
+      _setSyncStatus('ok'); console.log('[GP Sync] Foreground: coleções atualizadas');
+    } else { console.log('[GP Sync] Foreground: local atualizado'); }
   }).catch(function(e){ console.warn('[GP Sync] Foreground erro:',e); });
 }
 window.addEventListener('beforeunload', _flushIfPending);
 window.addEventListener('pagehide', _flushIfPending);
 window.addEventListener('pageshow', function(e){ if(e.persisted){ _onAppForeground(); }});
 document.addEventListener('visibilitychange', function(){
-  if(document.visibilityState==='hidden'){ _flushIfPending(); _hiddenAt=Date.now(); }
+  if(document.visibilityState==='hidden'){ _flushIfPending(); }
   else { _onAppForeground(); }
 });
 /* ============================= */
@@ -1791,7 +1703,6 @@ function addLicenca(sid, inicio, fim) {
     var v = new Date(s.vencimento + 'T12:00:00');
     v.setDate(v.getDate() + dias);
     s.vencimento = v.toISOString().split('T')[0];
-    s.updatedAt = Date.now(); s.deviceId = _getDeviceId();
     save();
     toast('Licença de '+dias+'d adicionada. Vencimento atualizado para '+fmtDate(s.vencimento)+'.');
   }
@@ -1829,41 +1740,6 @@ function removeLicenca(sid, licId) {
 var diasPermitidos = [1,2,3,4,5,6];
 var horariosConfig = {}; // { hour: [dow, dow, ...] }  e.g. { 5:[1,4], 6:[1,2,3,4,5,6] }
 var chavePix = '';
-function getCfgAvisoDias(){ return parseInt(localStorage.getItem('gp-aviso-dias'))||5; }
-function getCfgMaxSlot()  { return parseInt(localStorage.getItem('gp-max-slot'))||1; }
-function getCfgAulaDur()  { return parseInt(localStorage.getItem('gp-aula-dur'))||60; }
-function getCfgPerfil()   { try{return JSON.parse(localStorage.getItem('gp-perfil'))||{};}catch(e){return {};} }
-function saveCfgPerfil(p) { localStorage.setItem('gp-perfil',JSON.stringify(p)); }
-var _cfgAba = 'planos';
-function setCfgAba(aba){ _cfgAba=aba; renderConfiguracoes(); }
-function salvarAvisoDias(){
-  var v=parseInt(document.getElementById('cfg-aviso-dias').value);
-  if(isNaN(v)||v<1||v>30){ toast('Valor inválido (1–30)'); return; }
-  localStorage.setItem('gp-aviso-dias',v);
-  toast('Salvo!'); renderConfiguracoes();
-}
-function salvarMetaCfg(){
-  var v=parseFloat(document.getElementById('cfg-meta-inp').value);
-  if(isNaN(v)||v<0){ toast('Valor inválido'); return; }
-  localStorage.setItem('gp-meta',v);
-  toast('Meta salva!'); renderFinanceiro(); renderConfiguracoes();
-}
-function salvarPerfil(){
-  var p={
-    nome: (document.getElementById('cfg-pf-nome')||{}).value||'',
-    telefone: (document.getElementById('cfg-pf-telefone')||{}).value||'',
-    instagram: (document.getElementById('cfg-pf-instagram')||{}).value||'',
-    cref: (document.getElementById('cfg-pf-cref')||{}).value||''
-  };
-  saveCfgPerfil(p);
-  toast('Perfil salvo!');
-}
-function limparDadosLocais(){
-  if(!confirm('Limpar cache local? Os dados na nuvem não serão afetados.')) return;
-  ['gp-aviso-dias','gp-max-slot','gp-aula-dur','gp-perfil','gp-fin-modo','gp-meta','gp-pix','gp-recibo-header','gp-recibo-rodape','gp-recibo-corpo'].forEach(function(k){ localStorage.removeItem(k); });
-  toast('Dados locais limpos. Recarregando…');
-  setTimeout(function(){ location.reload(); }, 1200);
-}
 function loadChavePix(){ try{ chavePix=localStorage.getItem('gp-pix')||''; }catch(e){} }
 function saveChavePix(){ try{ localStorage.setItem('gp-pix',chavePix); }catch(e){} }
 
@@ -2417,7 +2293,7 @@ function computeStatus(s) {
   var venc=new Date(s.vencimento+'T12:00:00');
   var diff=Math.ceil((venc-hoje)/(1000*60*60*24));
   if(diff<0)  return 'atrasado';
-  if(diff<=getCfgAvisoDias()) return 'vencendo';
+  if(diff<=5) return 'vencendo';
   return 'em dia';
 }
 function refreshAll(){
@@ -2440,7 +2316,6 @@ function renovarAluno(id){
   var hoje=new Date();hoje.setHours(0,0,0,0); if(base<hoje)base=new Date(hoje);
   base.setMonth(base.getMonth()+1);
   s.vencimento=base.toISOString().split('T')[0]; s.status='em dia'; s.statusManual=null;
-  s.updatedAt=Date.now(); s.deviceId=_getDeviceId();
   save(); refreshAll(); renderFinanceiro();
   toast(s.nome.split(' ')[0]+' renovado ate '+fmtDate(s.vencimento));
 }
@@ -2565,7 +2440,7 @@ function verListaHoje(){
 function getAulasDoMes(sid){
   var s=students.find(function(x){return x.id===sid&&!x.deleted;}); if(!s||!s.plano)return{feitas:0,direito:0,faltas:0};
   var spw=PLAN_DAYS[s.plano]||0;
-  // Período baseado na vigência do plano (vencimento - 1 mês), não no mês calendário
+  // Período de competência: baseado no vencimento do plano (vencimento - 1 mês)
   var periodoFim, periodoInicio;
   if(s.vencimento){
     periodoFim=new Date(s.vencimento+'T23:59:59');
@@ -2575,10 +2450,8 @@ function getAulasDoMes(sid){
     var now=new Date(),y=now.getFullYear(),m=now.getMonth();
     periodoInicio=new Date(y,m,1); periodoFim=new Date(y,m+1,0,23,59,59);
   }
-  // Não conta antes do início real do aluno
-  if(s.inicio){var si=new Date(s.inicio+'T00:00:00');if(si>periodoInicio)periodoInicio=si;}
-  var periodDays=Math.max(1,Math.round((periodoFim-periodoInicio)/86400000));
-  var dir=Math.round(spw*periodDays/7);
+  // Direito = alocação mensal FIXA (spw * 4 semanas), descontando feriados e licenças no período
+  var dir=spw*4;
   var sAgs=agendas.filter(function(a){return !a.deleted&&a.alunoId===sid;});
   var dowsAluno=[];
   sAgs.forEach(function(a){a.days.forEach(function(dw){if(dowsAluno.indexOf(dw)===-1)dowsAluno.push(dw);});});
@@ -2593,6 +2466,9 @@ function getAulasDoMes(sid){
       dc.setDate(dc.getDate()+1);
     }
   }
+  // Presencas contam a partir do início real do aluno dentro do período de competência
+  var presencaInicio=new Date(periodoInicio);
+  if(s.inicio){var si=new Date(s.inicio+'T00:00:00');if(si>presencaInicio)presencaInicio=si;}
   var f=0,fa=0;
   Object.keys(presencas).forEach(function(k){
     if(k.indexOf(sid+'_')!==0)return;
@@ -2600,7 +2476,7 @@ function getAulasDoMes(sid){
     if(isFeriado(ds))return;
     var _psf=_presStatus(presencas[k]);
     var d=new Date(ds+'T12:00:00');
-    if(d>=periodoInicio&&d<=periodoFim){if(_psf==='presente')f++;else if(_psf==='faltou')fa++;}
+    if(d>=presencaInicio&&d<=periodoFim){if(_psf==='presente')f++;else if(_psf==='faltou')fa++;}
   });
   return{feitas:f,direito:dir,faltas:fa};
 }
@@ -2648,15 +2524,13 @@ function renderPaineis(){
     return parseInt(p[1])===(hoje.getMonth()+1)&&parseInt(p[2])===hoje.getDate();
   });
   var aRen=_vs.filter(function(s){
-    if(!s.vencimento) return false;
-    if(isEmLicenca(s.id, ds)) return false;
+    if(!s.vencimento)return false;
     var v=new Date(s.vencimento+'T12:00:00');v.setHours(0,0,0,0);
     var t=new Date();t.setHours(0,0,0,0);
     var d=Math.ceil((v-t)/86400000);
     return d>=0&&d<=7;
   }).sort(function(a,b){return new Date(a.vencimento)-new Date(b.vencimento);});
   var ausentes=_vs.filter(function(s){
-    if(isEmLicenca(s.id, ds)) return false;
     var d=getDaysAbsent(s.id);return d!==null&&d>=7&&s.status!=='atrasado';
   }).sort(function(a,b){return (getDaysAbsent(b.id)||0)-(getDaysAbsent(a.id)||0);});
 
@@ -2796,38 +2670,6 @@ function jaPagouNoMes(sid){
     var d=new Date(p.data+'T12:00:00');
     return isMesmoMes(d,now);
   });
-}
-
-// Regime de competência: agrupa receita pelo mês do vencimento do plano
-// Pagamento pertence à competência do mês em que o plano vence (não em que foi pago)
-function getRecCompetencia(){
-  var now=new Date();
-  var yr=now.getFullYear(), mo=now.getMonth();
-  var result={total:0,recebido:0,pendente:0,pagRows:[],pendRows:[],totalRows:[]};
-  _visible(students).filter(function(s){return s.status!=='aguardando';}).forEach(function(s){
-    if(!s.vencimento||!s.plano)return;
-    var _ps=getPlano(s.plano); if(_ps&&_ps.tipo==='pacote')return;
-    var v=new Date(s.vencimento+'T12:00:00');
-    if(v.getFullYear()!==yr||v.getMonth()!==mo)return; // vencimento não é neste mês
-    var valor=getPlanoValorTotal(s);
-    result.total+=valor;
-    result.totalRows.push(s);
-    // Pagamento deste ciclo: o mais recente recebido até o vencimento, dentro de 45 dias antes
-    var pag=pagamentos.filter(function(p){
-      if(p.deleted||p.alunoId!==s.id)return false;
-      if(p.data>s.vencimento)return false; // não contar pagamentos após vencimento (próximo ciclo)
-      var daysToVenc=(new Date(s.vencimento+'T12:00:00')-new Date(p.data+'T12:00:00'))/86400000;
-      return daysToVenc<=45;
-    }).sort(function(a,b){return b.data.localeCompare(a.data);})[0];
-    if(pag){
-      result.recebido+=(pag.valor||0);
-      result.pagRows.push({student:s,pag:pag});
-    } else {
-      result.pendente+=valor;
-      result.pendRows.push(s);
-    }
-  });
-  return result;
 }
 function marcarComoPago(sid){
   var s=students.find(function(x){return x.id===sid&&!x.deleted;});
@@ -3131,9 +2973,7 @@ function saveStudent(){
     precoAvulsa:parseFloat(document.getElementById('f-preco-avulsa')&&document.getElementById('f-preco-avulsa').value)||null,
     valorUnitario:_saveValorUnitario,
     valorTotal:_saveValorTotal,
-    criadoEm:editingId?(students.find(function(x){return x.id===editingId&&!x.deleted;})||{}).criadoEm:new Date().toISOString(),
-    updatedAt:Date.now(),
-    deviceId:_getDeviceId()
+    criadoEm:editingId?(students.find(function(x){return x.id===editingId&&!x.deleted;})||{}).criadoEm:new Date().toISOString()
   });
   var days=Array.from(document.querySelectorAll('#f-days-picker .day-btn.selected')).map(function(b){return parseInt(b.dataset.day);});
   if(days.length){
@@ -3160,7 +3000,7 @@ function saveStudent(){
         var ocupados=agsRef.filter(function(a){
           return a.days.includes(d) && parseInt(a.inicio.split(':')[0])===h;
         });
-        if(ocupados.length>=getCfgMaxSlot()+1){
+        if(ocupados.length>=2){
           var nomes=ocupados.map(function(a){var s=students.find(function(x){return x.id===a.alunoId&&!x.deleted;});return s?s.nome.split(' ')[0]:'?';});
           conflitos.push(DAY_NAMES[d]+' '+t+' \u2014 hor\u00e1rio lotado ('+nomes.join(' + ')+')');
         } else if(ocupados.length===1 && obj.modalidade!=='Duo'){
@@ -3315,57 +3155,6 @@ function openDetail(id){
         +'<div style="font-size:0.82rem;color:var(--white);margin-top:2px;">'+escapeHtml(e.nota)+'</div></div>';}).join('')
       +'</div>';
   }
-  // Historico de presencas
-  var _allPres=Object.keys(presencas).filter(function(k){
-    return k.indexOf(s.id+'_')===0 && !presencas[k].deleted && (presencas[k].status==='presente'||presencas[k].status==='faltou');
-  }).map(function(k){
-    return {date:k.replace(s.id+'_',''), status:presencas[k].status};
-  }).sort(function(a,b){return b.date.localeCompare(a.date);});
-  var histPresencasHtml='';
-  if(_allPres.length){
-    var _byMonth={};
-    _allPres.forEach(function(e){
-      var ym=e.date.slice(0,7);
-      if(!_byMonth[ym]) _byMonth[ym]=[];
-      _byMonth[ym].push(e);
-    });
-    var _monthKeys=Object.keys(_byMonth).sort(function(a,b){return b.localeCompare(a);});
-    var _monthNames=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-    histPresencasHtml='<div style="background:var(--card);padding:14px 16px;margin-top:12px;">'
-      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'
-      +'<span style="font-family:Raleway,sans-serif;font-size:0.58rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--accent-l);">Histórico de presenças</span>'
-      +'<span style="font-size:0.72rem;color:var(--white-dim);">'+_allPres.length+' registro'+((_allPres.length!==1)?'s':'')+'</span>'
-      +'</div>';
-    _monthKeys.forEach(function(ym){
-      var parts=ym.split('-');
-      var label=_monthNames[parseInt(parts[1],10)-1]+' '+parts[0];
-      var entries=_byMonth[ym];
-      var pres=entries.filter(function(e){return e.status==='presente';}).length;
-      var falt=entries.filter(function(e){return e.status==='faltou';}).length;
-      histPresencasHtml+='<div style="margin-bottom:12px;">'
-        +'<div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:5px;border-bottom:1px solid var(--border);margin-bottom:6px;">'
-        +'<span style="font-size:0.7rem;font-weight:700;color:var(--white);">'+label+'</span>'
-        +'<span style="font-size:0.68rem;color:var(--white-dim);">'
-        +(pres>0?'<span style="color:var(--success);">✔ '+pres+'</span>':'')
-        +(pres>0&&falt>0?' &nbsp;':'')
-        +(falt>0?'<span style="color:var(--danger);">✘ '+falt+'</span>':'')
-        +'</span></div>'
-        +'<div style="display:flex;flex-direction:column;gap:4px;">'
-        +entries.map(function(e){
-          var isPres=e.status==='presente';
-          var dStr=fmtDate(e.date);
-          var dayOfWeek=['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][new Date(e.date+'T12:00:00').getDay()];
-          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;">'
-            +'<span style="font-size:0.76rem;color:var(--white-dim);">'+dayOfWeek+', '+dStr+'</span>'
-            +'<span style="font-size:0.68rem;font-weight:600;padding:2px 8px;border-radius:10px;'
-            +(isPres?'background:rgba(39,174,96,0.15);color:var(--success);':'background:rgba(231,76,60,0.15);color:var(--danger);')
-            +'">'+( isPres?'✔ Presente':'✘ Faltou')+'</span>'
-            +'</div>';
-        }).join('')
-        +'</div></div>';
-    });
-    histPresencasHtml+='</div>';
-  }
   var ph=waPhone(s); var nome1=cleanText(s.nome.split(' ')[0], 40);
   var waHtml='';
   if(ph){
@@ -3408,7 +3197,7 @@ function openDetail(id){
     +'<div class="detail-item"><div class="detail-item-label">Telefone</div><div class="detail-item-value">'+escapeHtml(s.telefone||'\u2014')+'</div></div>'
     +(s.obs?'<div class="detail-item" style="grid-column:1/-1"><div class="detail-item-label">Obs saude</div><div class="detail-item-value">'+escapeHtml(s.obs)+'</div></div>':'')
     +'</div>'
-    +notasHtml+histPresencasHtml+waHtml
+    +notasHtml+waHtml
     +'<div id="det-actions" style="display:flex;gap:10px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);"></div>';
   var actDiv=document.getElementById('det-actions');
   if(s.status==='vencendo'||s.status==='atrasado'){
@@ -4157,21 +3946,19 @@ function renderFinanceiro(){
     out+='<div style="height:100%;width:'+pct+'%;background:var(--success);border-radius:4px;"></div></div></div>';
   } else {
     // === COMPETÊNCIA ===
-    // Receita do mês = planos cujo vencimento cai neste mês (independente de quando foram pagos)
-    var _crc=getRecCompetencia();
-    var _pctComp=_crc.total>0?Math.round(_crc.recebido/_crc.total*100):0;
+    var _pctComp=total>0?Math.round(rec/total*100):0;
     out+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">';
-    out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\'comp_total\')" style="cursor:pointer;border-top:2px solid var(--accent);padding:14px 12px;border-radius:10px;"><div class="stat-num" style="color:var(--accent-l);font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(_crc.total)+'</div><div class="stat-lbl">Receita do mês</div></div>';
-    out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\'recebido\')" style="cursor:pointer;border-top:2px solid var(--success);padding:14px 12px;border-radius:10px;"><div class="stat-num" style="color:var(--success);font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(_crc.recebido)+'</div><div class="stat-lbl">Já recebido</div></div>';
-    out+='<div class="stat-card'+(_crc.pendente>0?' warning':'')+'" onclick="abrirDetalheFinanceiro(\'comp_pendente\')" style="cursor:pointer;border-top:2px solid '+(_crc.pendente>0?'var(--warning)':'var(--success)')+';padding:14px 12px;border-radius:10px;"><div class="stat-num" style="color:'+(_crc.pendente>0?'var(--warning)':'var(--success)')+';font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(_crc.pendente)+'</div><div class="stat-lbl">Pendente</div></div>';
+    out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\'comp_total\')" style="cursor:pointer;border-top:2px solid var(--accent);padding:14px 12px;border-radius:10px;"><div class="stat-num" style="color:var(--accent-l);font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(total)+'</div><div class="stat-lbl">Receita do mês</div></div>';
+    out+='<div class="stat-card" onclick="abrirDetalheFinanceiro(\'recebido\')" style="cursor:pointer;border-top:2px solid var(--success);padding:14px 12px;border-radius:10px;"><div class="stat-num" style="color:var(--success);font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(rec)+'</div><div class="stat-lbl">Já recebido</div></div>';
+    out+='<div class="stat-card'+(_pendente>0?' warning':'')+'" onclick="abrirDetalheFinanceiro(\'comp_pendente\')" style="cursor:pointer;border-top:2px solid '+(_pendente>0?'var(--warning)':'var(--success)')+';padding:14px 12px;border-radius:10px;"><div class="stat-num" style="color:'+(_pendente>0?'var(--warning)':'var(--success)')+';font-size:clamp(0.7rem,3.5vw,1rem);word-break:break-word;">'+fmt(_pendente)+'</div><div class="stat-lbl">Pendente</div></div>';
     out+='</div>';
     out+='<div style="background:var(--card);padding:14px 18px;margin-bottom:8px;border-radius:8px;">';
     out+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px;">';
     out+='<span style="font-family:Raleway,sans-serif;font-size:0.58rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--accent-l);white-space:nowrap;flex-shrink:0;">Recebido da competência</span>';
-    out+='<span style="font-size:0.82rem;color:var(--white);font-weight:600;text-align:right;">'+_pctComp+'%&nbsp;<span style="color:var(--white-dim);font-weight:300;font-size:0.75rem;">'+fmt(_crc.recebido)+' de '+fmt(_crc.total)+'</span></span>';
+    out+='<span style="font-size:0.82rem;color:var(--white);font-weight:600;text-align:right;">'+_pctComp+'%&nbsp;<span style="color:var(--white-dim);font-weight:300;font-size:0.75rem;">'+fmt(rec)+' de '+fmt(total)+'</span></span>';
     out+='</div><div style="height:8px;background:rgba(74,127,165,0.15);border-radius:4px;overflow:hidden;">';
     out+='<div style="height:100%;width:'+_pctComp+'%;background:var(--success);border-radius:4px;"></div></div>';
-    out+='<div style="font-size:0.68rem;color:var(--white-dim);margin-top:6px;">Pagamentos cujo plano vence neste mês — independente da data de recebimento</div>';
+    out+='<div style="font-size:0.68rem;color:var(--white-dim);margin-top:6px;">Competência = receita gerada no mês, independente do recebimento</div>';
     out+='</div>';
   }
   // Painel de competência (só mostra no modo caixa e apenas se há pré-pagamentos ou futuros pendentes)
@@ -4290,10 +4077,10 @@ function renderFinanceiro(){
         avBg='rgba(231,76,60,0.15)';avColor='var(--danger)';leftBorder='border-left:3px solid var(--danger);';
         statusLabel='<div style="font-size:0.6rem;color:var(--danger);margin-top:2px;">Atrasado h\u00E1 '+diasAt+' dia'+(diasAt!==1?'s':'')+'</div>';
       } else if(s.vencimento){
-        var cor5=_diff<=getCfgAvisoDias()?'var(--warning)':'var(--white-dim)';
-        sbFin=_diff<=getCfgAvisoDias()?'<span class="badge badge-warn">Vencendo</span>':'<span class="badge badge-ok">Em dia</span>';
-        avBg=_diff<=getCfgAvisoDias()?'rgba(243,156,18,0.15)':'rgba(39,174,96,0.15)';
-        avColor=_diff<=getCfgAvisoDias()?'var(--warning)':'var(--success)';
+        var cor5=_diff<=5?'var(--warning)':'var(--white-dim)';
+        sbFin=_diff<=5?'<span class="badge badge-warn">Vencendo</span>':'<span class="badge badge-ok">Em dia</span>';
+        avBg=_diff<=5?'rgba(243,156,18,0.15)':'rgba(39,174,96,0.15)';
+        avColor=_diff<=5?'var(--warning)':'var(--success)';
         statusLabel='<div style="font-size:0.6rem;color:'+cor5+';margin-top:2px;">Vence em '+_diff+' dia'+(Math.abs(_diff)!==1?'s':'')+'</div>';
       } else {
         sbFin='<span class="badge badge-ok">Em dia</span>';
@@ -4344,30 +4131,17 @@ function abrirDetalheFinanceiro(tipo){
       +'<div><div style="font-size:0.85rem;font-weight:600;color:var(--white);">'+escapeHtml(nome)+'</div>'+(sub?'<div style="font-size:0.7rem;color:var(--white-dim);margin-top:1px;">'+sub+'</div>':'')+'</div>'+v+'</div>';
   }
   if(tipo==='recebido'){
-    if(getFinModo()==='competencia'){
-      // Competência: pagamentos dos planos cujo vencimento é neste mês
-      var _crcD=getRecCompetencia();
-      titulo='Recebido (competência)';
-      rows.push('<div style="padding:10px 12px;font-size:0.72rem;color:var(--white-dim);border-bottom:1px solid var(--border);">Pagamentos referentes a planos com vencimento neste mês.</div>');
-      if(!_crcD.pagRows.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Nenhum pagamento desta competência.</div>');}
-      _crcD.pagRows.forEach(function(r){
-        var sub=fmtDate(r.pag.data)+' · '+(r.pag.forma||'')+' · vence '+fmtDate(r.student.vencimento);
-        rows.push(_row(r.student.nome,sub,r.pag.valor,'var(--success)'));
-      });
-    } else {
-      // Caixa: pagamentos cuja DATA está neste mês
-      var pags=pagamentos.filter(function(p){
-        if(p.deleted)return false;
-        var d=new Date(p.data+'T12:00:00');
-        return isMesmoMes(d,_now);
-      }).sort(function(a,b){return b.data.localeCompare(a.data);});
-      if(!pags.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Nenhum pagamento registrado este mês.</div>');}
-      pags.forEach(function(p){
-        var s=students.find(function(x){return x.id===p.alunoId&&!x.deleted;});
-        var nome=s?s.nome:(p.alunoId||'?');
-        rows.push(_row(nome,fmtDate(p.data)+' · '+(p.forma||''),p.valor,'var(--success)'));
-      });
-    }
+    var pags=pagamentos.filter(function(p){
+      if(p.deleted)return false;
+      var d=new Date(p.data+'T12:00:00');
+      return isMesmoMes(d,_now);
+    }).sort(function(a,b){return b.data.localeCompare(a.data);});
+    if(!pags.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Nenhum pagamento registrado este mês.</div>');}
+    pags.forEach(function(p){
+      var s=students.find(function(x){return x.id===p.alunoId&&!x.deleted;});
+      var nome=s?s.nome:(p.alunoId||'?');
+      rows.push(_row(nome,fmtDate(p.data)+' · '+(p.forma||''),p.valor,'var(--success)'));
+    });
   } else if(tipo==='avencer'){
     var lista=_vsf_ativos.filter(function(s){
       if(!s.vencimento||!s.plano)return false;
@@ -4471,25 +4245,25 @@ function abrirDetalheFinanceiro(tipo){
       rows.push(_row(s.nome,(s.vencimento?'Vence '+fmtDate(s.vencimento):''),getPlanoValorTotal(s),'var(--success)'));
     });
   } else if(tipo==='comp_total'){
-    // Competência: planos com vencimento neste mês
-    var _crcT=getRecCompetencia();
-    rows.push('<div style="padding:10px 12px;font-size:0.72rem;color:var(--white-dim);border-bottom:1px solid var(--border);">Planos cujo vencimento é neste mês — pagos ou pendentes.</div>');
-    if(!_crcT.totalRows.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Nenhum plano vence este mês.</div>');}
-    _crcT.totalRows.sort(function(a,b){return (a.vencimento||'').localeCompare(b.vencimento||'');}).forEach(function(s){
-      var pagou=_crcT.pagRows.some(function(r){return r.student.id===s.id;});
-      var sub=(pagou?'✔ Pago':'⏳ Pendente')+' · vence '+fmtDate(s.vencimento);
-      var cor=pagou?'var(--success)':'var(--warning)';
+    // Competência: todos os alunos ativos (não aguardando) — receita gerada no mês
+    var lista=_vsf_ativos.slice().sort(function(a,b){return a.nome.localeCompare(b.nome,'pt-BR');});
+    rows.push('<div style="padding:10px 12px;font-size:0.72rem;color:var(--white-dim);border-bottom:1px solid var(--border);">Receita gerada no mês pela competência dos planos ativos.</div>');
+    if(!lista.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Nenhum aluno ativo.</div>');}
+    lista.forEach(function(s){
+      var pago=jaPagouNoMes(s.id);
+      var sub=(pago?'Pago':s.status==='atrasado'?'Inadimplente':'Pendente')+(s.vencimento?' · '+fmtDate(s.vencimento):'');
+      var cor=pago?'var(--success)':s.status==='atrasado'?'var(--danger)':'var(--warning)';
       rows.push(_row(s.nome,sub,getPlanoValorTotal(s),cor));
     });
   } else if(tipo==='comp_pendente'){
-    // Competência: planos com vencimento neste mês sem pagamento do ciclo
-    var _crcP=getRecCompetencia();
-    rows.push('<div style="padding:10px 12px;font-size:0.72rem;color:var(--white-dim);border-bottom:1px solid var(--border);">Planos com vencimento neste mês sem pagamento registrado no ciclo.</div>');
-    if(!_crcP.pendRows.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Todos os planos deste mês foram pagos!</div>');}
-    _crcP.pendRows.sort(function(a,b){return (a.vencimento||'').localeCompare(b.vencimento||'');}).forEach(function(s){
+    // Competência: alunos que ainda não pagaram
+    var lista=_vsf_ativos.filter(function(s){return !jaPagouNoMes(s.id);}).sort(function(a,b){return (a.vencimento||'').localeCompare(b.vencimento||'');});
+    rows.push('<div style="padding:10px 12px;font-size:0.72rem;color:var(--white-dim);border-bottom:1px solid var(--border);">Receita gerada mas ainda não recebida este mês.</div>');
+    if(!lista.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Todos os alunos já pagaram!</div>');}
+    lista.forEach(function(s){
       var diff=getDiffDias(s.vencimento||'');
-      var sub='Vence '+fmtDate(s.vencimento)+(diff<0?' · Atrasado há '+Math.abs(diff)+'d':'');
-      var cor=diff<0?'var(--danger)':'var(--warning)';
+      var sub=s.vencimento?(diff<0?'Atrasado há '+Math.abs(diff)+' dia'+(Math.abs(diff)!==1?'s':''):'Vence em '+diff+' dia'+(diff!==1?'s':'')):'';
+      var cor=s.status==='atrasado'||(s.vencimento&&diff<0)?'var(--danger)':'var(--warning)';
       rows.push(_row(s.nome,sub,getPlanoValorTotal(s),cor));
     });
   }
@@ -4625,282 +4399,199 @@ function renderConfiguracoes() {
   var body = document.getElementById('config-body');
   var out = '';
 
-  // --- Tab navigation ---
-  var tabs = [
-    {id:'planos',   icon:'📋', label:'Planos'},
-    {id:'agenda',   icon:'📅', label:'Agenda'},
-    {id:'financeiro',icon:'💰',label:'Financeiro'},
-    {id:'perfil',   icon:'👤', label:'Perfil'},
-    {id:'dados',    icon:'💾', label:'Dados'},
-  ];
-  out += '<div style="display:flex;gap:4px;margin-bottom:18px;background:var(--dark);border-radius:8px;padding:4px;">';
-  tabs.forEach(function(t){
-    var active = _cfgAba === t.id;
-    out += '<button onclick="setCfgAba(\''+t.id+'\')" style="flex:1;padding:7px 2px;border:none;border-radius:6px;font-size:0.55rem;font-family:Raleway,sans-serif;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;cursor:pointer;transition:background 0.15s;display:flex;flex-direction:column;align-items:center;gap:2px;'
-      +(active?'background:var(--accent);color:#fff;':'background:none;color:var(--white-dim);')+'\">'
-      +'<span style="font-size:0.9rem;">'+t.icon+'</span>'
-      +'<span>'+t.label+'</span></button>';
+  out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Seus planos</div>';
+
+  _visible(PLANOS).forEach(function(p, idx) {
+    var tipoLabel = p.tipo==='pacote' ? '\uD83D\uDCE6 Aula Avulsa' : '\uD83D\uDCC5 Mensal';
+    var tipoColor = p.tipo==='pacote' ? 'var(--warning)' : 'var(--accent-l)';
+    var borderCol = p.tipo==='pacote' ? 'var(--warning)' : 'var(--accent)';
+    out += '<div class="plano-card" data-idx="'+idx+'" style="background:var(--card);padding:14px 16px;margin-bottom:8px;border-left:3px solid '+borderCol+';border-radius:0 8px 8px 0;cursor:pointer;" onclick="editarPlano('+idx+')">';
+    out += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+    out += '<div>';
+    out += '<div style="font-weight:600;font-size:0.9rem;color:var(--white);">'+p.nome+'</div>';
+    out += '<div style="font-size:0.72rem;margin-top:3px;color:'+tipoColor+';">'+tipoLabel;
+    if(p.tipo !== 'pacote') out += ' \u00B7 '+p.diasSemana+'x/sem';
+    out += '</div>';
+    out += '<div style="font-size:0.72rem;color:var(--white-dim);margin-top:2px;">Individual: R$ '+p.precoInd;
+    if(p.precoExt) out += ' &nbsp; '+(p.labelExt||'Duo')+': R$ '+p.precoExt;
+    out += '</div>';
+    out += '</div>';
+    out += '<div style="display:flex;gap:6px;">';
+    out += '<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();excluirPlano('+idx+')" style="color:var(--danger);border-color:var(--danger);">\u2715</button>';
+    out += '</div>';
+    out += '</div></div>';
   });
+
+  out += '<button class="btn btn-outline" style="width:100%;height:40px;margin-top:8px;" onclick="novoPlanocfg()">+ Novo plano</button>';
+
+  
+  out += '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">';
+  out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Dias de atendimento</div>';
+  out += '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:12px;">Selecione os dias em que voc\u00ea aceita agendamentos:</div>';
+  var DNAMES7 = ['Dom','Seg','Ter','Qua','Qui','Sex','S\u00e1b'];
+  out += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px;">';
+  [0,1,2,3,4,5,6].forEach(function(d) {
+    var sel = diasPermitidos.indexOf(d) !== -1;
+    out += '<button class="cfg-dia-btn" data-dow="'+d+'" style="'
+      + 'height:48px;border:1px solid '+(sel?'var(--accent)':'var(--border)')+';'
+      + 'background:'+(sel?'var(--accent)':'none')+';'
+      + 'color:'+(sel?'#fff':'var(--white-dim)')+';'
+      + 'font-family:Raleway,sans-serif;font-size:0.55rem;font-weight:700;'
+      + 'letter-spacing:0.08em;text-transform:uppercase;cursor:pointer;border-radius:4px;">'
+      + DNAMES7[d]+'</button>';
+  });
+  out += '</div></div>';
+
+  // Horários de atendimento
+  out += '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">';
+  out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Hor\u00E1rios de atendimento</div>';
+  out += '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:14px;">Defina quais hor\u00E1rios est\u00E3o dispon\u00EDveis e em quais dias:</div>';
+  var DNAMES7H = ['Dom','Seg','Ter','Qua','Qui','Sex','S\u00E1b'];
+  var configuredHours = Object.keys(horariosConfig).map(Number).sort(function(a,b){return a-b;}).filter(function(h){ return horariosConfig[h] && horariosConfig[h].length > 0; });
+  configuredHours.forEach(function(h){
+    var diasH = horariosConfig[h] || [];
+    out += '<div class="hcfg-row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;background:var(--card);padding:10px 12px;border-radius:8px;">';
+    out += '<span style="font-family:Raleway,sans-serif;font-weight:700;font-size:0.82rem;color:var(--white);min-width:42px;">'+String(h).padStart(2,'0')+':00</span>';
+    out += '<div style="display:flex;gap:4px;flex-wrap:wrap;flex:1;">';
+    [0,1,2,3,4,5,6].forEach(function(d){
+      var sel = diasH.indexOf(d) !== -1;
+      out += '<button class="hcfg-day-btn" data-h="'+h+'" data-d="'+d+'" style="'
+        +'height:28px;width:32px;border:1px solid '+(sel?'var(--accent)':'var(--border)')+';'
+        +'background:'+(sel?'var(--accent)':'none')+';'
+        +'color:'+(sel?'#fff':'var(--white-dim)')+';'
+        +'font-family:Raleway,sans-serif;font-size:0.5rem;font-weight:700;'
+        +'letter-spacing:0.05em;text-transform:uppercase;cursor:pointer;border-radius:3px;">'
+        +DNAMES7H[d]+'</button>';
+    });
+    out += '</div>';
+    out += '<button class="hcfg-del-btn" data-h="'+h+'" style="background:none;border:1px solid var(--danger);color:var(--danger);width:26px;height:26px;border-radius:4px;cursor:pointer;flex-shrink:0;">\u2715</button>';
+    out += '</div>';
+  });
+  // Add hour row — free time input (any hour 00-23)
+  out += '<div style="display:flex;gap:8px;margin-top:8px;align-items:center;">';
+  out += '<input type="time" id="hcfg-add-inp" step="3600" placeholder="HH:MM" style="flex:1;margin:0;padding:10px 12px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.9rem;height:42px;box-sizing:border-box;">';
+  out += '<button class="btn btn-outline" style="height:42px;padding:0 16px;white-space:nowrap;" onclick="adicionarHorarioCfg()">+ Adicionar</button>';
+  out += '</div>';
+  out += '<div style="font-size:0.65rem;color:var(--white-dim);margin-top:6px;">Digite qualquer hor\u00e1rio (ex: 22:00, 06:30)</div>';
   out += '</div>';
 
-  // ====== PLANOS ======
-  if(_cfgAba === 'planos'){
-    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Seus planos</div>';
-    _visible(PLANOS).forEach(function(p, idx) {
-      var tipoLabel = p.tipo==='pacote' ? '📦 Aula Avulsa' : '📅 Mensal';
-      var tipoColor = p.tipo==='pacote' ? 'var(--warning)' : 'var(--accent-l)';
-      var borderCol = p.tipo==='pacote' ? 'var(--warning)' : 'var(--accent)';
-      out += '<div class="plano-card" data-idx="'+idx+'" style="background:var(--card);padding:14px 16px;margin-bottom:8px;border-left:3px solid '+borderCol+';border-radius:0 8px 8px 0;cursor:pointer;" onclick="editarPlano('+idx+')">';
-      out += '<div style="display:flex;justify-content:space-between;align-items:center;">';
-      out += '<div><div style="font-weight:600;font-size:0.9rem;color:var(--white);">'+p.nome+'</div>';
-      out += '<div style="font-size:0.72rem;margin-top:3px;color:'+tipoColor+';">'+tipoLabel;
-      if(p.tipo !== 'pacote') out += ' · '+p.diasSemana+'x/sem';
-      out += '</div>';
-      out += '<div style="font-size:0.72rem;color:var(--white-dim);margin-top:2px;">Individual: R$ '+p.precoInd;
-      if(p.precoExt) out += ' &nbsp; '+(p.labelExt||'Duo')+': R$ '+p.precoExt;
-      out += '</div></div>';
-      out += '<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();excluirPlano('+idx+')" style="color:var(--danger);border-color:var(--danger);">✕</button>';
-      out += '</div></div>';
-    });
-    out += '<button class="btn btn-outline" style="width:100%;height:40px;margin-top:8px;" onclick="novoPlanocfg()">+ Novo plano</button>';
 
-    out += '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">';
-    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:12px;">Alertas</div>';
-    out += '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:8px;">Quantos dias antes do vencimento mostrar o aviso “Vencendo”:</div>';
-    out += '<div style="display:flex;gap:8px;align-items:center;">';
-    out += '<input type="number" id="cfg-aviso-dias" min="1" max="30" value="'+getCfgAvisoDias()+'" style="width:70px;margin:0;padding:10px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.9rem;text-align:center;">';
-    out += '<span style="font-size:0.78rem;color:var(--white-dim);">dias antes</span>';
-    out += '<button class="btn btn-primary btn-sm" style="margin-left:auto;" onclick="salvarAvisoDias()">Salvar</button>';
-    out += '</div></div>';
-  }
-
-  // ====== AGENDA ======
-  if(_cfgAba === 'agenda'){
-    var DNAMES7 = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
-    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Dias de atendimento</div>';
-    out += '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:12px;">Dias em que você aceita agendamentos:</div>';
-    out += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:20px;">';
-    [0,1,2,3,4,5,6].forEach(function(d) {
-      var sel = diasPermitidos.indexOf(d) !== -1;
-      out += '<button class="cfg-dia-btn" data-dow="'+d+'" style="'
-        + 'height:48px;border:1px solid '+(sel?'var(--accent)':'var(--border)')+';'
-        + 'background:'+(sel?'var(--accent)':'none')+';color:'+(sel?'#fff':'var(--white-dim)')+';'
-        + 'font-family:Raleway,sans-serif;font-size:0.55rem;font-weight:700;'
-        + 'letter-spacing:0.08em;text-transform:uppercase;cursor:pointer;border-radius:4px;">'
-        + DNAMES7[d]+'</button>';
-    });
-    out += '</div>';
-
-    out += '<div style="padding-top:16px;border-top:1px solid var(--border);margin-bottom:20px;">';
-    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Horários de atendimento</div>';
-    out += '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:14px;">Defina os horários disponíveis e em quais dias:</div>';
-    var DNAMES7H = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
-    var configuredHours = Object.keys(horariosConfig).map(Number).sort(function(a,b){return a-b;}).filter(function(h){ return horariosConfig[h] && horariosConfig[h].length > 0; });
-    configuredHours.forEach(function(h){
-      var diasH = horariosConfig[h] || [];
-      out += '<div class="hcfg-row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;background:var(--card);padding:10px 12px;border-radius:8px;">';
-      out += '<span style="font-family:Raleway,sans-serif;font-weight:700;font-size:0.82rem;color:var(--white);min-width:42px;">'+String(h).padStart(2,'0')+':00</span>';
-      out += '<div style="display:flex;gap:4px;flex-wrap:wrap;flex:1;">';
-      [0,1,2,3,4,5,6].forEach(function(d){
-        var sel = diasH.indexOf(d) !== -1;
-        out += '<button class="hcfg-day-btn" data-h="'+h+'" data-d="'+d+'" style="'
-          +'height:28px;width:32px;border:1px solid '+(sel?'var(--accent)':'var(--border)')+';'
-          +'background:'+(sel?'var(--accent)':'none')+';color:'+(sel?'#fff':'var(--white-dim)')+';'
-          +'font-family:Raleway,sans-serif;font-size:0.5rem;font-weight:700;'
-          +'letter-spacing:0.05em;text-transform:uppercase;cursor:pointer;border-radius:3px;">'
-          +DNAMES7H[d]+'</button>';
-      });
-      out += '</div>';
-      out += '<button class="hcfg-del-btn" data-h="'+h+'" style="background:none;border:1px solid var(--danger);color:var(--danger);width:26px;height:26px;border-radius:4px;cursor:pointer;flex-shrink:0;">✕</button>';
+  out += '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">';
+  out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:12px;"> Feriados personalizados</div>';
+  var ferKeys = Object.keys(feriadosCustom).sort();
+  if (ferKeys.length) {
+    ferKeys.forEach(function(k){
+      var dt = new Date(k+'T12:00:00').toLocaleDateString('pt-BR');
+      out += '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:var(--card);border-radius:8px;margin-bottom:6px;">';
+      out += '<div><div style="font-size:0.85rem;color:var(--white);">'+feriadosCustom[k]+'</div>';
+      out += '<div style="font-size:0.68rem;color:var(--white-dim);">'+dt+'</div></div>';
+      out += '<button class="btn btn-danger btn-sm del-fer-btn" data-k="'+k+'">\u2715</button>';
       out += '</div>';
     });
-    out += '<div style="display:flex;gap:8px;margin-top:8px;align-items:center;">';
-    out += '<input type="time" id="hcfg-add-inp" step="3600" placeholder="HH:MM" style="flex:1;margin:0;padding:10px 12px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.9rem;height:42px;box-sizing:border-box;">';
-    out += '<button class="btn btn-outline" style="height:42px;padding:0 16px;white-space:nowrap;" onclick="adicionarHorarioCfg()">+ Adicionar</button>';
-    out += '</div>';
-    out += '<div style="font-size:0.65rem;color:var(--white-dim);margin-top:6px;">Digite qualquer horário (ex: 22:00, 06:30)</div>';
-    out += '</div>';
-
-    out += '<div style="padding-top:16px;border-top:1px solid var(--border);margin-bottom:20px;">';
-    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:12px;">Regras de agendamento</div>';
-    out += '<div style="display:flex;flex-direction:column;gap:12px;">';
-    // Duration
-    out += '<div><div style="font-size:0.72rem;color:var(--white-dim);margin-bottom:6px;">Duração padrão da aula</div>';
-    out += '<div style="display:flex;gap:6px;">';
-    [30,45,60,90].forEach(function(m){
-      var sel = getCfgAulaDur()===m;
-      out += '<button class="cfg-dur-btn" data-min="'+m+'" style="flex:1;height:36px;border:1px solid '+(sel?'var(--accent)':'var(--border)')+';background:'+(sel?'var(--accent)':'none')+';color:'+(sel?'#fff':'var(--white-dim)')+';border-radius:4px;font-size:0.8rem;cursor:pointer;">'+m+'min</button>';
-    });
-    out += '</div></div>';
-    // Max per slot
-    out += '<div><div style="font-size:0.72rem;color:var(--white-dim);margin-bottom:6px;">Máx. alunos por horário</div>';
-    out += '<div style="display:flex;gap:6px;">';
-    [1,2,3,4].forEach(function(n){
-      var sel = getCfgMaxSlot()===n;
-      out += '<button class="cfg-slot-btn" data-max="'+n+'" style="flex:1;height:36px;border:1px solid '+(sel?'var(--accent)':'var(--border)')+';background:'+(sel?'var(--accent)':'none')+';color:'+(sel?'#fff':'var(--white-dim)')+';border-radius:4px;font-size:0.8rem;cursor:pointer;">'+n+(n===4?'+':'')+'</button>';
-    });
-    out += '</div></div>';
-    out += '</div></div>';
-
-    out += '<div style="padding-top:16px;border-top:1px solid var(--border);">';
-    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:12px;">Feriados personalizados</div>';
-    var ferKeys = Object.keys(feriadosCustom).sort();
-    if(ferKeys.length){
-      ferKeys.forEach(function(k){
-        var dt = new Date(k+'T12:00:00').toLocaleDateString('pt-BR');
-        out += '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:var(--card);border-radius:8px;margin-bottom:6px;">';
-        out += '<div><div style="font-size:0.85rem;color:var(--white);">'+feriadosCustom[k]+'</div>';
-        out += '<div style="font-size:0.68rem;color:var(--white-dim);">'+dt+'</div></div>';
-        out += '<button class="btn btn-danger btn-sm del-fer-btn" data-k="'+k+'">✕</button>';
-        out += '</div>';
-      });
-    } else {
-      out += '<p style="font-size:0.78rem;color:var(--white-dim);margin-bottom:12px;">Nenhum feriado personalizado.</p>';
-    }
-    out += '<div style="display:flex;gap:8px;margin-top:8px;">';
-    out += '<input type="date" id="cfg-fer-data" style="flex:1;margin-bottom:0;padding:10px;">';
-    out += '<input type="text" id="cfg-fer-nome" placeholder="Nome do feriado" style="flex:2;margin-bottom:0;padding:10px;">';
-    out += '</div>';
-    out += '<button class="btn btn-outline" style="width:100%;height:38px;margin-top:8px;" onclick="adicionarFeriadoCfg()">+ Adicionar feriado</button>';
-    out += '</div>';
+  } else {
+    out += '<p style="font-size:0.78rem;color:var(--white-dim);margin-bottom:12px;">Nenhum feriado personalizado.</p>';
   }
+  out += '<div style="display:flex;gap:8px;margin-top:8px;">';
+  out += '<input type="date" id="cfg-fer-data" style="flex:1;margin-bottom:0;padding:10px;">';
+  out += '<input type="text" id="cfg-fer-nome" placeholder="Nome do feriado" style="flex:2;margin-bottom:0;padding:10px;">';
+  out += '</div>';
+  out += '<button class="btn btn-outline" style="width:100%;height:38px;margin-top:8px;" onclick="adicionarFeriadoCfg()">+ Adicionar feriado</button>';
+  out += '</div>';
 
-  // ====== FINANCEIRO ======
-  if(_cfgAba === 'financeiro'){
-    // Meta mensal
-    var meta = getMeta();
-    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Meta mensal</div>';
-    out += '<div style="display:flex;gap:8px;margin-bottom:20px;">';
-    out += '<input type="number" id="cfg-meta-inp" min="0" placeholder="R$ 0,00" value="'+(meta||'')+'" style="flex:1;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.9rem;">';
-    out += '<button class="btn btn-primary" style="height:42px;padding:0 16px;white-space:nowrap;" onclick="salvarMetaCfg()">Salvar</button>';
-    out += '</div>';
+  // Recibo
+  out += '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">';
+  out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Comprovante de pagamento</div>';
+  out += '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:12px;">Personalize o cabe\u00E7alho e rodap\u00E9 do comprovante gerado para os alunos:</div>';
+  out += '<div style="display:flex;flex-direction:column;gap:8px;">';
+  out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">Cabe\u00E7alho (nome / apresenta\u00E7\u00E3o)</div>';
+  out += '<input type="text" id="cfg-recibo-header" placeholder="Ex: Jo\u00E3o Silva - Personal Trainer" value="'+escapeHTML(reciboHeader)+'" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;"></div>';
+  out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">Corpo do comprovante</div>';
+  out += '<div style="font-size:0.65rem;color:rgba(74,127,165,0.7);margin-bottom:6px;">Vari\u00E1veis: <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{nome}</code> <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{plano}</code> <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{valor}</code> <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{data}</code> <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{vencimento}</code></div>';
+  out += '<textarea id="cfg-recibo-corpo" rows="6" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;font-family:monospace;resize:vertical;line-height:1.5;">'+escapeHTML(reciboCorpo)+'</textarea></div>';
+  out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">Rodap\u00E9 (instagram / contato)</div>';
+  out += '<input type="text" id="cfg-recibo-rodape" placeholder="Ex: @seuperfil" value="'+escapeHTML(reciboRodape)+'" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;"></div>';
+  out += '<button class="btn btn-primary" style="height:42px;" onclick="salvarReciboConfig()">Salvar comprovante</button>';
+  out += '</div></div>';
 
-    // Modelo padrão
-    var modoPadrao = getFinModo();
-    out += '<div style="padding-top:16px;border-top:1px solid var(--border);margin-bottom:20px;">';
-    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Modelo padrão de análise</div>';
-    out += '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:10px;">Define qual modelo abre por padrão na aba Financeiro:</div>';
-    out += '<div style="display:flex;background:var(--card);border-radius:8px;padding:3px;gap:2px;">';
-    out += '<button onclick="setFinModo(\'caixa\');renderConfiguracoes();" style="flex:1;padding:9px 0;border-radius:6px;border:none;font-size:0.75rem;font-weight:600;cursor:pointer;'+(modoPadrao==='caixa'?'background:var(--accent);color:#fff;':'background:none;color:var(--white-dim);')+'">Caixa</button>';
-    out += '<button onclick="setFinModo(\'competencia\');renderConfiguracoes();" style="flex:1;padding:9px 0;border-radius:6px;border:none;font-size:0.75rem;font-weight:600;cursor:pointer;'+(modoPadrao==='competencia'?'background:var(--accent);color:#fff;':'background:none;color:var(--white-dim);')+'">Competência</button>';
-    out += '</div></div>';
-
-    // Pix
-    out += '<div style="padding-top:16px;border-top:1px solid var(--border);margin-bottom:20px;">';
-    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Dados para cobrança</div>';
-    out += '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:8px;">Chave Pix exibida nas mensagens de cobrança:</div>';
-    out += '<div style="display:flex;gap:8px;">';
-    out += '<input type="text" id="cfg-pix-input" placeholder="CPF, e-mail, telefone ou chave aleatória" value="'+chavePix+'" style="flex:1;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;">';
-    out += '<button class="btn btn-primary" style="height:42px;padding:0 16px;white-space:nowrap;" onclick="salvarChavePix()">Salvar</button>';
-    out += '</div></div>';
-
-    // Comprovante
-    out += '<div style="padding-top:16px;border-top:1px solid var(--border);">';
-    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Comprovante de pagamento</div>';
-    out += '<div style="display:flex;flex-direction:column;gap:8px;">';
-    out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">Cabeçalho (nome / apresentação)</div>';
-    out += '<input type="text" id="cfg-recibo-header" placeholder="Ex: João Silva - Personal Trainer" value="'+escapeHTML(reciboHeader)+'" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;"></div>';
-    out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">Corpo do comprovante</div>';
-    out += '<div style="font-size:0.65rem;color:rgba(74,127,165,0.7);margin-bottom:6px;">Variáveis: <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{nome}</code> <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{plano}</code> <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{valor}</code> <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{data}</code> <code style="background:rgba(74,127,165,0.1);padding:1px 5px;border-radius:3px;">{vencimento}</code></div>';
-    out += '<textarea id="cfg-recibo-corpo" rows="6" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;font-family:monospace;resize:vertical;line-height:1.5;">'+escapeHTML(reciboCorpo)+'</textarea></div>';
-    out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">Rodapé (instagram / contato)</div>';
-    out += '<input type="text" id="cfg-recibo-rodape" placeholder="Ex: @seuperfil" value="'+escapeHTML(reciboRodape)+'" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;"></div>';
-    out += '<button class="btn btn-primary" style="height:42px;" onclick="salvarReciboConfig()">Salvar comprovante</button>';
-    out += '</div></div>';
-  }
-
-  // ====== PERFIL ======
-  if(_cfgAba === 'perfil'){
-    var pf = getCfgPerfil();
-    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Seu perfil profissional</div>';
-    out += '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:16px;">Essas informações aparecem no comprovante e nas mensagens geradas pelo app.</div>';
-    out += '<div style="display:flex;flex-direction:column;gap:10px;">';
-    out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">Nome / Nome do negócio</div>';
-    out += '<input type="text" id="cfg-pf-nome" placeholder="Ex: João Silva - Personal Trainer" value="'+escapeHTML(pf.nome||'')+'" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;"></div>';
-    out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">WhatsApp / Telefone</div>';
-    out += '<input type="tel" id="cfg-pf-telefone" placeholder="Ex: 85999999999" value="'+escapeHTML(pf.telefone||'')+'" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;"></div>';
-    out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">Instagram</div>';
-    out += '<input type="text" id="cfg-pf-instagram" placeholder="Ex: @seuperfil" value="'+escapeHTML(pf.instagram||'')+'" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;"></div>';
-    out += '<div><div style="font-size:0.68rem;color:var(--white-dim);margin-bottom:4px;">CREF (opcional)</div>';
-    out += '<input type="text" id="cfg-pf-cref" placeholder="Ex: 000000-G/CE" value="'+escapeHTML(pf.cref||'')+'" style="width:100%;box-sizing:border-box;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;"></div>';
-    out += '<button class="btn btn-primary" style="height:42px;" onclick="salvarPerfil()">Salvar perfil</button>';
-    out += '</div>';
-  }
-
-  // ====== DADOS ======
-  if(_cfgAba === 'dados'){
-    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Export / Import</div>';
-    out += '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">';
-    out += '<button class="btn btn-outline" style="height:42px;" onclick="exportarDados()">⬇ Exportar todos os dados (JSON)</button>';
-    out += '<button class="btn btn-outline" style="height:42px;" onclick="importarDados()">⬆ Importar backup (JSON)</button>';
-    out += '</div>';
-
-    out += '<div style="padding-top:16px;border-top:1px solid var(--border);margin-bottom:20px;">';
-    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Histórico de backups</div>';
-    out += '<div id="cfg-backup-hist-wrap">';
-    try{
-      var list=JSON.parse(localStorage.getItem('gp-auto-bk-list')||'[]');
-      if(list.length){
-        list.forEach(function(k,i){
-          var bk=JSON.parse(localStorage.getItem(k)||'{}');
-          var ts=bk.ts?new Date(bk.ts).toLocaleString('pt-BR'):'--';
-          var sz=bk.size?Math.round(bk.size/1024)+'KB':'--';
-          out += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--card);border-radius:8px;margin-bottom:6px;">';
-          out += '<div><div style="font-size:0.8rem;color:var(--white);">Backup '+(i+1)+'</div><div style="font-size:0.65rem;color:var(--white-dim);">'+ts+' &middot; '+sz+'</div></div>';
-          out += '<button class="btn btn-outline btn-sm" onclick="restaurarAutoBackup(\''+k+'\')">Restaurar</button>';
-          out += '</div>';
-        });
-      } else {
-        out += '<p style="font-size:0.78rem;color:var(--white-dim);">Nenhum backup automático.</p>';
-      }
-    }catch(e){
-      out += '<p style="font-size:0.78rem;color:var(--white-dim);">Nenhum backup.</p>';
-    }
-    out += '</div></div>';
-
-    out += '<div style="padding-top:16px;border-top:1px solid var(--border);">';
-    out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--danger);margin-bottom:10px;">Zona de risco</div>';
-    out += '<button class="btn btn-outline" style="width:100%;height:42px;color:var(--danger);border-color:var(--danger);" onclick="limparDadosLocais()">Limpar dados locais (manter nuvem)</button>';
-    out += '<div style="font-size:0.65rem;color:var(--white-dim);margin-top:6px;">Remove o cache local. Os dados do Firebase serão baixados novamente ao recarregar.</div>';
-    out += '</div>';
-  }
+  // Chave Pix
+  out += '<div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">';
+  out += '<div style="font-family:Raleway,sans-serif;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent-l);margin-bottom:10px;">Dados para cobran\u00E7a</div>';
+  out += '<div style="font-size:0.78rem;color:var(--white-dim);margin-bottom:8px;">Chave Pix exibida nas mensagens de cobran\u00E7a:</div>';
+  out += '<div style="display:flex;gap:8px;">';
+  out += '<input type="text" id="cfg-pix-input" placeholder="CPF, e-mail, telefone ou chave aleat\u00F3ria" value="'+chavePix+'" style="flex:1;margin:0;padding:10px 14px;background:var(--dark);border:1px solid var(--border);color:var(--white);border-radius:4px;font-size:0.82rem;outline:none;">';
+  out += '<button class="btn btn-primary" style="height:42px;padding:0 16px;white-space:nowrap;" onclick="salvarChavePix()">Salvar</button>';
+  out += '</div></div>';
 
   body.innerHTML = out;
 
-  // --- Event listeners ---
+  // Horários config - day toggle buttons
   body.querySelectorAll('.hcfg-day-btn').forEach(function(btn){
     btn.onclick = function(){
       var h = parseInt(btn.getAttribute('data-h'));
       var d = parseInt(btn.getAttribute('data-d'));
-      if(!horariosConfig[h]) horariosConfig[h] = [];
+      if (!horariosConfig[h]) horariosConfig[h] = [];
       var idx = horariosConfig[h].indexOf(d);
-      if(idx !== -1){
-        if(horariosConfig[h].length > 1){ horariosConfig[h].splice(idx, 1); btn.style.borderColor='var(--border)'; btn.style.background='none'; btn.style.color='var(--white-dim)'; }
+      if (idx !== -1) {
+        if (horariosConfig[h].length > 1) {
+          horariosConfig[h].splice(idx, 1);
+          btn.style.borderColor = 'var(--border)';
+          btn.style.background = 'none';
+          btn.style.color = 'var(--white-dim)';
+        }
       } else {
-        horariosConfig[h].push(d); horariosConfig[h].sort(function(a,b){return a-b;}); btn.style.borderColor='var(--accent)'; btn.style.background='var(--accent)'; btn.style.color='#fff';
+        horariosConfig[h].push(d);
+        horariosConfig[h].sort(function(a,b){return a-b;});
+        btn.style.borderColor = 'var(--accent)';
+        btn.style.background = 'var(--accent)';
+        btn.style.color = '#fff';
       }
-      saveHorariosConfig(); renderCalendar();
+      saveHorariosConfig();
+      renderCalendar();
     };
   });
+
+  // Horários config - delete hour buttons
   body.querySelectorAll('.hcfg-del-btn').forEach(function(btn){
-    btn.onclick = function(){ var h=parseInt(btn.getAttribute('data-h')); delete horariosConfig[h]; saveHorariosConfig(); renderConfiguracoes(); renderCalendar(); };
-  });
-  body.querySelectorAll('.cfg-dia-btn').forEach(function(btn){
     btn.onclick = function(){
-      var dow=parseInt(btn.getAttribute('data-dow')); var idx3=diasPermitidos.indexOf(dow);
-      if(idx3!==-1){ if(diasPermitidos.length>1){ diasPermitidos.splice(idx3,1); btn.style.borderColor='var(--border)'; btn.style.background='none'; btn.style.color='var(--white-dim)'; } }
-      else { diasPermitidos.push(dow); diasPermitidos.sort(function(a,b){return a-b;}); btn.style.borderColor='var(--accent)'; btn.style.background='var(--accent)'; btn.style.color='#fff'; }
+      var h = parseInt(btn.getAttribute('data-h'));
+      delete horariosConfig[h];
+      saveHorariosConfig();
+      renderConfiguracoes();
+      renderCalendar();
+    };
+  });
+
+
+  body.querySelectorAll('.cfg-dia-btn').forEach(function(btn){
+    btn.onclick = function() {
+      var dow = parseInt(btn.getAttribute('data-dow'));
+      var idx3 = diasPermitidos.indexOf(dow);
+      if (idx3 !== -1) {
+        if (diasPermitidos.length > 1) {
+          diasPermitidos.splice(idx3, 1);
+          btn.style.borderColor = 'var(--border)';
+          btn.style.background = 'none';
+          btn.style.color = 'var(--white-dim)';
+        }
+      } else {
+        diasPermitidos.push(dow);
+        diasPermitidos.sort(function(a,b){return a-b;});
+        btn.style.borderColor = 'var(--accent)';
+        btn.style.background = 'var(--accent)';
+        btn.style.color = '#fff';
+      }
       saveDiasPermitidos();
     };
   });
+
+  
   body.querySelectorAll('.del-fer-btn').forEach(function(btn){
-    btn.onclick = function(){ delete feriadosCustom[btn.getAttribute('data-k')]; try{localStorage.setItem('gp-fe',JSON.stringify(feriadosCustom));}catch(e){} renderConfiguracoes(); renderCalendar(); };
-  });
-  body.querySelectorAll('.cfg-dur-btn').forEach(function(btn){
-    btn.onclick = function(){ var m=parseInt(btn.getAttribute('data-min')); localStorage.setItem('gp-aula-dur',m); toast('Duração padrão: '+m+'min ✓'); renderConfiguracoes(); };
-  });
-  body.querySelectorAll('.cfg-slot-btn').forEach(function(btn){
-    btn.onclick = function(){ var n=parseInt(btn.getAttribute('data-max')); localStorage.setItem('gp-max-slot',n); toast('Máx. por horário: '+n+' ✓'); renderConfiguracoes(); };
+    btn.onclick = function(){
+      delete feriadosCustom[btn.getAttribute('data-k')];
+      try{localStorage.setItem('gp-fe',JSON.stringify(feriadosCustom));}catch(e){}
+      renderConfiguracoes();
+      renderCalendar();
+    };
   });
 }
 
@@ -5486,9 +5177,8 @@ function renderSimulacao() {
 
 function getPrioridadeAcao() {
   var acoes=[];
-  var ds=todayStr();
 
-  _visible(students).filter(function(s){return !isEmLicenca(s.id,ds)&&s.status==='atrasado';})
+  _visible(students).filter(function(s){return s.status==='atrasado';})
     .sort(function(a,b){return getPlanoValorTotal(b)-getPlanoValorTotal(a);})
     .forEach(function(s){
       var ph=waPhone(s);
@@ -5503,11 +5193,10 @@ function getPrioridadeAcao() {
     });
 
   _visible(students).filter(function(s){
-    if(isEmLicenca(s.id,ds)) return false;
     var d=getDaysAbsent(s.id);
     return d!==null&&d>=7&&s.status!=='atrasado';
   }).map(function(s){
-    return {s:s,score:getPlanoValorTotal(s)*(getDaysAbsent(s.id)||0)};
+    return {s,score:getPlanoValorTotal(s)*(getDaysAbsent(s.id)||0)};
   }).sort(function(a,b){return b.score-a.score;})
     .slice(0,3)
     .forEach(function(x){
@@ -5525,7 +5214,7 @@ function getPrioridadeAcao() {
 
   var hoje=new Date();hoje.setHours(0,0,0,0);
   _visible(students).filter(function(s){
-    if(!s.vencimento||isEmLicenca(s.id,ds)) return false;
+    if(!s.vencimento)return false;
     var v=new Date(s.vencimento+'T12:00:00');v.setHours(0,0,0,0);
     var d=Math.ceil((v-hoje)/86400000);
     return d>=0&&d<=7;
@@ -6387,7 +6076,6 @@ function getAlunosHoje(){
     if(seen[slot.alunoId]) return;
     var s = students.find(function(x){ return x.id===slot.alunoId && !x.deleted; });
     if(!s) return;
-    if(isEmLicenca(s.id, ds)) return;
     seen[slot.alunoId] = true;
     result.push({ student:s, slot:slot, status: _presStatus(presencas[presKey(s.id,ds)])||'sem registro' });
   });
@@ -6403,7 +6091,6 @@ function getFaltaramOntem(){
     if(seen[slot.alunoId]) return;
     var s = students.find(function(x){ return x.id===slot.alunoId && !x.deleted; });
     if(!s) return;
-    if(isEmLicenca(s.id, ys)) return;
     seen[slot.alunoId] = true;
     if(_presStatus(presencas[presKey(s.id,ys)])==='presente') return;
     result.push({ student:s, slot:slot });
@@ -6413,9 +6100,8 @@ function getFaltaramOntem(){
 
 function getCobrancasHoje(){
   var hoje = new Date(); hoje.setHours(0,0,0,0);
-  var ds = todayStr();
   return _visible(students)
-    .filter(function(s){ return !isEmLicenca(s.id, ds) && (s.status==='atrasado'||s.status==='vencendo'); })
+    .filter(function(s){ return s.status==='atrasado'||s.status==='vencendo'; })
     .map(function(s){
       var vd = s.vencimento ? new Date(s.vencimento+'T12:00:00') : null;
       if(vd) vd.setHours(0,0,0,0);
@@ -6425,9 +6111,8 @@ function getCobrancasHoje(){
 }
 
 function getAlunosEmRisco(){
-  var ds = todayStr();
   return _visible(students)
-    .filter(function(s){ return !isEmLicenca(s.id, ds) && s.status!=='atrasado'; })
+    .filter(function(s){ return s.status!=='atrasado'; })
     .map(function(s){ return { student:s, dias:getMissedSessionsStreak(s.id) }; })
     .filter(function(it){ return it.dias>=1; })
     .sort(function(a,b){ return b.dias-a.dias; });
