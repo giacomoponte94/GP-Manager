@@ -801,6 +801,14 @@ try{ firebase.database().setPersistenceEnabled(true); }catch(e){}
 
 var auth = firebase.auth();
 var currentUser = null;
+var currentProfile = null;
+
+function isPersonal() { return !currentProfile || currentProfile.tipo === 'personal'; }
+function isAluno()    { return !!(currentProfile && currentProfile.tipo === 'aluno'); }
+function getAlunoContext() {
+  return isAluno() ? { ownerUid: currentProfile.ownerUid, studentId: currentProfile.studentId } : null;
+}
+function ensureProfileLoaded() { return currentProfile !== null; }
 
 // DB refs — set after auth via _initUserRefs(uid)
 var _legacyRef = null;
@@ -2267,6 +2275,22 @@ async function doRegister() {
   } catch(e) {
     _loginErr(_AUTH_MSGS[e.code]||e.message);
   }
+}
+
+// Creates an aluno profile for an already-authenticated user.
+// Call after creating the Firebase Auth account for the student.
+async function createAlunoProfile(email, ownerUid, studentId) {
+  if (!currentUser) throw new Error('Usuário não autenticado');
+  if (!ownerUid || !studentId) throw new Error('ownerUid e studentId são obrigatórios');
+  var profileData = {
+    email: email,
+    tipo: 'aluno',
+    ownerUid: ownerUid,
+    studentId: studentId,
+    createdAt: new Date().toISOString()
+  };
+  await firebase.database().ref('users/' + currentUser.uid + '/profile').set(profileData);
+  currentProfile = profileData;
 }
 
 function forgotPassword() {
@@ -4294,11 +4318,28 @@ document.addEventListener('DOMContentLoaded', function() {
       currentUser = user;
       _initUserRefs(user.uid);
       _migrateIfNeeded(user.uid);
-      document.getElementById('login-screen').style.display = 'none';
-      document.getElementById('app').style.display = 'flex';
-      setTimeout(function(){ try{initApp();}catch(e){ console.error('initApp err',e); } }, 50);
+      // Load profile before rendering — fall back to 'personal' for existing accounts
+      firebase.database().ref('users/'+user.uid+'/profile').once('value').then(function(snap){
+        var p = snap.val();
+        currentProfile = p || { tipo: 'personal' };
+        if (!currentProfile.tipo) currentProfile.tipo = 'personal';
+        if (currentProfile.tipo === 'aluno' && (!currentProfile.ownerUid || !currentProfile.studentId)) {
+          toast('Perfil de aluno inválido: vínculo ausente. Contate seu personal.');
+          auth.signOut();
+          return;
+        }
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('app').style.display = 'flex';
+        setTimeout(function(){ try{initApp();}catch(e){ console.error('initApp err',e); } }, 50);
+      }).catch(function(){
+        currentProfile = { tipo: 'personal' };
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('app').style.display = 'flex';
+        setTimeout(function(){ try{initApp();}catch(e){ console.error('initApp err',e); } }, 50);
+      });
     } else {
       currentUser = null;
+      currentProfile = null;
       document.getElementById('login-screen').style.display = 'flex';
       document.getElementById('app').style.display = 'none';
     }
