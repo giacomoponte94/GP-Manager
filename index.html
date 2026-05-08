@@ -2511,12 +2511,14 @@ function renderPaineis(){
   });
   var aRen=_vs.filter(function(s){
     if(!s.vencimento)return false;
+    if(isEmLicenca(s.id, ds))return false;
     var v=new Date(s.vencimento+'T12:00:00');v.setHours(0,0,0,0);
     var t=new Date();t.setHours(0,0,0,0);
     var d=Math.ceil((v-t)/86400000);
     return d>=0&&d<=7;
   }).sort(function(a,b){return new Date(a.vencimento)-new Date(b.vencimento);});
   var ausentes=_vs.filter(function(s){
+    if(isEmLicenca(s.id, ds))return false;
     var d=getDaysAbsent(s.id);return d!==null&&d>=7&&s.status!=='atrasado';
   }).sort(function(a,b){return (getDaysAbsent(b.id)||0)-(getDaysAbsent(a.id)||0);});
 
@@ -5163,8 +5165,9 @@ function renderSimulacao() {
 
 function getPrioridadeAcao() {
   var acoes=[];
+  var ds=todayStr();
 
-  _visible(students).filter(function(s){return s.status==='atrasado';})
+  _visible(students).filter(function(s){return !isEmLicenca(s.id,ds)&&s.status==='atrasado';})
     .sort(function(a,b){return getPlanoValorTotal(b)-getPlanoValorTotal(a);})
     .forEach(function(s){
       var ph=waPhone(s);
@@ -5179,6 +5182,7 @@ function getPrioridadeAcao() {
     });
 
   _visible(students).filter(function(s){
+    if(isEmLicenca(s.id,ds))return false;
     var d=getDaysAbsent(s.id);
     return d!==null&&d>=7&&s.status!=='atrasado';
   }).map(function(s){
@@ -5200,7 +5204,7 @@ function getPrioridadeAcao() {
 
   var hoje=new Date();hoje.setHours(0,0,0,0);
   _visible(students).filter(function(s){
-    if(!s.vencimento)return false;
+    if(!s.vencimento||isEmLicenca(s.id,ds))return false;
     var v=new Date(s.vencimento+'T12:00:00');v.setHours(0,0,0,0);
     var d=Math.ceil((v-hoje)/86400000);
     return d>=0&&d<=7;
@@ -6062,6 +6066,7 @@ function getAlunosHoje(){
     if(seen[slot.alunoId]) return;
     var s = students.find(function(x){ return x.id===slot.alunoId && !x.deleted; });
     if(!s) return;
+    if(isEmLicenca(s.id, ds)) return;
     seen[slot.alunoId] = true;
     result.push({ student:s, slot:slot, status: _presStatus(presencas[presKey(s.id,ds)])||'sem registro' });
   });
@@ -6077,6 +6082,7 @@ function getFaltaramOntem(){
     if(seen[slot.alunoId]) return;
     var s = students.find(function(x){ return x.id===slot.alunoId && !x.deleted; });
     if(!s) return;
+    if(isEmLicenca(s.id, ys)) return;
     seen[slot.alunoId] = true;
     if(_presStatus(presencas[presKey(s.id,ys)])==='presente') return;
     result.push({ student:s, slot:slot });
@@ -6086,8 +6092,9 @@ function getFaltaramOntem(){
 
 function getCobrancasHoje(){
   var hoje = new Date(); hoje.setHours(0,0,0,0);
+  var ds = todayStr();
   return _visible(students)
-    .filter(function(s){ return s.status==='atrasado'||s.status==='vencendo'; })
+    .filter(function(s){ return !isEmLicenca(s.id, ds) && (s.status==='atrasado'||s.status==='vencendo'); })
     .map(function(s){
       var vd = s.vencimento ? new Date(s.vencimento+'T12:00:00') : null;
       if(vd) vd.setHours(0,0,0,0);
@@ -6097,8 +6104,9 @@ function getCobrancasHoje(){
 }
 
 function getAlunosEmRisco(){
+  var ds = todayStr();
   return _visible(students)
-    .filter(function(s){ return s.status!=='atrasado'; })
+    .filter(function(s){ return !isEmLicenca(s.id, ds) && s.status!=='atrasado'; })
     .map(function(s){ return { student:s, dias:getMissedSessionsStreak(s.id) }; })
     .filter(function(it){ return it.dias>=1; })
     .sort(function(a,b){ return b.dias-a.dias; });
