@@ -457,6 +457,7 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
       <div class="dash-section" id="dash-dia"></div>
       <div class="dash-section" id="dash-aniv"></div>
       <div class="dash-section" id="dash-venc"></div>
+      <div id="dash-acoes" style="margin-bottom:8px;"></div>
     </div>
 
     <!-- Modal: grupo de alunos do dashboard -->
@@ -484,7 +485,6 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
       </div>
       <div class="stats-row" id="stats-row"></div>
       <div id="paineis"></div>
-      <div id="auto-panel" style="margin-bottom:16px;"></div>
       <div class="toolbar">
         <div class="search-wrap">
           <span class="search-icon">&#128269;</span>
@@ -2341,7 +2341,7 @@ function showTab(tab){
   setTimeout(function(){
     try{
       if(tab==='dashboard'){renderDashboard();}
-      else if(tab==='alunos'){renderTable();renderStats();renderNotifs();renderLockIn();renderPaineis();renderAutomacao();}
+      else if(tab==='alunos'){renderTable();renderStats();renderNotifs();renderLockIn();renderPaineis();}
       else if(tab==='treino'){renderTabTreino();}
       else if(tab==='agenda'){renderCalendar();}
       else if(tab==='financeiro'){renderFinanceiro();}
@@ -5219,7 +5219,7 @@ function renovarComMensagem(sid) {
 }
 
 function renderAutomacao() {
-  var panel=document.getElementById('auto-panel'); if(!panel)return;
+  var panel=document.getElementById('dash-acoes'); if(!panel)return;
   var acoes=getPrioridadeAcao();
   if(!acoes.length){panel.innerHTML='';return;}
 
@@ -6320,6 +6320,8 @@ function renderDashboard() {
     }
     anivEl.innerHTML=out;
   }
+
+  try{renderAutomacao();}catch(e){}
 }
 
 
