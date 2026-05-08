@@ -789,10 +789,10 @@ td{border-bottom:1px solid var(--border);vertical-align:middle;}
 /* ===== FIREBASE CLOUD SYNC ===== */
 var firebaseConfig = {
   apiKey: "AIzaSyCrNWzOuOkfHQqJT_OEkZHFD4nsarQ-N74",
-  authDomain: "gp-manager-8e604.firebaseapp.com",
-  databaseURL: "https://gp-manager-8e604-default-rtdb.firebaseio.com",
-  projectId: "gp-manager-8e604",
-  storageBucket: "gp-manager-8e604.appspot.com",
+  authDomain: "personal-pro-8e604.firebaseapp.com",
+  databaseURL: "https://personal-pro-8e604-default-rtdb.firebaseio.com",
+  projectId: "personal-pro-8e604",
+  storageBucket: "personal-pro-8e604.appspot.com",
   messagingSenderId: "680333411172",
   appId: "1:680333411172:web:ec373d87f989a8eea1f071"
 };
@@ -882,7 +882,7 @@ function _setSyncStatus(status, detail){
   var el=document.getElementById('sync-status'); if(!el) return;
   if(status==='ok')  { el.innerHTML='🟢 Sincronizado'; el.style.color='var(--success)'; }
   else if(status==='up')  { el.innerHTML='🟡 Sincronizando...'; el.style.color='var(--white-dim)'; }
-  else if(status==='err') { el.innerHTML='🔴 Offline'; el.style.color='var(--danger)'; if(detail) console.error('[GP Sync]', detail); }
+  else if(status==='err') { el.innerHTML='🔴 Offline'; el.style.color='var(--danger)'; if(detail) console.error('[Personal Pro Sync]', detail); }
   else { el.innerHTML=''; }
 }
 
@@ -946,13 +946,6 @@ function _pushCol(lsKey){
 function _pushAllCols(){
   Object.keys(_COL_MAP).forEach(function(lsKey){ _pushCol(lsKey); });
 }
-
-window.testFirebaseWrite = async function(){
-  try{
-    await _colsRef.child('_test').set({ok:true,ts:new Date().toISOString()});
-    alert('Firebase OK'); console.log('TESTE DIRETO OK');
-  }catch(e){ alert('Erro Firebase: '+e.message); console.error('TESTE DIRETO ERRO:',e); }
-};
 
 // Retorna true se localData é ao menos tão completo quanto cloudData (>= registros/chaves).
 // Usado para evitar que cloud com timestamp mais novo sobrescreva local com mais dados.
@@ -1167,12 +1160,12 @@ function _registerCollectionListeners(){
 function startCloudSync(){
   if(!_colsRef || !_legacyRef) { _setSyncStatus('err'); return; }
   _loadColTs();
-  console.log('[GP Sync] Iniciando sync por coleção...');
+  console.log('[Personal Pro Sync] Iniciando sync por coleção...');
   // Verifica estrutura legada gp/data e migra se necessário
   _legacyRef.once('value').then(function(legSnap){
     var legData=legSnap.val();
     if(legData&&legData.ts){
-      console.log('[GP Sync] Migrando gp/data para coleções granulares...');
+      console.log('[Personal Pro Sync] Migrando gp/data para coleções granulares...');
       var now=Date.now();
       var migPs=Object.keys(_SYNC_KEYS).map(function(field){
         var lsKey=_SYNC_KEYS[field]; var col=_COL_MAP[lsKey];
@@ -1180,9 +1173,9 @@ function startCloudSync(){
         return _colsRef.child(col).set({data:legData[field],localTs:now,serverTs:firebase.database.ServerValue.TIMESTAMP});
       });
       Promise.all(migPs).then(function(){
-        console.log('[GP Sync] Migração concluída — removendo gp/data');
+        console.log('[Personal Pro Sync] Migração concluída — removendo gp/data');
         _legacyRef.remove(); _startSync();
-      }).catch(function(e){ console.warn('[GP Sync] Migração parcial:',e); _startSync(); });
+      }).catch(function(e){ console.warn('[Personal Pro Sync] Migração parcial:',e); _startSync(); });
     } else { _startSync(); }
   }).catch(function(){ _startSync(); });
 }
@@ -1201,23 +1194,23 @@ function _startSync(){
       var cLts=cd.localTs||0;  var lLts=_colLocalTs[col]||0;
       if((cSts&&lSts) ? (cSts>lSts) : (cLts&&cLts>lLts)) anyCloudNewer=true;
     });
-    console.log('[GP Sync] Startup: localHasData='+localHasData+' isDirty='+isDirty+' cloudHasData='+cloudHasData+' anyCloudNewer='+anyCloudNewer);
+    console.log('[Personal Pro Sync] Startup: localHasData='+localHasData+' isDirty='+isDirty+' cloudHasData='+cloudHasData+' anyCloudNewer='+anyCloudNewer);
     if(cloudHasData&&!localHasData&&!isDirty){
-      console.log('[GP Sync] localStorage vazio — aplicando todas as coleções');
+      console.log('[Personal Pro Sync] localStorage vazio — aplicando todas as coleções');
       Object.keys(_COL_MAP).forEach(function(lsKey){ var col=_COL_MAP[lsKey]; if(allCols[col]) _applyCol(col,lsKey,allCols[col]); });
       try{ loadAll(); }catch(e){} try{ refreshAll(); }catch(e){} try{ renderCalendar(); }catch(e){} try{ renderFinanceiro(); }catch(e){}
     } else if(isDirty||(!cloudHasData&&localHasData)){
-      console.log('[GP Sync] dirty='+isDirty+' — verificando coleções por coleção');
+      console.log('[Personal Pro Sync] dirty='+isDirty+' — verificando coleções por coleção');
       Object.keys(_COL_MAP).forEach(function(lsKey){
         var col=_COL_MAP[lsKey]; var cd=allCols[col];
         // Se essa coleção tem flag dirty própria → sempre enviar (mudança local explícita)
         var colDirty=false; try{ colDirty=localStorage.getItem('gp-dirty-'+lsKey)==='1'; }catch(e){}
-        if(colDirty){ console.log('[GP Sync] Push forçado (col dirty):', col); _pushCol(lsKey); return; }
+        if(colDirty){ console.log('[Personal Pro Sync] Push forçado (col dirty):', col); _pushCol(lsKey); return; }
         var cSts=cd?(cd.serverTs||0):0; var lSts=_colServerTs[col]||0;
         var cLts=cd?(cd.localTs||0):0;  var lLts=_colLocalTs[col]||0;
         var cloudIsNewer=(cSts&&lSts) ? (cSts>lSts) : (cLts>lLts);
         if(cloudIsNewer){
-          console.log('[GP Sync] APPLY aceito (cloud mais novo no startup):', col,
+          console.log('[Personal Pro Sync] APPLY aceito (cloud mais novo no startup):', col,
             'cloud.sts='+cSts+' local.sts='+lSts+' cloud.lts='+cLts+' local.lts='+lLts);
           _applyCol(col,lsKey,cd,true);
         } else {
@@ -1226,7 +1219,7 @@ function _startSync(){
       });
       try{ loadAll(); }catch(e){} try{ refreshAll(); }catch(e){} try{ renderCalendar(); }catch(e){} try{ renderFinanceiro(); }catch(e){}
     } else if(anyCloudNewer){
-      console.log('[GP Sync] Aplicando coleções mais recentes');
+      console.log('[Personal Pro Sync] Aplicando coleções mais recentes');
       Object.keys(_COL_MAP).forEach(function(lsKey){
         var col=_COL_MAP[lsKey]; var cd=allCols[col]; if(!cd) return;
         var cSts=cd.serverTs||0; var lSts=_colServerTs[col]||0;
@@ -1235,16 +1228,17 @@ function _startSync(){
       });
       try{ loadAll(); }catch(e){} try{ refreshAll(); }catch(e){} try{ renderCalendar(); }catch(e){} try{ renderFinanceiro(); }catch(e){}
     } else {
-      console.log('[GP Sync] Já em sincronia — nenhuma ação');
+      console.log('[Personal Pro Sync] Já em sincronia — nenhuma ação');
     }
     _setSyncStatus('ok'); _initialized=true; _registerCollectionListeners();
   }).catch(function(e){
-    console.warn('[GP Sync] Erro startup:',e); _setSyncStatus('err',e);
+    console.warn('[Personal Pro Sync] Erro startup:',e); _setSyncStatus('err',e);
     _initialized=true; _registerCollectionListeners();
   });
 }
 
 function forceSyncFromCloud(){
+  if(!_colsRef){ toast('Sincronização indisponível no momento.'); return; }
   _setSyncStatus('up');
   _colsRef.once('value').then(function(snap){
     var allCols=snap.val()||{};
@@ -1256,6 +1250,7 @@ function forceSyncFromCloud(){
 }
 
 function openSyncHistory(){
+  if(!_histRef){ toast('Histórico indisponível no momento.'); return; }
   _histRef.child('index').orderByKey().limitToLast(15).once('value').then(function(snap){
     var entries=[]; snap.forEach(function(c){ entries.unshift({key:c.key,data:c.val()}); });
     var body=document.getElementById('sync-hist-body'); if(!body) return;
@@ -1275,7 +1270,8 @@ function openSyncHistory(){
 }
 
 function restoreHistory(key){
-  if(!confirm('Restaurar esta vers\u00e3o? Os dados atuais ser\u00e3o substitu\u00eddos.')) return;
+  if(!_histRef){ toast('Histórico indisponível no momento.'); return; }
+  if(!confirm('Restaurar esta versão? Os dados atuais serão substituídos.')) return;
   _setSyncStatus('up');
   _histRef.child('snaps').child(key).once('value').then(function(snap){
     var data=snap.val(); if(!data){ toast('Snapshot n\u00e3o encontrado.'); _setSyncStatus('err'); return; }
@@ -1296,7 +1292,7 @@ function restoreHistory(key){
   localStorage.setItem=function(key,val){
     orig(key,val);
     if(_startupComplete&&!_applyingCloud&&_COL_MAP.hasOwnProperty(key)){
-      console.log('[GP Sync] Alteração local detectada:', key);
+      console.log('[Personal Pro Sync] Alteração local detectada:', key);
       try{ orig('gp-dirty','1'); }catch(e){}
       try{ orig('gp-dirty-'+key,'1'); }catch(e){}  // rastrea por coleção
       if(_initialized) _pushCol(key);
@@ -1309,7 +1305,7 @@ function _flushIfPending(){
   var hasPendingTimer=Object.keys(_COL_MAP).some(function(k){ return !!_colTimers[_COL_MAP[k]]; });
   var dirty=false; try{ dirty=localStorage.getItem('gp-dirty')==='1'; }catch(e){}
   if(!hasPendingTimer&&!dirty) return;
-  console.log('[GP Sync] Flush emergência — coleções pendentes');
+  console.log('[Personal Pro Sync] Flush emergência — coleções pendentes');
   Object.keys(_COL_MAP).forEach(function(lsKey){
     var col=_COL_MAP[lsKey];
     if(_colTimers[col]){ clearTimeout(_colTimers[col]); _colTimers[col]=null; }
@@ -1329,7 +1325,7 @@ function _onAppForeground(){
   try{ firebase.database().goOnline(); }catch(e){}
   if(!_initialized) return;
   var dirty=false; try{ dirty=localStorage.getItem('gp-dirty')==='1'; }catch(e){}
-  if(dirty){ console.log('[GP Sync] Foreground: dirty — enviando'); _pushAllCols(); return; }
+  if(dirty){ console.log('[Personal Pro Sync] Foreground: dirty — enviando'); _pushAllCols(); return; }
   _colsRef.once('value').then(function(snap){
     var allCols=snap.val()||{};
     var anyNewer=false;
@@ -1341,9 +1337,9 @@ function _onAppForeground(){
     });
     if(anyNewer){
       try{ loadAll(); }catch(e){} try{ refreshAll(); }catch(e){} try{ renderCalendar(); }catch(e){} try{ renderFinanceiro(); }catch(e){}
-      _setSyncStatus('ok'); console.log('[GP Sync] Foreground: coleções atualizadas');
-    } else { console.log('[GP Sync] Foreground: local atualizado'); }
-  }).catch(function(e){ console.warn('[GP Sync] Foreground erro:',e); });
+      _setSyncStatus('ok'); console.log('[Personal Pro Sync] Foreground: coleções atualizadas');
+    } else { console.log('[Personal Pro Sync] Foreground: local atualizado'); }
+  }).catch(function(e){ console.warn('[Personal Pro Sync] Foreground erro:',e); });
 }
 window.addEventListener('beforeunload', _flushIfPending);
 window.addEventListener('pagehide', _flushIfPending);
@@ -1479,7 +1475,7 @@ function fixMojibake(str) {
   }
 }
 
-function escapeHTML(str){ return (str==null?'':String(str)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function escapeHTML(str){ return escapeHtml(str); }
 
 function cleanText(str, maxLen) {
   var value = fixMojibake(String(str == null ? '' : str))
