@@ -6299,8 +6299,9 @@ function getFaltaramOntem(){
 
 function getCobrancasHoje(){
   var hoje = new Date(); hoje.setHours(0,0,0,0);
+  var ds = todayStr();
   return _visible(students)
-    .filter(function(s){ return s.status==='atrasado'||s.status==='vencendo'; })
+    .filter(function(s){ return !isEmLicenca(s.id, ds) && (s.status==='atrasado'||s.status==='vencendo'); })
     .map(function(s){
       var vd = s.vencimento ? new Date(s.vencimento+'T12:00:00') : null;
       if(vd) vd.setHours(0,0,0,0);
@@ -6310,8 +6311,9 @@ function getCobrancasHoje(){
 }
 
 function getAlunosEmRisco(){
+  var ds = todayStr();
   return _visible(students)
-    .filter(function(s){ return s.status!=='atrasado'; })
+    .filter(function(s){ return !isEmLicenca(s.id, ds) && s.status!=='atrasado'; })
     .map(function(s){ return { student:s, dias:getMissedSessionsStreak(s.id) }; })
     .filter(function(it){ return it.dias>=1; })
     .sort(function(a,b){ return b.dias-a.dias; });
