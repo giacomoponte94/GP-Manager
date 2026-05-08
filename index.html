@@ -2450,22 +2450,8 @@ function getAulasDoMes(sid){
     var now=new Date(),y=now.getFullYear(),m=now.getMonth();
     periodoInicio=new Date(y,m,1); periodoFim=new Date(y,m+1,0,23,59,59);
   }
-  // Direito = alocação mensal FIXA (spw * 4 semanas), descontando feriados e licenças no período
+  // Direito = alocação mensal FIXA (spw * 4 semanas), sem desconto de feriados ou licenças
   var dir=spw*4;
-  var sAgs=agendas.filter(function(a){return !a.deleted&&a.alunoId===sid;});
-  var dowsAluno=[];
-  sAgs.forEach(function(a){a.days.forEach(function(dw){if(dowsAluno.indexOf(dw)===-1)dowsAluno.push(dw);});});
-  if(dowsAluno.length){
-    var dc=new Date(periodoInicio);
-    while(dc<=periodoFim){
-      var dStr=dc.toISOString().split('T')[0];
-      if(dowsAluno.indexOf(dc.getDay())!==-1){
-        if(isHoliday(dc)) dir=Math.max(0,dir-1);
-        else if(isEmLicenca(sid,dStr)) dir=Math.max(0,dir-1);
-      }
-      dc.setDate(dc.getDate()+1);
-    }
-  }
   // Presencas contam a partir do início real do aluno dentro do período de competência
   var presencaInicio=new Date(periodoInicio);
   if(s.inicio){var si=new Date(s.inicio+'T00:00:00');if(si>presencaInicio)presencaInicio=si;}
