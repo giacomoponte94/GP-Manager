@@ -2344,7 +2344,7 @@ function showTab(tab){
       else if(tab==='alunos'){renderTable();renderStats();renderNotifs();renderLockIn();renderPaineis();renderAutomacao();}
       else if(tab==='treino'){renderTabTreino();}
       else if(tab==='agenda'){renderCalendar();}
-      else if(tab==='financeiro'){renderFinanceiro();renderSimulacao();renderComparativo();renderHistoricoVisual();}
+      else if(tab==='financeiro'){renderFinanceiro();}
     }catch(e){}
   },20);
 }
@@ -2509,6 +2509,7 @@ function getMissedSessionsStreak(sid){
     var dStr=d.toISOString().split('T')[0];
     var ags=getAgendasParaData(dStr);
     if(!ags.some(function(a){return a.alunoId===sid;})) continue; // dia sem sessão — pula
+    if(isEmLicenca(sid,dStr)) continue; // licença — não conta como falta
     var p=_presStatus(presencas[sid+'_'+dStr]);
     if(p==='faltou'){ streak++; }
     else { break; } // presente ou não marcado — interrompe contagem
@@ -3923,8 +3924,8 @@ function renderFinanceiro(){
     return s.status==='atrasado'||(s.vencimento&&getDiffDias(getVencimentoEfetivo(s))<0);
   }).length;
   var freq=calcFreqMedia();
-  var risco=_vsf.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;}).length;
-  var recRisco=_vsf.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
+  var _dsRisco=todayStr(); var risco=_vsf.filter(function(s){return !isEmLicenca(s.id,_dsRisco)&&s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;}).length;
+  var recRisco=_vsf.filter(function(s){return !isEmLicenca(s.id,_dsRisco)&&s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
   var proj=_vsf.filter(function(s){return s.status==='em dia'||s.status==='vencendo';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
   // Competência: alunos "aguardando" com pagamento já realizado (adiantamento)
   var _temPagamento=function(sid){return pagamentos.some(function(p){return !p.deleted&&p.alunoId===sid;});};
@@ -5006,7 +5007,7 @@ function renderMiniChart(sid,exKey) {
 function calcSimulacao() {
   var ativos=_visible(students).filter(function(s){return s.status!=='atrasado';});
   var inad  =_visible(students).filter(function(s){return s.status==='atrasado';});
-  var ausentes=_visible(students).filter(function(s){var d=getDaysAbsent(s.id);return d!==null&&d>=7&&s.status!=='atrasado';});
+  var _dsCalc=todayStr(); var ausentes=_visible(students).filter(function(s){if(isEmLicenca(s.id,_dsCalc))return false; var d=getDaysAbsent(s.id);return d!==null&&d>=7&&s.status!=='atrasado';});
 
   var recAtual  =ativos.reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
   var recGarant =_visible(students).filter(function(s){return s.status==='em dia';}).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
