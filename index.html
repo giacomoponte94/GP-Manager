@@ -1672,6 +1672,19 @@ function useReposicao(sid, motivo) {
 }
 // --- Licença ---
 function getLicencasAluno(sid) { return (licencas[sid]||[]).filter(function(l){ return !l.deleted; }); }
+function getVencimentoEfetivo(s) {
+  if (!s || !s.vencimento) return s ? s.vencimento : null;
+  var periodoInicio = new Date(s.vencimento + 'T00:00:00');
+  periodoInicio.setMonth(periodoInicio.getMonth() - 1);
+  var lics = getLicencasAluno(s.id).filter(function(l) {
+    return new Date(l.inicio + 'T00:00:00') >= periodoInicio;
+  });
+  var extra = lics.reduce(function(sum, l) { return sum + (l.diasExtendidos || 0); }, 0);
+  if (!extra) return s.vencimento;
+  var v = new Date(s.vencimento + 'T12:00:00');
+  v.setDate(v.getDate() + extra);
+  return v.toISOString().split('T')[0];
+}
 function isEmLicenca(sid, dateStr) {
   var lics = getLicencasAluno(sid);
   var d = new Date(dateStr + 'T12:00:00');
@@ -1697,16 +1710,9 @@ function addLicenca(sid, inicio, fim) {
   if(!licencas[sid]) licencas[sid] = [];
   licencas[sid].push({id: Date.now()+'', inicio: inicio, fim: fim, diasExtendidos: dias, criadaEm: new Date().toISOString()});
   saveLicencas();
-  // Estender vencimento pelo número de dias da licença
-  var s = students.find(function(x){ return x.id === sid&&!x.deleted; });
-  if(s && s.vencimento) {
-    var v = new Date(s.vencimento + 'T12:00:00');
-    v.setDate(v.getDate() + dias);
-    s.vencimento = v.toISOString().split('T')[0];
-    s.updatedAt = Date.now(); s.deviceId = _getDeviceId();
-    save();
-    toast('Licença de '+dias+'d adicionada. Vencimento atualizado para '+fmtDate(s.vencimento)+'.');
-  }
+  var _sLic = students.find(function(x){ return x.id === sid&&!x.deleted; });
+  var _novoVef = _sLic ? getVencimentoEfetivo(_sLic) : null;
+  toast('Licença de '+dias+'d adicionada.'+((_novoVef&&_sLic)?' Vencimento: '+fmtDate(_novoVef)+'.':''));
   return true;
 }
 function removeLicenca(sid, licId) {
@@ -1719,18 +1725,6 @@ function removeLicenca(sid, licId) {
     _registerDelete(t); return t;
   });
   saveLicencas();
-  // Reverter extensão do vencimento
-  if(lic) {
-    var dias = lic.diasExtendidos || (Math.round((new Date(lic.fim+'T00:00:00') - new Date(lic.inicio+'T00:00:00')) / 86400000) + 1);
-    var s = students.find(function(x){ return x.id === sid&&!x.deleted; });
-    if(s && s.vencimento) {
-      var v = new Date(s.vencimento + 'T12:00:00');
-      v.setDate(v.getDate() - dias);
-      s.vencimento = v.toISOString().split('T')[0];
-      s.updatedAt = Date.now(); s.deviceId = _getDeviceId();
-      save();
-    }
-  }
 }
 
 
@@ -2296,7 +2290,7 @@ function computeStatus(s) {
   if(_ps&&_ps.tipo==='pacote') return 'em dia';
   if(!s.vencimento) return 'em dia';
   var hoje=new Date(); hoje.setHours(0,0,0,0);
-  var venc=new Date(s.vencimento+'T12:00:00');
+  var venc=new Date(getVencimentoEfetivo(s)+'T12:00:00');
   var diff=Math.ceil((venc-hoje)/(1000*60*60*24));
   if(diff<0)  return 'atrasado';
   if(diff<=5) return 'vencendo';
@@ -2318,7 +2312,7 @@ function toggleStatus(id,ns){
 }
 function renovarAluno(id){
   var s=students.find(function(x){return x.id===id&&!x.deleted;}); if(!s)return;
-  var base=s.vencimento?new Date(s.vencimento+'T12:00:00'):new Date();
+  var _vefRen=getVencimentoEfetivo(s); var base=_vefRen?new Date(_vefRen+'T12:00:00'):new Date();
   var hoje=new Date();hoje.setHours(0,0,0,0); if(base<hoje)base=new Date(hoje);
   base.setMonth(base.getMonth()+1);
   s.vencimento=base.toISOString().split('T')[0]; s.status='em dia'; s.statusManual=null;
@@ -2381,7 +2375,7 @@ function renderTable(){
     var sb=s.status==='em dia'?'<button class="badge badge-ok" style="cursor:pointer;border:none;" onclick="toggleStatus(\''+sid+'\',\'atrasado\')">&#10003; Em dia</button>':s.status==='atrasado'?'<button class="badge badge-late" style="cursor:pointer;border:none;" onclick="toggleStatus(\''+sid+'\',\'em dia\')">&#8226; Inadimplente</button>':s.status==='aguardando'?'<span class="badge badge-agrd">&#9711; Aguardando início</span>':'<button class="badge badge-warn" style="cursor:pointer;border:none;" onclick="toggleStatus(\''+sid+'\',\'atrasado\')">&#9888; Vencendo</button>';
     var aulas=getAulasDoMes(s.id); var atag=aulas.direito>0?'<span style="font-size:0.62rem;color:var(--white-dim);margin-left:4px;">'+aulas.feitas+'/'+aulas.direito+'</span>':'';
     var hoje2=new Date();hoje2.setHours(0,0,0,0);
-    var vd=s.vencimento?new Date(s.vencimento+'T12:00:00'):null;
+    var _vef2=getVencimentoEfetivo(s); var vd=_vef2?new Date(_vef2+'T12:00:00'):null;
     var dv=vd?Math.ceil((vd-hoje2)/(86400000)):null;
     var vtag=dv!==null&&dv>=0&&dv<=7?'<span style="font-size:0.58rem;color:var(--warning);margin-left:4px;">'+(dv===0?'Hoje!':'Vence em '+dv+'d')+'</span>':'';
     var np=s.nascimento?s.nascimento.split('-'):null;
@@ -2389,7 +2383,7 @@ function renderTable(){
     var ab=getAbsenceBadge(s.id);
     var modTag=s.modalidade==='Duo'?'<span class="badge badge-duo" style="font-size:0.6rem;padding:1px 5px;">Duo</span>':'';
     var _vSrch=getPlanoValorTotal(s);
-    var subParts=[getPlanNome(s.plano)||'',s.modalidade||'',_vSrch>0?'R$ '+Math.round(_vSrch).toLocaleString('pt-BR'):'',s.vencimento?'Vence '+fmtDate(s.vencimento):''];
+    var subParts=[getPlanNome(s.plano)||'',s.modalidade||'',_vSrch>0?'R$ '+Math.round(_vSrch).toLocaleString('pt-BR'):'',_vef2?'Vence '+fmtDate(_vef2):''];
     var sub=subParts.filter(Boolean).join(' · ');
     sub=escapeHtml(fixMojibake(sub));
     return '<div class="st-card st-row '+stClass+'" data-id="'+sid+'">'
@@ -2456,9 +2450,10 @@ function getAulasDoMes(sid){
   var spw=PLAN_DAYS[s.plano]||0;
   // Período de competência: baseado no vencimento do plano (vencimento - 1 mês)
   var periodoFim, periodoInicio;
-  if(s.vencimento){
-    periodoFim=new Date(s.vencimento+'T23:59:59');
-    periodoInicio=new Date(s.vencimento+'T00:00:00');
+  var _vefAulas=getVencimentoEfetivo(s);
+  if(_vefAulas){
+    periodoFim=new Date(_vefAulas+'T23:59:59');
+    periodoInicio=new Date(_vefAulas+'T00:00:00');
     periodoInicio.setMonth(periodoInicio.getMonth()-1);
   } else {
     var now=new Date(),y=now.getFullYear(),m=now.getMonth();
@@ -2537,13 +2532,13 @@ function renderPaineis(){
     return parseInt(p[1])===(hoje.getMonth()+1)&&parseInt(p[2])===hoje.getDate();
   });
   var aRen=_vs.filter(function(s){
-    if(!s.vencimento)return false;
+    var _vefPain=getVencimentoEfetivo(s); if(!_vefPain)return false;
     if(isEmLicenca(s.id, ds))return false;
-    var v=new Date(s.vencimento+'T12:00:00');v.setHours(0,0,0,0);
+    var v=new Date(_vefPain+'T12:00:00');v.setHours(0,0,0,0);
     var t=new Date();t.setHours(0,0,0,0);
     var d=Math.ceil((v-t)/86400000);
     return d>=0&&d<=7;
-  }).sort(function(a,b){return new Date(a.vencimento)-new Date(b.vencimento);});
+  }).sort(function(a,b){return new Date(getVencimentoEfetivo(a))-new Date(getVencimentoEfetivo(b));});
   var ausentes=_vs.filter(function(s){
     if(isEmLicenca(s.id, ds))return false;
     var d=getDaysAbsent(s.id);return d!==null&&d>=7&&s.status!=='atrasado';
@@ -2576,13 +2571,13 @@ function renderPaineis(){
   if(aRen.length){
     out+='<div style="margin-bottom:18px;">'+pnlTitle('A renovar esta semana ('+aRen.length+')');
     aRen.forEach(function(s){
-      var v=new Date(s.vencimento+'T12:00:00');v.setHours(0,0,0,0);
+      var _vefR=getVencimentoEfetivo(s); var v=new Date(_vefR+'T12:00:00');v.setHours(0,0,0,0);
       var t=new Date();t.setHours(0,0,0,0);
       var d=Math.ceil((v-t)/86400000);
       var cor=d===0?'var(--danger)':d<=2?'var(--warning)':'var(--accent)';
       var lbl=d===0?'Vence hoje':'Vence em '+d+'d';
       var ph=waPhone(s);
-      var dataFmt=new Date(s.vencimento+'T12:00:00').toLocaleDateString('pt-BR');
+      var dataFmt=new Date(_vefR+'T12:00:00').toLocaleDateString('pt-BR');
       var msgVenc;
       if(d===0){
         msgVenc='Oi, '+s.nome.split(' ')[0]+'! Hoje é o dia!\n\nSeu plano *'+getPlanNome(s.plano)+'* vence hoje, *'+dataFmt+'*. Que tal já aproveitar e renovar agora para continuar treinando sem nenhuma pausa?\n\n*Valor:* R$ '+getPlanoValorTotal(s).toLocaleString('pt-BR',{minimumFractionDigits:2})+(chavePix?'\n*Chave Pix:* '+chavePix:'')+'\n\nMe manda o comprovante assim que fizer e tá confirmado!';
@@ -2728,7 +2723,7 @@ function getMsgCobranca(s,diff){
   var nome=s.nome.split(' ')[0];
   var plano=getPlanNome(s.plano)||'—';
   var valor=getPlanoValorTotal(s).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
-  var venc=s.vencimento?new Date(s.vencimento+'T12:00:00').toLocaleDateString('pt-BR'):'--';
+  var _vefMsg=getVencimentoEfetivo(s); var venc=_vefMsg?new Date(_vefMsg+'T12:00:00').toLocaleDateString('pt-BR'):'--';
   var tmpl={
     5:'Oi [NOME]! Passando pra te lembrar que o pagamento do seu plano vence daqui 5 dias. Vamos garantir seu horário na agenda e manter sua rotina em dia 💪\n📋 Plano: [Plano]\n💰 Valor: R$ [VALOR]\n📅 Vencimento: [DD/MM/AAAA]',
     3:'Oi [NOME]! Seu pagamento vence em 3 dias. Me chama se precisar de qualquer coisa pra mantermos tudo alinhado! 😊\n📋 Plano: [Plano]\n💰 Valor: R$ [VALOR]\n📅 Vencimento: [DD/MM/AAAA]',
@@ -2747,12 +2742,12 @@ function cobrarInadimplentes(){
   var alvos=_visible(students).filter(function(s){
     if(s.status==='aguardando'||!s.vencimento||!s.plano)return false;
     if(jaPagouNoMes(s.id))return false;
-    var d=getDiffDias(s.vencimento);
+    var d=getDiffDias(getVencimentoEfetivo(s));
     return DIFFS.indexOf(d)!==-1;
-  }).sort(function(a,b){return getDiffDias(a.vencimento)-getDiffDias(b.vencimento);});
+  }).sort(function(a,b){return getDiffDias(getVencimentoEfetivo(a))-getDiffDias(getVencimentoEfetivo(b));});
   if(!alvos.length){alert('Nenhum aluno no período de cobrança (janela de ±5 dias do vencimento).');return;}
   var rows=alvos.map(function(s,i){
-    var diff=getDiffDias(s.vencimento);
+    var diff=getDiffDias(getVencimentoEfetivo(s));
     var msg=getMsgCobranca(s,diff)||'';
     var ph=waPhone(s);
     var label=diff>0?'D-'+diff:diff===0?'Hoje':'D+'+Math.abs(diff);
@@ -3184,8 +3179,8 @@ function openDetail(id){
   var waHtml='';
   if(ph){
     var msgL=encodeURIComponent('Ola '+nome1+'! So lembrando do seu treino hoje. Ate logo!');
-    var diasRestC=s.vencimento?Math.ceil((new Date(s.vencimento+'T12:00:00')-new Date())/86400000):null;
-    var dataFmtC=s.vencimento?new Date(s.vencimento+'T12:00:00').toLocaleDateString('pt-BR'):'';
+    var _vefC=getVencimentoEfetivo(s); var diasRestC=_vefC?Math.ceil((new Date(_vefC+'T12:00:00')-new Date())/86400000):null;
+    var dataFmtC=_vefC?new Date(_vefC+'T12:00:00').toLocaleDateString('pt-BR'):'';
     var msgCStr;
     if(diasRestC!==null&&diasRestC===0){
       msgCStr='Oi, '+nome1+'! Hoje é o dia! 📅\n\nSeu plano *'+getPlanNome(s.plano)+'* vence hoje, *'+dataFmtC+'*. Que tal já aproveitar e renovar agora para continuar treinando sem nenhuma pausa?\n\nVocê vem evoluindo muito, seria uma pena parar agora. 💪🔥\n\n*Valor:* R$ '+getPlanoValorTotal(s).toLocaleString('pt-BR',{minimumFractionDigits:2})+(chavePix?'\n*Chave Pix:* '+chavePix:'')+'\n\nMe manda o comprovante assim que fizer e tá confirmado!';
@@ -3216,7 +3211,7 @@ function openDetail(id){
     +'<div class="detail-item"><div class="detail-item-label">Objetivo</div><div class="detail-item-value">'+escapeHtml(s.objetivo||'\u2014')+'</div></div>'
     +'<div class="detail-item"><div class="detail-item-label">Nascimento</div><div class="detail-item-value">'+fmtDate(s.nascimento)+'</div></div>'
     +'<div class="detail-item"><div class="detail-item-label">Inicio</div><div class="detail-item-value">'+fmtDate(s.inicio)+'</div></div>'
-    +'<div class="detail-item"><div class="detail-item-label">Vencimento</div><div class="detail-item-value">'+fmtDate(s.vencimento)+'</div></div>'
+    +'<div class="detail-item"><div class="detail-item-label">Vencimento</div><div class="detail-item-value">'+fmtDate(getVencimentoEfetivo(s))+'</div></div>'
     +(function(){var _vd=getPlanoValorTotal(s);var _psd=getPlano(s.plano);var _vstr=_vd>0?'R$ '+Math.round(_vd).toLocaleString('pt-BR'):'\u2014';if(_psd&&_psd.tipo==='pacote'&&s.qtdAulas)_vstr='Pacote '+s.qtdAulas+' aulas \u00b7 R$ '+Math.round(_vd).toLocaleString('pt-BR');return '<div class="detail-item"><div class="detail-item-label">Valor</div><div class="detail-item-value">'+_vstr+'</div></div>';})()
 
     +'<div class="detail-item"><div class="detail-item-label">Telefone</div><div class="detail-item-value">'+escapeHtml(s.telefone||'\u2014')+'</div></div>'
@@ -3356,7 +3351,7 @@ function openDetail(id){
 
     licPanel.innerHTML=''
       +'<div style="font-family:Raleway,sans-serif;font-size:0.52rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);margin-bottom:8px;">Licen\u00e7a / Congelamento</div>'
-      +'<div style="font-size:0.72rem;color:var(--white-dim);margin-bottom:10px;">At\u00e9 7 dias corridos por per\u00edodo. Dias em licen\u00e7a s\u00e3o descontados do direito mensal.</div>'
+      +'<div style="font-size:0.72rem;color:var(--white-dim);margin-bottom:10px;">Dias em licen\u00e7a postergam o vencimento automaticamente.</div>'
       +licHtml
       +'<div class="lic-admin-toggle" style="margin-top:10px;">'
       +'<button class="btn btn-outline btn-sm lic-open-btn" style="height:30px;font-size:0.6rem;width:100%;">+ Incluir Licen\u00e7a</button>'
@@ -3906,26 +3901,26 @@ function renderFinanceiro(){
     if(!s.plano)return false;
     var _ps=getPlano(s.plano); if(_ps&&_ps.tipo==='pacote')return false;
     if(jaPagouNoMes(s.id))return false;
-    return s.status==='atrasado'||(s.vencimento&&getDiffDias(s.vencimento)<0);
+    return s.status==='atrasado'||(s.vencimento&&getDiffDias(getVencimentoEfetivo(s))<0);
   }).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
   // A vencer = vencimento futuro, não marcado atrasado manualmente, e não pagou
   var ven=_vsf_ativos.filter(function(s){
     if(!s.vencimento||!s.plano)return false;
     var _ps=getPlano(s.plano); if(_ps&&_ps.tipo==='pacote')return false;
     if(s.status==='atrasado')return false;
-    return getDiffDias(s.vencimento)>0&&!jaPagouNoMes(s.id);
+    return getDiffDias(getVencimentoEfetivo(s))>0&&!jaPagouNoMes(s.id);
   }).reduce(function(a,s){return a+getPlanoValorTotal(s);},0);
   var pct=total>0?Math.round(rec/total*100):0;
   var ativos=_vsf_ativos.filter(function(s){
     if(jaPagouNoMes(s.id))return true;
     if(s.status==='atrasado')return false;
-    return getDiffDias(s.vencimento||'9999-12-31')>=0;
+    return getDiffDias(getVencimentoEfetivo(s)||'9999-12-31')>=0;
   }).length;
   var inat=_vsf_ativos.filter(function(s){
     if(!s.plano)return false;
     var _ps=getPlano(s.plano); if(_ps&&_ps.tipo==='pacote')return false;
     if(jaPagouNoMes(s.id))return false;
-    return s.status==='atrasado'||(s.vencimento&&getDiffDias(s.vencimento)<0);
+    return s.status==='atrasado'||(s.vencimento&&getDiffDias(getVencimentoEfetivo(s))<0);
   }).length;
   var freq=calcFreqMedia();
   var risco=_vsf.filter(function(s){return s.status!=='atrasado'&&getMissedSessionsStreak(s.id)>=1;}).length;
@@ -3968,7 +3963,7 @@ function renderFinanceiro(){
       if(jaPagouNoMes(s.id)) return 3;
       var _plS=getPlano(s.plano); if(_plS&&_plS.tipo==='pacote') return 3;
       if(s.status==='atrasado') return 0;
-      var d=s.vencimento?getDiffDias(s.vencimento):999;
+      var d=s.vencimento?getDiffDias(getVencimentoEfetivo(s)):999;
       if(d<0) return 0;
       if(s.status==='vencendo'||d<=7) return 1;
       if(s.status==='aguardando') return 3;
@@ -3994,7 +3989,7 @@ function renderFinanceiro(){
       var _isAguard=s.status==='aguardando';
       var _sFutPago=_isAguard&&_temPagamento(s.id);
       var _pagouMes=!_isAguard&&jaPagouNoMes(s.id);
-      var _diff=s.vencimento?getDiffDias(s.vencimento):999;
+      var _diff=s.vencimento?getDiffDias(getVencimentoEfetivo(s)):999;
       var _isPacote=_plS&&_plS.tipo==='pacote';
       // Determinar status financeiro para exibi\u00E7\u00E3o
       var sbFin,statusLabel,avBg,avColor,leftBorder='';
@@ -4027,7 +4022,7 @@ function renderFinanceiro(){
         avBg='rgba(39,174,96,0.15)';avColor='var(--success)';statusLabel='';
       }
       var inicioTag=_isAguard&&s.inicio?'<div style="font-size:0.62rem;color:var(--accent-l);margin-top:3px;padding:3px 8px;background:rgba(74,127,165,0.08);border-radius:3px;display:inline-block;">Inicia em '+fmtDate(s.inicio)+'</div>':'';
-      var venc=fmtDate(s.vencimento);
+      var venc=fmtDate(getVencimentoEfetivo(s));
       // Bot\u00F5es
       var btnMarcar=(!_isAguard&&!_pagouMes&&!_isPacote)?'<button class="btn btn-primary btn-sm" onclick="marcarComoPago(this.dataset.sid)" data-sid="'+sid+'">Marcar como pago</button>':'';
       var ren=(s.status==='atrasado'||s.status==='vencendo')?'<button class="btn btn-outline btn-sm" onclick="renovarAluno(this.dataset.sid)" data-sid="'+sid+'">Renovar</button>':'';
@@ -4043,7 +4038,7 @@ function renderFinanceiro(){
         +'</div>'
         +'<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--border);margin-bottom:8px;">'
         +'<span style="font-size:0.88rem;font-weight:700;color:var(--white);">'+valor+'</span>'
-        +'<span style="font-size:0.72rem;color:var(--white-dim);">'+(s.vencimento?'Vence '+venc:'')+'</span>'
+        +'<span style="font-size:0.72rem;color:var(--white-dim);">'+(getVencimentoEfetivo(s)?'Vence '+venc:'')+'</span>'
         +'</div>'
         +'<div style="display:flex;gap:6px;flex-wrap:wrap;">'
         +btnMarcar
@@ -4095,23 +4090,23 @@ function abrirDetalheFinanceiro(tipo){
       if(!s.vencimento||!s.plano)return false;
       var _ps=getPlano(s.plano); if(_ps&&_ps.tipo==='pacote')return false;
       if(s.status==='atrasado')return false;
-      return getDiffDias(s.vencimento)>0&&!jaPagouNoMes(s.id);
-    }).sort(function(a,b){return a.vencimento.localeCompare(b.vencimento);});
+      return getDiffDias(getVencimentoEfetivo(s))>0&&!jaPagouNoMes(s.id);
+    }).sort(function(a,b){return (getVencimentoEfetivo(a)||'').localeCompare(getVencimentoEfetivo(b)||'');});
     if(!lista.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Nenhum aluno a vencer.</div>');}
     lista.forEach(function(s){
-      var diff=getDiffDias(s.vencimento);
-      rows.push(_row(s.nome,'Vence em '+diff+' dia'+(diff!==1?'s':'')+' · '+fmtDate(s.vencimento),getPlanoValorTotal(s),'var(--warning)'));
+      var diff=getDiffDias(getVencimentoEfetivo(s));
+      rows.push(_row(s.nome,'Vence em '+diff+' dia'+(diff!==1?'s':'')+' · '+fmtDate(getVencimentoEfetivo(s)),getPlanoValorTotal(s),'var(--warning)'));
     });
   } else if(tipo==='atraso'){
     var lista=_vsf_ativos.filter(function(s){
       if(!s.plano)return false;
       var _ps=getPlano(s.plano); if(_ps&&_ps.tipo==='pacote')return false;
       if(jaPagouNoMes(s.id))return false;
-      return s.status==='atrasado'||(s.vencimento&&getDiffDias(s.vencimento)<0);
-    }).sort(function(a,b){return (a.vencimento||'').localeCompare(b.vencimento||'');});
+      return s.status==='atrasado'||(s.vencimento&&getDiffDias(getVencimentoEfetivo(s))<0);
+    }).sort(function(a,b){return (getVencimentoEfetivo(a)||'').localeCompare(getVencimentoEfetivo(b)||'');});
     if(!lista.length){rows.push('<div style="padding:16px;color:var(--white-dim);font-size:0.82rem;text-align:center;">Nenhum aluno em atraso.</div>');}
     lista.forEach(function(s){
-      var diff=getDiffDias(s.vencimento||'');
+      var diff=getDiffDias(getVencimentoEfetivo(s)||'');
       var sub=s.vencimento?(diff<0?'Atrasado há '+Math.abs(diff)+' dia'+(Math.abs(diff)!==1?'s':''):'Inadimplente'):'Sem vencimento';
       rows.push(_row(s.nome,sub,getPlanoValorTotal(s),'var(--danger)'));
     });
