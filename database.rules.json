@@ -21,10 +21,8 @@
     },
 
     "personalInvites": {
-      "$encodedEmail": {
-        ".read":  "auth != null && root.child('users').child(auth.uid).child('profile').child('tipo').val() === 'admin'",
-        ".write": "auth != null && root.child('users').child(auth.uid).child('profile').child('tipo').val() === 'admin'"
-      }
+      ".read":  "auth != null && root.child('users').child(auth.uid).child('profile').child('tipo').val() === 'admin'",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('profile').child('tipo').val() === 'admin'"
     },
 
     "studentInvites": {
