@@ -810,6 +810,23 @@ function getAlunoContext() {
 }
 function ensureProfileLoaded() { return currentProfile !== null; }
 
+// --- ACL ---------------------------------------------------------------
+var _ACL_TABS_BLOCKED  = ['alunos', 'financeiro'];
+var _ACL_ACTS_BLOCKED  = [
+  'edit-student','delete-student','toggle-status',
+  'save-payment','save-expense','edit-agenda','edit-treino'
+];
+function canViewTab(tab) { return isPersonal() || _ACL_TABS_BLOCKED.indexOf(tab) === -1; }
+function canDo(action)   { return isPersonal() || _ACL_ACTS_BLOCKED.indexOf(action) === -1; }
+function _aclToast(msg)  { toast(msg || 'Acesso restrito ao personal trainer.'); }
+function applyMenuVisibility() {
+  var blocked = isAluno() ? _ACL_TABS_BLOCKED : [];
+  document.querySelectorAll('.ham-item[data-tab]').forEach(function(b){
+    b.style.display = blocked.indexOf(b.getAttribute('data-tab')) !== -1 ? 'none' : '';
+  });
+}
+// -----------------------------------------------------------------------
+
 // DB refs — set after auth via _initUserRefs(uid)
 var _legacyRef = null;
 var _colsRef   = null;
@@ -1382,6 +1399,7 @@ function triggerPhotoUpload() {
 
 
 function openCadastro(mode, id) {
+  if(!canDo('edit-student')){ _aclToast('Sem permissão para cadastrar ou editar alunos.'); return; }
   editingId = null;
   currentPhoto = null;
 
@@ -2331,6 +2349,7 @@ function refreshAll(){
   try{renderDashboard();}catch(e){}
 }
 function toggleStatus(id,ns){
+  if(!canDo('toggle-status')){ _aclToast('Sem permissão para alterar status.'); return; }
   var s=students.find(function(x){return x.id===id&&!x.deleted;});
   if(s){s.status=ns;s.statusManual=ns;save();renderTable();renderStats();renderFinanceiro();renderNotifs();}
 }
@@ -2353,6 +2372,7 @@ function closeHamburger(){
   document.getElementById('ham-backdrop').classList.remove('open');
 }
 function showTab(tab){
+  if(!canViewTab(tab)){ _aclToast('Área restrita ao personal trainer.'); return; }
   ['dashboard','alunos','treino','agenda','financeiro'].forEach(function(t){
     var el2=document.getElementById('tab-'+t);if(el2)el2.style.display=t===tab?'':'none';
   });
@@ -2885,6 +2905,7 @@ function renderAaDayRows(){
   c.innerHTML=sel.map(function(d){var prev=ex[d]||'06:00';return '<div class="day-time-row" data-day="'+d+'"><div class="dt-day">'+DAY_NAMES[d]+'</div><div class="dt-inputs"><div class="dt-lbl">Inicio</div><input type="time" value="'+prev+'"></div></div>';}).join('');
 }
 function salvarAlteracaoAgenda(){
+  if(!canDo('edit-agenda')){ _aclToast('Sem permissão para alterar horários.'); return; }
   var sid=document.getElementById('aa-sid').value;
   var fromDate=document.getElementById('aa-from').value;
   if(!sid||!fromDate){alert('Preencha todos os campos.');return;}
@@ -2972,6 +2993,7 @@ function openModal(mode,id){
   var _ms=document.getElementById('modal-student'); if(_ms){_ms.style.display='flex';}
 }
 function saveStudent(){
+  if(!canDo('edit-student')){ _aclToast('Sem permissão para salvar alunos.'); return; }
   var nome=cleanText(document.getElementById('f-nome').value, 120);
   if(!nome){alert('Informe o nome.');return;}
   var plano=document.getElementById('f-plano').value;
@@ -4289,6 +4311,7 @@ function initApp(){
   try{renderBackupStatus();}catch(e){}
   try{atualizarSelectsPlanos();}catch(e){}
   try{refreshAll();}catch(e){}
+  try{applyMenuVisibility();}catch(e){}
   try{showTab('dashboard');}catch(e){}
   try{startCloudSync();}catch(e){ _setSyncStatus('err'); }
   setTimeout(function(){
@@ -4824,6 +4847,7 @@ function renderTreinoAluno(aluno,treino){
 }
 
 function criarTreino(alunoId){
+  if(!canDo('edit-treino')){ _aclToast('Visualização apenas — edição restrita ao personal trainer.'); return; }
   var nome=prompt('Nome da divisão (ex: Treino A, Full Body, Superior):','');
   if(!nome||!nome.trim())return;
   var t=getTreino(alunoId);
@@ -4939,6 +4963,7 @@ function renderTreinoEditor(sid) {
 }
 
 function promptNovaDivisao(sid) {
+  if(!canDo('edit-treino')){ _aclToast('Visualização apenas — edição restrita ao personal trainer.'); return; }
   var nome=prompt('Nome da divisao (ex: Treino A, Full Body, Superior):','');
   if(!nome||!nome.trim())return;
   var t=getTreino(sid);
@@ -4950,6 +4975,7 @@ function promptNovaDivisao(sid) {
 }
 
 function openAddExercicio(sid,di) {
+  if(!canDo('edit-treino')){ _aclToast('Visualização apenas — edição restrita ao personal trainer.'); return; }
   document.getElementById('ex-sid').value=sid;
   document.getElementById('ex-di').value=di;
   document.getElementById('ex-nome').value='';
@@ -4962,6 +4988,7 @@ function openAddExercicio(sid,di) {
 }
 
 function salvarExercicio() {
+  if(!canDo('edit-treino')){ _aclToast('Visualização apenas — edição restrita ao personal trainer.'); return; }
   var sid=document.getElementById('ex-sid').value;
   var di=parseInt(document.getElementById('ex-di').value);
   var nome=document.getElementById('ex-nome').value.trim();
@@ -5854,6 +5881,7 @@ function editarDespesa(id) {
   document.getElementById('modal-despesa').style.display='flex';
 }
 function salvarDespesa() {
+  if(!canDo('save-expense')){ _aclToast('Sem permissão para registrar despesas.'); return; }
   var descricao=document.getElementById('desp-desc').value.trim();
   var valor=parseFloat(document.getElementById('desp-valor').value);
   var data=document.getElementById('desp-data').value;
@@ -5960,6 +5988,7 @@ function openPagamento(sid) {
 }
 
 function salvarPagamento() {
+  if(!canDo('save-payment')){ _aclToast('Sem permissão para registrar pagamentos.'); return; }
   var sid = document.getElementById('pag-sid').value;
   var data = document.getElementById('pag-data').value;
   var valor = parseFloat(document.getElementById('pag-valor').value);
