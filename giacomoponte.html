@@ -327,7 +327,7 @@ footer{background:var(--gp-navy-deeper);padding:80px 44px 36px;border-top:1px so
 <!-- NAV -->
 <nav id="navbar">
   <a href="#top" class="brand">
-    <div class="mono"><img id="logo-nav" src="giacomoponte.png" alt="Giácomo Ponte"></div>
+    <div class="mono"><img src="giacomoponte.png" alt="Giácomo Ponte"></div>
   </a>
   <ul>
     <li><a href="#sobre">Sobre</a></li>
@@ -591,7 +591,7 @@ footer{background:var(--gp-navy-deeper);padding:80px 44px 36px;border-top:1px so
 <!-- FOOTER -->
 <footer>
   <div class="foot-big">
-    <div class="foot-mark"><img id="logo-footer" src="giacomoponte.png" alt="Giácomo Ponte"></div>
+    <div class="foot-mark"><img src="giacomoponte.png" alt="Giácomo Ponte"></div>
     <div class="foot-word">GIÁCOMO<br><em>PONTE.</em></div>
     <div class="foot-grid">
       <div class="foot-col">
@@ -707,32 +707,6 @@ mobileMenu.querySelectorAll('a').forEach(link => {
     document.body.style.overflow = '';
   });
 });
-
-// Remove white background from logo PNG
-function removeWhiteBg(id) {
-  var img = document.getElementById(id);
-  if (!img) return;
-  function process() {
-    if (img._bgDone) return;
-    img._bgDone = true;
-    var c = document.createElement('canvas');
-    var ctx = c.getContext('2d');
-    c.width = img.naturalWidth; c.height = img.naturalHeight;
-    ctx.drawImage(img, 0, 0);
-    try {
-      var d = ctx.getImageData(0, 0, c.width, c.height);
-      for (var i = 0; i < d.data.length; i += 4) {
-        if (d.data[i] > 230 && d.data[i+1] > 230 && d.data[i+2] > 230) d.data[i+3] = 0;
-      }
-      ctx.putImageData(d, 0, 0);
-      img.src = c.toDataURL();
-    } catch(err) {}
-  }
-  if (img.complete && img.naturalWidth) process();
-  else img.addEventListener('load', process);
-}
-removeWhiteBg('logo-nav');
-removeWhiteBg('logo-footer');
 </script>
 </body>
 </html>
