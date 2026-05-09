@@ -801,11 +801,21 @@ try{ firebase.database().setPersistenceEnabled(true); }catch(e){}
 
 var auth = firebase.auth();
 var currentUser = null;
+var currentProfile = null;
 
 // DB refs — set after auth via _initUserRefs(uid)
 var _legacyRef = null;
 var _colsRef   = null;
 var _histRef   = null;
+
+function _emailKey(email){
+  return String(email||'').trim().toLowerCase().replace(/\./g,',');
+}
+
+function _findAlunoLinkByEmail(email){
+  var k=_emailKey(email); if(!k) return Promise.resolve(null);
+  return firebase.database().ref('studentEmailIndex/'+k).once('value').then(function(s){ return s.val()||null; }).catch(function(){ return null; });
+}
 
 function _initUserRefs(uid) {
   _colsRef   = firebase.database().ref('users/' + uid + '/collections');
@@ -2256,9 +2266,14 @@ async function doRegister() {
   if(pass.length<6){ _loginErr('A senha deve ter ao menos 6 caracteres.'); return; }
   try {
     var cred = await auth.createUserWithEmailAndPassword(email, pass);
-    await firebase.database().ref('users/'+cred.user.uid+'/profile').set({
-      email:email, tipo:'personal', createdAt:new Date().toISOString()
-    });
+    var alunoLink=await _findAlunoLinkByEmail(email);
+    var profile={ email:email, tipo:'personal', createdAt:new Date().toISOString() };
+    if(alunoLink&&alunoLink.ownerUid&&alunoLink.studentId){
+      profile.tipo='aluno';
+      profile.ownerUid=alunoLink.ownerUid;
+      profile.studentId=alunoLink.studentId;
+    }
+    await firebase.database().ref('users/'+cred.user.uid+'/profile').set(profile);
     // onAuthStateChanged handles the rest
   } catch(e) {
     _loginErr(_AUTH_MSGS[e.code]||e.message);
@@ -3021,8 +3036,19 @@ function saveStudent(){
     // Sem dias selecionados — tombstone agendas do aluno em edição (preserva históricas)
     if(editingId){var _now2=Date.now(),_dev2=_getDeviceId();agendas=agendas.map(function(a){if(a.alunoId!==editingId||a.validUntil)return a;var t3=Object.assign({},a,{deleted:true,updatedAt:_now2,deviceId:_dev2});_registerDelete(t3);return t3;});}
   }
+  var prevStudent=editingId?(students.find(function(x){return x.id===editingId&&!x.deleted;})||null):null;
   if(editingId){var i=students.findIndex(function(x){return x.id===editingId;});if(i>=0)students[i]=obj;else students.push(obj);}
   else students.push(obj);
+  try{
+    var newEmail=_emailKey(obj.email||'');
+    var oldEmail=_emailKey(prevStudent&&prevStudent.email||'');
+    if(currentUser&&newEmail){
+      firebase.database().ref('studentEmailIndex/'+newEmail).set({ownerUid:currentUser.uid,studentId:obj.id,updatedAt:new Date().toISOString()});
+    }
+    if(currentUser&&oldEmail&&oldEmail!==newEmail){
+      firebase.database().ref('studentEmailIndex/'+oldEmail).remove();
+    }
+  }catch(e){}
   save(); saveAgendas(); refreshAll();
   cancelarCadastro();
   toast('Aluno salvo!');
@@ -4340,16 +4366,36 @@ document.addEventListener('DOMContentLoaded', function() {
   try { initTheme(); } catch(e) {}
 
   // Firebase Auth state — single source of truth for login/logout
-  auth.onAuthStateChanged(function(user) {
+  auth.onAuthStateChanged(async function(user) {
     if(user) {
       currentUser = user;
-      _initUserRefs(user.uid);
-      _migrateIfNeeded(user.uid);
+      var profile=null;
+      try{
+        var ps=await firebase.database().ref('users/'+user.uid+'/profile').once('value');
+        profile=ps.val()||null;
+      }catch(e){}
+      if(!profile){
+        profile={email:user.email||'',tipo:'personal',createdAt:new Date().toISOString()};
+      }
+      if((!profile.tipo||profile.tipo==='personal')&&user.email){
+        var alunoLink=await _findAlunoLinkByEmail(user.email);
+        if(alunoLink&&alunoLink.ownerUid&&alunoLink.studentId){
+          profile.tipo='aluno';
+          profile.ownerUid=alunoLink.ownerUid;
+          profile.studentId=alunoLink.studentId;
+          try{ await firebase.database().ref('users/'+user.uid+'/profile').update(profile); }catch(e){}
+        }
+      }
+      currentProfile=profile;
+      var dataUid=(profile.tipo==='aluno'&&profile.ownerUid)?profile.ownerUid:user.uid;
+      _initUserRefs(dataUid);
+      _migrateIfNeeded(dataUid);
       document.getElementById('login-screen').style.display = 'none';
       document.getElementById('app').style.display = 'flex';
       setTimeout(function(){ try{initApp();}catch(e){ console.error('initApp err',e); } }, 50);
     } else {
       currentUser = null;
+      currentProfile = null;
       document.getElementById('login-screen').style.display = 'flex';
       document.getElementById('app').style.display = 'none';
     }
