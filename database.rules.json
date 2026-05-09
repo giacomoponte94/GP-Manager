@@ -15,6 +15,25 @@
       }
     },
 
+    "adminConfig": {
+      ".read":  "auth != null",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('profile').child('tipo').val() === 'admin'"
+    },
+
+    "personalInvites": {
+      "$encodedEmail": {
+        ".read":  "auth != null && root.child('users').child(auth.uid).child('profile').child('tipo').val() === 'admin'",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('profile').child('tipo').val() === 'admin'"
+      }
+    },
+
+    "studentInvites": {
+      "$encodedEmail": {
+        ".read":  "auth != null",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('profile').child('tipo').val() !== 'aluno'"
+      }
+    },
+
     "studentViews": {
       "$studentUid": {
         ".read": "auth != null && (auth.uid === $studentUid || auth.uid === root.child('studentOwners').child($studentUid).child('ownerUid').val())",
@@ -28,6 +47,11 @@
           }
         }
       }
+    },
+
+    "gp": {
+      ".read":  false,
+      ".write": false
     }
 
   }
