@@ -1,0 +1,34 @@
+{
+  "rules": {
+
+    "users": {
+      "$uid": {
+        ".read":  "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "studentOwners": {
+      "$studentUid": {
+        ".read": "auth != null && (auth.uid === $studentUid || auth.uid === data.child('ownerUid').val())",
+        ".write": "auth != null && auth.uid === $studentUid && newData.child('studentUid').val() === auth.uid"
+      }
+    },
+
+    "studentViews": {
+      "$studentUid": {
+        ".read": "auth != null && (auth.uid === $studentUid || auth.uid === root.child('studentOwners').child($studentUid).child('ownerUid').val())",
+
+        ".write": "auth != null && auth.uid === root.child('studentOwners').child($studentUid).child('ownerUid').val()",
+
+        "agendaOps": {
+          ".write": "auth != null && (auth.uid === $studentUid || auth.uid === root.child('studentOwners').child($studentUid).child('ownerUid').val())",
+          "$opId": {
+            ".validate": "newData.hasChildren(['type', 'studentUid', 'createdAt']) && newData.child('studentUid').val() === $studentUid"
+          }
+        }
+      }
+    }
+
+  }
+}

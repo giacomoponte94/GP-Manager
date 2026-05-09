@@ -832,10 +832,95 @@ var _legacyRef = null;
 var _colsRef   = null;
 var _histRef   = null;
 
+var _alunoViewData = null;
+var _alunoViewRef  = null;
+
 function _initUserRefs(uid) {
   _colsRef   = firebase.database().ref('users/' + uid + '/collections');
   _legacyRef = firebase.database().ref('users/' + uid + '/data');
   _histRef   = firebase.database().ref('users/' + uid + '/history');
+}
+
+// Populates globals (students/agendas/treinos) from studentViews when profile.tipo='aluno'.
+// Called once in initApp; re-runs on every Firebase update.
+function _initAlunoView() {
+  if (!isAluno() || !currentUser) return;
+  var ctx = getAlunoContext(); // {ownerUid, studentId}
+  if (!ctx) return;
+  if (_alunoViewRef) _alunoViewRef.off(); // detach previous listener
+  _alunoViewRef = firebase.database().ref('studentViews/' + currentUser.uid);
+  _alunoViewRef.on('value', function(snap) {
+    _alunoViewData = snap.val() || {};
+    var sv = _alunoViewData;
+
+    // Synthetic student record so existing renderers work unchanged
+    if (sv.profile) {
+      students = [{
+        id: ctx.studentId, deleted: false,
+        nome: sv.profile.nome || (currentProfile && currentProfile.email) || 'Aluno',
+        plano: sv.profile.plano || '', modalidade: sv.profile.modalidade || '',
+        vencimento: sv.profile.vencimento || '', inicio: sv.profile.inicio || '',
+        status: sv.profile.status || 'em dia', valor: sv.profile.valor || ''
+      }];
+    }
+
+    // Training plan
+    if (sv.treino) treinosData[ctx.studentId] = sv.treino;
+
+    // Agenda + presencas
+    if (sv.agendaReadable) {
+      agendas   = sv.agendaReadable.agendas   || [];
+      presencas = sv.agendaReadable.presencas || {};
+    }
+
+    try { refreshAll(); } catch(e) {}
+    try { renderDashboard(); } catch(e) {}
+  }, function(err) {
+    console.warn('[AlunoView] read error:', err.message);
+    toast('Não foi possível carregar seus dados. Contate seu personal.');
+  });
+}
+
+// Personal calls this to push a student's data into studentViews/{studentAuthUid}.
+// studentAuthUid = Firebase Auth UID of the student account.
+// appStudentId   = local ID used in students[].id within the personal's app.
+function syncStudentView(studentAuthUid, appStudentId) {
+  if (!isPersonal() || !currentUser) { _aclToast(); return; }
+  var s = students.find(function(x){ return x.id === appStudentId && !x.deleted; });
+  if (!s) { toast('Aluno não encontrado.'); return; }
+  var ref = firebase.database().ref('studentViews/' + studentAuthUid);
+
+  // Sanitised profile — never expose financial details raw
+  ref.child('profile').set({
+    nome: s.nome, plano: s.plano, modalidade: s.modalidade || '',
+    vencimento: getVencimentoEfetivo(s), inicio: s.inicio || '',
+    status: s.status || 'em dia', valor: s.valor || '',
+    updatedAt: Date.now()
+  });
+
+  // Training plan (full object — read-only for student via rules)
+  var t = getTreino(appStudentId);
+  if (t && t.divisoes && t.divisoes.length) ref.child('treino').set(t);
+
+  // Agenda snapshot — agendas + presencas scoped to this student
+  var sAgendas = agendas.filter(function(a){ return !a.deleted && a.alunoId === appStudentId; });
+  var sPres = {};
+  Object.keys(presencas).forEach(function(k){
+    if (k.indexOf(appStudentId + '_') === 0) sPres[k] = presencas[k];
+  });
+  ref.child('agendaReadable').set({ agendas: sAgendas, presencas: sPres, updatedAt: Date.now() });
+
+  toast('Dados sincronizados com o aluno.');
+}
+
+// Student submits an agenda operation (e.g. reposition request) to the personal.
+function submitAgendaOp(type, payload) {
+  if (!isAluno() || !currentUser) return;
+  var opId = Date.now().toString(36) + Math.random().toString(36).slice(2);
+  var entry = Object.assign({ type: type, studentUid: currentUser.uid, createdAt: new Date().toISOString() }, payload || {});
+  firebase.database().ref('studentViews/' + currentUser.uid + '/agendaOps/' + opId).set(entry)
+    .then(function(){ toast('Solicitação enviada ao personal.'); })
+    .catch(function(e){ toast('Erro ao enviar solicitação: ' + e.message); });
 }
 
 // One-time migration: copy gp/collections → users/{uid}/collections if user has no data yet
@@ -2308,6 +2393,13 @@ async function createAlunoProfile(email, ownerUid, studentId) {
     createdAt: new Date().toISOString()
   };
   await firebase.database().ref('users/' + currentUser.uid + '/profile').set(profileData);
+  // Write studentOwners so security rules can resolve ownerUid from studentUid
+  await firebase.database().ref('studentOwners/' + currentUser.uid).set({
+    studentUid: currentUser.uid,
+    ownerUid: ownerUid,
+    appStudentId: studentId,
+    createdAt: profileData.createdAt
+  });
   currentProfile = profileData;
 }
 
@@ -4306,6 +4398,13 @@ function gerarRecibo(id){
 }
 
 function initApp(){
+  if(isAluno()){
+    // Aluno: skip personal sync, load from studentViews instead
+    try{applyMenuVisibility();}catch(e){}
+    try{showTab('dashboard');}catch(e){}
+    try{_initAlunoView();}catch(e){ console.warn('_initAlunoView err',e); }
+    return;
+  }
   try{loadAll();}catch(e){}
   try{checkAutoBackup();}catch(e){}
   try{renderBackupStatus();}catch(e){}
