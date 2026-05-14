@@ -22,7 +22,10 @@
 
     "personalInvites": {
       ".read":  "auth != null && root.child('users').child(auth.uid).child('profile').child('tipo').val() === 'admin'",
-      ".write": "auth != null && root.child('users').child(auth.uid).child('profile').child('tipo').val() === 'admin'"
+      ".write": "auth != null && root.child('users').child(auth.uid).child('profile').child('tipo').val() === 'admin'",
+      "$encodedEmail": {
+        ".read": "auth != null"
+      }
     },
 
     "studentInvites": {
@@ -30,6 +33,11 @@
         ".read":  "auth != null",
         ".write": "auth != null && root.child('users').child(auth.uid).child('profile').child('tipo').val() !== 'aluno'"
       }
+    },
+
+    "gp": {
+      ".read":  false,
+      ".write": false
     },
 
     "studentViews": {
@@ -45,11 +53,6 @@
           }
         }
       }
-    },
-
-    "gp": {
-      ".read":  false,
-      ".write": false
     }
 
   }
