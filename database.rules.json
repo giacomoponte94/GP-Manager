@@ -3,15 +3,15 @@
 
     "users": {
       "$uid": {
-        ".read":  "auth != null && auth.uid === $uid",
-        ".write": "auth != null && auth.uid === $uid"
+        ".read":  "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('profile').child('tipo').val() === 'admin')",
+        ".write": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('profile').child('tipo').val() === 'admin')"
       }
     },
 
     "studentOwners": {
       "$studentUid": {
-        ".read": "auth != null && (auth.uid === $studentUid || auth.uid === data.child('ownerUid').val())",
-        ".write": "auth != null && auth.uid === $studentUid && newData.child('studentUid').val() === auth.uid"
+        ".read":  "auth != null && (auth.uid === $studentUid || auth.uid === data.child('ownerUid').val() || root.child('users').child(auth.uid).child('profile').child('tipo').val() === 'admin')",
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('profile').child('tipo').val() === 'admin' || (auth.uid === $studentUid && newData.child('studentUid').val() === auth.uid))"
       }
     },
 
@@ -35,24 +35,23 @@
       }
     },
 
-    "gp": {
-      ".read":  false,
-      ".write": false
-    },
-
     "studentViews": {
       "$studentUid": {
-        ".read": "auth != null && (auth.uid === $studentUid || auth.uid === root.child('studentOwners').child($studentUid).child('ownerUid').val())",
-
-        ".write": "auth != null && auth.uid === root.child('studentOwners').child($studentUid).child('ownerUid').val()",
+        ".read":  "auth != null && (auth.uid === $studentUid || auth.uid === root.child('studentOwners').child($studentUid).child('ownerUid').val() || root.child('users').child(auth.uid).child('profile').child('tipo').val() === 'admin')",
+        ".write": "auth != null && (auth.uid === root.child('studentOwners').child($studentUid).child('ownerUid').val() || root.child('users').child(auth.uid).child('profile').child('tipo').val() === 'admin')",
 
         "agendaOps": {
-          ".write": "auth != null && (auth.uid === $studentUid || auth.uid === root.child('studentOwners').child($studentUid).child('ownerUid').val())",
+          ".write": "auth != null && (auth.uid === $studentUid || auth.uid === root.child('studentOwners').child($studentUid).child('ownerUid').val() || root.child('users').child(auth.uid).child('profile').child('tipo').val() === 'admin')",
           "$opId": {
             ".validate": "newData.hasChildren(['type', 'studentUid', 'createdAt']) && newData.child('studentUid').val() === $studentUid"
           }
         }
       }
+    },
+
+    "gp": {
+      ".read":  false,
+      ".write": false
     }
 
   }
