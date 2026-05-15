@@ -2402,8 +2402,29 @@ async function doFirstAccess() {
     // Step 1: create account first — invites must be checked while authenticated
     cred = await auth.createUserWithEmailAndPassword(email, pass);
   } catch(e) {
-    _creatingAccount = false; _reset();
-    _loginErr(_AUTH_MSGS[e.code]||e.message); return;
+    if (e.code === 'auth/email-already-in-use') {
+      // Auth account exists but may lack a profile (previous first-access failed mid-flight).
+      // Try to sign in and recover.
+      try {
+        cred = await auth.signInWithEmailAndPassword(email, pass);
+        var existingSnap = await firebase.database().ref('users/'+cred.user.uid+'/profile').once('value');
+        if (existingSnap.val()) {
+          // Profile already complete — redirect to normal login flow.
+          _creatingAccount = false; _reset();
+          currentUser = cred.user;
+          currentProfile = existingSnap.val();
+          _initUserRefs(cred.user.uid);
+          _showApp(); return;
+        }
+        // No profile yet — fall through to invite check below using existing cred.
+      } catch(signInErr) {
+        _creatingAccount = false; _reset();
+        _loginErr(_AUTH_MSGS[signInErr.code] || 'Email já cadastrado. Se esqueceu a senha, use "Esqueci a senha".'); return;
+      }
+    } else {
+      _creatingAccount = false; _reset();
+      _loginErr(_AUTH_MSGS[e.code]||e.message); return;
+    }
   }
 
   try {
