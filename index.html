@@ -882,10 +882,22 @@ function _initAlunoView() {
     // Training plan
     if (sv.treino) treinosData[ctx.studentId] = sv.treino;
 
-    // Agenda + presencas
+    // Agenda + presencas + full student list for agenda display
     if (sv.agendaReadable) {
       agendas   = sv.agendaReadable.agendas   || [];
       presencas = sv.agendaReadable.presencas || {};
+      if (sv.agendaReadable.students) {
+        // Populate all students (name only) so the aluno can see who's in each slot
+        students = sv.agendaReadable.students.map(function(st){
+          return { id: st.id, nome: st.nome, deleted: false, plano: '', modalidade: '', status: 'em dia', valor: '', vencimento: '', inicio: '' };
+        });
+        // Overwrite the aluno's own record with full profile data
+        if (sv.profile && ctx) {
+          var ownIdx = students.findIndex(function(x){ return x.id === ctx.studentId; });
+          var own = { id: ctx.studentId, deleted: false, nome: sv.profile.nome || (currentProfile && currentProfile.email) || 'Aluno', plano: sv.profile.plano || '', modalidade: sv.profile.modalidade || '', vencimento: sv.profile.vencimento || '', inicio: sv.profile.inicio || '', status: sv.profile.status || 'em dia', valor: sv.profile.valor || '' };
+          if (ownIdx >= 0) students[ownIdx] = own; else students.push(own);
+        }
+      }
     }
 
     try { refreshAll(); } catch(e) {}
@@ -899,14 +911,16 @@ function _initAlunoView() {
 // Personal calls this to push a student's data into studentViews/{studentAuthUid}.
 // studentAuthUid = Firebase Auth UID of the student account.
 // appStudentId   = local ID used in students[].id within the personal's app.
-function syncStudentView(studentAuthUid, appStudentId) {
-  if (!isPersonal() || !currentUser) { _aclToast(); return; }
+// opts.silent    = true → skip toast (used by auto-sync on startup)
+function syncStudentView(studentAuthUid, appStudentId, opts) {
+  var silent = opts && opts.silent;
+  if (!isPersonal() || !currentUser) { if (!silent) _aclToast(); return Promise.resolve(); }
   var s = students.find(function(x){ return x.id === appStudentId && !x.deleted; });
-  if (!s) { toast('Aluno não encontrado.'); return; }
+  if (!s) { if (!silent) toast('Aluno não encontrado.'); return Promise.resolve(); }
   var ref = firebase.database().ref('studentViews/' + studentAuthUid);
 
   // Sanitised profile — never expose financial details raw
-  ref.child('profile').set({
+  var profileWrite = ref.child('profile').set({
     nome: s.nome, plano: s.plano, modalidade: s.modalidade || '',
     vencimento: getVencimentoEfetivo(s), inicio: s.inicio || '',
     status: s.status || 'em dia', valor: s.valor || '',
@@ -915,21 +929,93 @@ function syncStudentView(studentAuthUid, appStudentId) {
 
   // Training plan (full object — read-only for student via rules)
   var t = getTreino(appStudentId);
-  if (t && t.divisoes && t.divisoes.length) ref.child('treino').set(t);
+  var treinoWrite = (t && t.divisoes && t.divisoes.length) ? ref.child('treino').set(t) : Promise.resolve();
 
-  // Full anonymised agenda: own slots intact, other students shown as "_ocupado_"
-  var fullAgendas = agendas.filter(function(a){ return !a.deleted; }).map(function(a){
-    if (a.alunoId === appStudentId) return a;
-    return { id: a.id, days: a.days, inicio: a.inicio, fim: a.fim, alunoId: '_ocupado_', obs: '' };
+  // Full agenda — all slots with real names so student sees who's in each slot.
+  // Presencas: only the student's own records.
+  var fullAgendas = agendas.filter(function(a){ return !a.deleted; });
+  var fullStudents = _visible(students).map(function(st){
+    return { id: st.id, nome: st.nome };
   });
-  // Presencas: only the student's own records
   var sPres = {};
   Object.keys(presencas).forEach(function(k){
     if (k.indexOf(appStudentId + '_') === 0) sPres[k] = presencas[k];
   });
-  ref.child('agendaReadable').set({ agendas: fullAgendas, presencas: sPres, updatedAt: Date.now() });
+  var agendaWrite = ref.child('agendaReadable').set({ agendas: fullAgendas, students: fullStudents, presencas: sPres, updatedAt: Date.now() });
 
-  toast('Dados sincronizados com o aluno.');
+  return Promise.all([profileWrite, treinoWrite, agendaWrite]).then(function(){
+    if (!silent) toast('Dados sincronizados com o aluno.');
+  }).catch(function(e){ if (!silent) toast('Erro ao sincronizar: ' + e.message); });
+}
+
+// ─── Personal-side: listen for student agenda requests ────────────────────────
+var _pendingOps = [];
+var _opsListeners = [];
+
+function _listenStudentOps(studentUid, studentName, appStudentId) {
+  var opsRef = firebase.database().ref('studentViews/' + studentUid + '/agendaOps');
+  _opsListeners.push(opsRef);
+  opsRef.on('value', function(snap) {
+    var ops = snap.val() || {};
+    _pendingOps = _pendingOps.filter(function(op){ return op.studentUid !== studentUid; });
+    Object.keys(ops).forEach(function(opId) {
+      _pendingOps.push(Object.assign({ opId: opId, studentUid: studentUid, studentName: studentName, appStudentId: appStudentId }, ops[opId]));
+    });
+    try { renderNotifs(); } catch(e) {}
+  });
+}
+
+function aplicarOp(opId) {
+  var op = _pendingOps.find(function(o){ return o.opId === opId; });
+  if (!op) return;
+  if (op.type === 'solicitar_desmarcacao') {
+    removerDeData(op.agendaId, op.data);
+    addReposicao(op.appStudentId, 'desmarcacao');
+    saveExcecoes(); saveReposicoes();
+    toast(op.studentName.split(' ')[0] + ': desmarcação aplicada.');
+  } else if (op.type === 'solicitar_horario') {
+    adicionarEmData(op.appStudentId, op.hora || '07:00', op.data, 'extra');
+    saveExcecoes();
+    toast(op.studentName.split(' ')[0] + ': horário adicionado em ' + op.data + ' às ' + (op.hora||'') + '.');
+  }
+  firebase.database().ref('studentViews/' + op.studentUid + '/agendaOps/' + op.opId).remove();
+  renderCalendar();
+}
+
+function descartarOp(opId) {
+  var op = _pendingOps.find(function(o){ return o.opId === opId; });
+  if (!op) return;
+  firebase.database().ref('studentViews/' + op.studentUid + '/agendaOps/' + op.opId).remove();
+  toast('Solicitação descartada.');
+}
+
+function verSolicitacoes() {
+  if (!_pendingOps.length) { toast('Nenhuma solicitação pendente.'); return; }
+  var diasSem=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  var html = _pendingOps.map(function(op) {
+    var lbl = op.type === 'solicitar_desmarcacao'
+      ? 'Desmarcação — ' + (op.data||'')
+      : op.type === 'solicitar_horario'
+      ? 'Agendamento — ' + (op.data||'') + ' às ' + (op.hora||'')
+      : op.type;
+    return '<div style="background:var(--card);padding:14px;border-radius:4px;margin-bottom:8px;">'
+      +'<div style="font-weight:600;font-size:0.85rem;">'+op.studentName+'</div>'
+      +'<div style="font-size:0.75rem;color:var(--white-dim);margin-top:3px;">'+lbl+'</div>'
+      +'<div style="display:flex;gap:8px;margin-top:10px;">'
+      +'<button class="btn btn-primary btn-sm" onclick="aplicarOp(\''+op.opId+'\');document.getElementById(\'modal-ops\').style.display=\'none\';" style="flex:1;height:32px;font-size:0.7rem;">Aplicar</button>'
+      +'<button class="btn btn-sm" onclick="descartarOp(\''+op.opId+'\');document.getElementById(\'modal-ops\').style.display=\'none\';" style="flex:1;height:32px;font-size:0.7rem;border:1px solid var(--border);color:var(--white-dim);">Descartar</button>'
+      +'</div></div>';
+  }).join('');
+  var m = document.getElementById('modal-ops');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'modal-ops';
+    m.className = 'modal-overlay';
+    m.innerHTML = '<div class="modal" style="max-width:440px;"><div class="modal-header"><span style="font-family:Raleway,sans-serif;font-weight:800;font-size:0.85rem;letter-spacing:0.08em;">SOLICITAÇÕES DE ALUNOS</span><button class="modal-close" onclick="document.getElementById(\'modal-ops\').style.display=\'none\'">&#215;</button></div><div id="modal-ops-body" style="padding:12px 0;"></div></div>';
+    document.body.appendChild(m);
+  }
+  document.getElementById('modal-ops-body').innerHTML = html;
+  m.style.display = 'flex';
 }
 
 // Student submits an agenda operation (e.g. reposition request) to the personal.
@@ -2449,6 +2535,9 @@ async function doFirstAccess() {
     var profileData;
     if (sInv && sInv.ownerUid && sInv.studentId) {
       // — Aluno —
+      // Write studentUid into invite BEFORE profile (at this point tipo===null so rule passes).
+      // Personal reads this on startup to auto-sync student data.
+      try { await firebase.database().ref('studentInvites/'+enc).update({ studentUid: cred.user.uid, linkedAt: new Date().toISOString() }); } catch(_){}
       profileData = { email:email, tipo:'aluno', ownerUid:sInv.ownerUid, studentId:sInv.studentId, createdAt:new Date().toISOString() };
       await firebase.database().ref('users/'+cred.user.uid+'/profile').set(profileData);
       await firebase.database().ref('studentOwners/'+cred.user.uid).set({ studentUid:cred.user.uid, ownerUid:sInv.ownerUid, appStudentId:sInv.studentId, createdAt:profileData.createdAt });
@@ -2898,6 +2987,9 @@ function renderNotifs(){
     if(th.length) notifs.push({p:2,icon:'',msg:'<strong>'+th.length+' aluno'+(th.length>1?'s':'')+' agendado'+(th.length>1?'s':'')+' hoje</strong>',tipo:'info',cta:{lbl:'Ver lista',fn:'verListaHoje()'}});
   }
 
+  if(typeof _pendingOps !== 'undefined' && _pendingOps.length) {
+    notifs.push({p:0,icon:'📬',msg:'<strong>'+_pendingOps.length+' solicitaç'+(_pendingOps.length===1?'ão':'ões')+' de aluno'+(_pendingOps.length!==1?'s':'')+' pendente'+(_pendingOps.length!==1?'s':'')+'</strong>',tipo:'info',cta:{lbl:'Ver',fn:'verSolicitacoes()'}});
+  }
   if(!notifs.length){bar.innerHTML='';return;}
   bar.innerHTML=notifs.sort(function(a,b){return a.p-b.p;}).map(function(n){
     var bg=n.tipo==='danger'?'rgba(231,76,60,0.12)':n.tipo==='warn'?'rgba(243,156,18,0.1)':'rgba(74,127,165,0.08)';
@@ -3948,7 +4040,12 @@ function renderSlotModal(){
   } else if(isBloq){
     out='<div style="text-align:center;padding:20px;color:var(--danger);"><div style="font-weight:600;">Hor\u00e1rio bloqueado</div></div>';
   } else {
-    if(ags.length===0){out+='<p style="color:var(--white-dim);font-size:0.85rem;margin-bottom:16px;">Nenhum aluno neste hor\u00e1rio.</p>';}
+    if(ags.length===0){
+      out+='<p style="color:var(--white-dim);font-size:0.85rem;margin-bottom:16px;">Nenhum aluno neste hor\u00e1rio.</p>';
+      if(isAluno()){
+        out+='<button class="btn btn-primary btn-sm solicitar-slot-btn" data-date="'+slotDate+'" data-hora="'+String(agSlotHour).padStart(2,'0')+':00" style="width:100%;height:38px;font-size:0.75rem;">Solicitar este hor\u00e1rio</button>';
+      }
+    }
     var _alunoCtx=isAluno()?getAlunoContext():null;
     ags.forEach(function(ag){
       var s=students.find(function(x){return x.id===ag.alunoId&&!x.deleted;}); if(!s)return;
@@ -3976,7 +4073,13 @@ function renderSlotModal(){
         +'<div style="display:flex;justify-content:space-between;align-items:center;">'
         +'<div><div style="font-weight:600;font-size:0.9rem;">'+s.nome+repBadge+extraBadge+'</div>'
         +'<div style="font-size:0.72rem;color:var(--white-dim);margin-top:2px;">'+(getPlanNome(s.plano)||'')+(s.modalidade?' \u00b7 '+s.modalidade:'')+(presLabel?' <span style="color:'+bc+';font-weight:600;">'+presLabel+'</span>':'')+'</div></div></div>'
-        +(_canAct
+        +(isAluno()&&_canAct
+          // Aluno view of own slot: read-only status + request buttons
+          ? (presLabel?'<div style="margin-top:8px;font-size:0.8rem;color:'+bc+';">'+presLabel+'</div>':'')
+            +'<button class="btn btn-sm repos-btn" data-sid="'+s.id+'" data-agid="'+ag.id+'" data-date="'+slotDate+'" data-slot-dt="'+slotDT.toISOString()+'"'
+            +' style="width:100%;height:34px;font-size:0.72rem;margin-top:10px;background:rgba(243,156,18,0.1);border:1px solid rgba(243,156,18,0.35);color:var(--warning);">Solicitar desmarca\u00e7\u00e3o / reposi\u00e7\u00e3o</button>'
+          : !isAluno()&&_canAct
+          // Personal view: full controls
           ? '<div style="display:flex;gap:8px;margin-top:10px;">'
             +'<button class="btn btn-sm pres-btn" data-sid="'+s.id+'" data-date="'+slotDate+'" data-st="presente"'
             +' style="flex:1;height:34px;font-size:0.62rem;background:'+(ps==="presente"?"rgba(46,204,113,0.2)":"transparent")+';border:1px solid '+(ps==="presente"?"var(--success)":"rgba(46,204,113,0.3)")+';color:'+(ps==="presente"?"var(--success)":"rgba(46,204,113,0.7)")+';letter-spacing:0.1em;">\u2705 PRESENTE</button>'
@@ -4082,12 +4185,29 @@ function renderSlotModal(){
     };
   });
 
+  // "Solicitar horário" button — aluno only, empty slot
+  body.querySelectorAll('.solicitar-slot-btn').forEach(function(btn){
+    btn.onclick=function(){
+      var dt=btn.getAttribute('data-date'),hora=btn.getAttribute('data-hora');
+      var ctx=getAlunoContext();
+      submitAgendaOp('solicitar_horario',{data:dt,hora:hora,studentId:ctx?ctx.studentId:''});
+      btn.disabled=true; btn.textContent='Solicitação enviada!';
+    };
+  });
+
   // Desmarcar - gera reposi??o E remove do dia
   body.querySelectorAll('.repos-btn').forEach(function(btn){
     btn.onclick=function(){
       if(btn.disabled) return; // proteção contra duplo-clique/toque
       var sid=btn.getAttribute('data-sid');
-      if(isAluno()){var _c=getAlunoContext();if(!_c||sid!==_c.studentId){_aclToast('Você só pode desmarcar sua própria aula.');return;}}
+      if(isAluno()){
+        var _c=getAlunoContext();
+        if(!_c||sid!==_c.studentId){_aclToast('Você só pode desmarcar sua própria aula.');return;}
+        // Aluno: send request to personal instead of direct write
+        btn.disabled=true;
+        submitAgendaOp('solicitar_desmarcacao',{agendaId:btn.getAttribute('data-agid'),data:btn.getAttribute('data-date'),studentId:_c.studentId});
+        btn.textContent='Solicitação enviada!'; return;
+      }
       btn.disabled=true;
       var agId=btn.getAttribute('data-agid');
       var dt=btn.getAttribute('data-date');
@@ -4557,6 +4677,25 @@ function gerarRecibo(id){
   document.getElementById('modal-recibo').style.display='flex';
 }
 
+// Auto-sync all linked students' data to studentViews on personal startup.
+// Reads studentInvites for each student email; if studentUid is present (set on first access),
+// pushes profile/agenda/treino silently and starts listening for agenda requests.
+function _autoSyncStudentViews() {
+  if (!isPersonal() || !currentUser) return;
+  _opsListeners.forEach(function(r){ r.off(); }); _opsListeners = []; _pendingOps = [];
+  var toSync = _visible(students).filter(function(s){ return s.email; });
+  toSync.forEach(function(s) {
+    firebase.database().ref('studentInvites/' + _encodeEmail(s.email)).once('value')
+      .then(function(snap) {
+        var inv = snap.val();
+        if (inv && inv.studentUid) {
+          syncStudentView(inv.studentUid, s.id, { silent: true });
+          _listenStudentOps(inv.studentUid, s.nome, s.id);
+        }
+      }).catch(function(){});
+  });
+}
+
 function initApp(){
   if(isAluno()){
     // Aluno: skip personal sync, load from studentViews instead
@@ -4573,6 +4712,7 @@ function initApp(){
   try{applyMenuVisibility();}catch(e){}
   try{showTab('dashboard');}catch(e){}
   try{startCloudSync();}catch(e){ _setSyncStatus('err'); }
+  setTimeout(function(){ try{_autoSyncStudentViews();}catch(e){} }, 2000);
   setTimeout(function(){
     try{renderDashboard();}catch(e){}
     try{renderCalendar();}catch(e){}
