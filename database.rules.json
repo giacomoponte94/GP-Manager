@@ -31,7 +31,10 @@
     "studentInvites": {
       "$encodedEmail": {
         ".read":  "auth != null",
-        ".write": "auth != null && root.child('users').child(auth.uid).child('profile').child('tipo').val() !== 'aluno'"
+        ".write": "auth != null && root.child('users').child(auth.uid).child('profile').child('tipo').val() !== 'aluno'",
+        "studentUid": {
+          ".write": "auth != null && newData.val() === auth.uid"
+        }
       }
     },
 
