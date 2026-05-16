@@ -868,16 +868,28 @@ function _initAlunoView() {
     _alunoViewData = snap.val() || {};
     var sv = _alunoViewData;
 
-    // Synthetic student record so existing renderers work unchanged
-    if (sv.profile) {
-      students = [{
-        id: ctx.studentId, deleted: false,
-        nome: sv.profile.nome || (currentProfile && currentProfile.email) || 'Aluno',
-        plano: sv.profile.plano || '', modalidade: sv.profile.modalidade || '',
-        vencimento: sv.profile.vencimento || '', inicio: sv.profile.inicio || '',
-        status: sv.profile.status || 'em dia', valor: sv.profile.valor || ''
-      }];
+    // Self-register UID in invite so personal can auto-discover and sync.
+    // Runs for both new and legacy alunos (rule allows writing own UID).
+    if (currentProfile && currentProfile.email) {
+      firebase.database().ref('studentInvites/' + _encodeEmail(currentProfile.email) + '/studentUid')
+        .set(currentUser.uid).catch(function(){});
     }
+
+    // Synthetic student record so existing renderers work unchanged.
+    // Uses profile data if synced, otherwise builds a minimal record from the auth profile.
+    var _nome = sv.profile
+      ? (sv.profile.nome || (currentProfile && currentProfile.email) || 'Aluno')
+      : (currentProfile && currentProfile.email ? currentProfile.email.split('@')[0] : 'Aluno');
+    students = [{
+      id: ctx.studentId, deleted: false,
+      nome: _nome,
+      plano: sv.profile ? (sv.profile.plano || '') : '',
+      modalidade: sv.profile ? (sv.profile.modalidade || '') : '',
+      vencimento: sv.profile ? (sv.profile.vencimento || '') : '',
+      inicio: sv.profile ? (sv.profile.inicio || '') : '',
+      status: sv.profile ? (sv.profile.status || 'em dia') : 'em dia',
+      valor: sv.profile ? (sv.profile.valor || '') : ''
+    }];
 
     // Training plan
     if (sv.treino) treinosData[ctx.studentId] = sv.treino;
@@ -891,11 +903,11 @@ function _initAlunoView() {
         students = sv.agendaReadable.students.map(function(st){
           return { id: st.id, nome: st.nome, deleted: false, plano: '', modalidade: '', status: 'em dia', valor: '', vencimento: '', inicio: '' };
         });
-        // Overwrite the aluno's own record with full profile data
-        if (sv.profile && ctx) {
-          var ownIdx = students.findIndex(function(x){ return x.id === ctx.studentId; });
-          var own = { id: ctx.studentId, deleted: false, nome: sv.profile.nome || (currentProfile && currentProfile.email) || 'Aluno', plano: sv.profile.plano || '', modalidade: sv.profile.modalidade || '', vencimento: sv.profile.vencimento || '', inicio: sv.profile.inicio || '', status: sv.profile.status || 'em dia', valor: sv.profile.valor || '' };
-          if (ownIdx >= 0) students[ownIdx] = own; else students.push(own);
+        // Overwrite the aluno's own record with the full record already built above
+        if (ctx) {
+          var _ownRec = { id: ctx.studentId, deleted: false, nome: _nome, plano: sv.profile ? (sv.profile.plano||'') : '', modalidade: sv.profile ? (sv.profile.modalidade||'') : '', vencimento: sv.profile ? (sv.profile.vencimento||'') : '', inicio: sv.profile ? (sv.profile.inicio||'') : '', status: sv.profile ? (sv.profile.status||'em dia') : 'em dia', valor: sv.profile ? (sv.profile.valor||'') : '' };
+          var _ownIdx = students.findIndex(function(x){ return x.id === ctx.studentId; });
+          if (_ownIdx >= 0) students[_ownIdx] = _ownRec; else students.push(_ownRec);
         }
       }
     }
@@ -3607,6 +3619,20 @@ function openDetail(id){
     openTreinoAluno(s.id);
   };
   actDiv.appendChild(btnTreino);
+  // "Sincronizar conta do aluno" — only shown when student has an email
+  if (s.email && isPersonal()) {
+    var btnSync=document.createElement('button');
+    btnSync.className='btn btn-outline'; btnSync.style.cssText='flex:1;height:40px;font-size:0.72rem;';
+    btnSync.textContent='↺ Sincronizar';
+    btnSync.onclick=function(){
+      firebase.database().ref('studentInvites/'+_encodeEmail(s.email)).once('value').then(function(snap){
+        var inv=snap.val();
+        if(inv&&inv.studentUid){ syncStudentView(inv.studentUid,s.id); }
+        else { toast('Aluno ainda não fez o Primeiro Acesso ou o email está diferente.'); }
+      }).catch(function(e){ toast('Erro: '+e.message); });
+    };
+    actDiv.appendChild(btnSync);
+  }
   var hasActiveAgenda=agendas.some(function(a){return a.alunoId===s.id&&!a.deleted&&!a.validUntil;});
   if(hasActiveAgenda){
     var btnAg=document.createElement('button');
@@ -6744,10 +6770,13 @@ function renderAlunoHome() {
   if(dataEl) dataEl.textContent = diasSem[now.getDay()] + ' • ' + now.getDate() + ' de ' + mesNomes[now.getMonth()];
 
   var titleEl = document.querySelector('#tab-dashboard .page-title');
-  if(titleEl && s) titleEl.innerHTML = 'Olá, <span>'+s.nome.split(' ')[0]+'</span> 👋';
+  if(titleEl) {
+    var _nm = s ? s.nome.split(' ')[0] : (currentProfile && currentProfile.email ? currentProfile.email.split('@')[0] : 'Aluno');
+    titleEl.innerHTML = 'Olá, <span>'+_nm+'</span> 👋';
+  }
 
   var fraseEl = document.getElementById('dash-frase');
-  if(fraseEl) fraseEl.textContent = s ? 'Bem-vindo ao seu espaço de treino' : '';
+  if(fraseEl) fraseEl.textContent = s ? 'Bem-vindo ao seu espaço de treino' : (_alunoViewData && _alunoViewData.profile ? '' : 'Aguardando sincronização do seu personal...');
 
   // KPIs do aluno: aulas feitas/direito + status plano
   var kpisEl = document.getElementById('dash-kpis');
